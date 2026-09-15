@@ -1,0 +1,5 @@
+video_id,fragment_id,observation_id,relative_start,relative_end,video_timestamp_start,video_timestamp_end,observation_type,target,direction,covered_cases,notes
+synthetic-video-001,synthetic-fragment-001,synthetic-obs-001,1.5,3.0,9.5,11.0,persona,front-zone,no aplicable,circulación observable,"Ejemplo sintético; no describe un video real. Intervalo [9.5, 11.0) del video original, relativo a [8.0, 18.0)."
+synthetic-video-001,synthetic-fragment-001,synthetic-obs-002,4.0,4.4,12.0,12.4,cruce,entry-line,entry,cruce A_to_B,"Ejemplo sintético de cruce A_to_B mapeado a entry. No proviene de detecciones automáticas."
+synthetic-video-001,synthetic-fragment-002,synthetic-obs-003,2.0,6.0,20.0,24.0,permanencia,front-zone,no aplicable,permanencia en zona frontal,"Ejemplo sintético de permanencia en [20.0, 24.0) del video original, relativo a [18.0, 28.5). La plantilla de fragmentos no cubre entradas reales."
+synthetic-video-001,synthetic-fragment-002,synthetic-obs-004,8.0,8.0,26.0,26.0,persona,front-zone,unknown,persona en zona frontal,"Observación puntual sintética; dirección desconocida. La oclusión no está cubierta en fragments.example.csv y no se inventa aquí."

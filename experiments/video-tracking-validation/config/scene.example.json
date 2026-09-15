@@ -1,0 +1,38 @@
+{
+  "scene_id": "synthetic-scene-001",
+  "video_id": "synthetic-video-001",
+  "time_unit": "seconds",
+  "synthetic": true,
+  "frame_reference": {
+    "frame_index": 240,
+    "width": 1920,
+    "height": 1080,
+    "video_timestamp": 8.0
+  },
+  "front_zone": {
+    "name": "front-zone",
+    "polygon": [[420, 300], [1280, 300], [1420, 900], [360, 900]],
+    "purpose": "zona frontal observable"
+  },
+  "entry_line": {
+    "name": "entry-line",
+    "start": [500, 850],
+    "end": [1400, 850],
+    "segment_rule": "El cruce se evalúa solo contra el segmento start→end, no contra la recta infinita que lo contiene. Un punto cruza cuando su trayectoria corta ese segmento.",
+    "side_A": {
+      "name": "A",
+      "meaning": "Semiplano a la derecha del vector start→end. Con este segmento horizontal hacia +x, el lado A queda hacia +y (abajo en coordenadas de imagen).",
+      "sample_point": [950, 1000]
+    },
+    "side_B": {
+      "name": "B",
+      "meaning": "Semiplano a la izquierda del vector start→end. Con este segmento, el lado B queda hacia -y (arriba en coordenadas de imagen, hacia el interior de la zona).",
+      "sample_point": [950, 700]
+    },
+    "directions": {
+      "A_to_B": "entry",
+      "B_to_A": "exit"
+    }
+  },
+  "notes": "Ejemplo sintético ajeno a los videos reales. No describe ninguna escena ni video disponible. A_to_B (derecha→izquierda del vector, desde el pasillo sintético hacia la zona) se interpreta como entry; B_to_A como exit."
+}
