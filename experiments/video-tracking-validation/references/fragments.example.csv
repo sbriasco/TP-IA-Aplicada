@@ -1,0 +1,3 @@
+video_id,fragment_id,start_video_seconds,end_video_seconds,time_unit,selection_reason,covered_cases,coverage_limitations
+synthetic-video-001,synthetic-fragment-001,8.0,18.0,seconds,plantilla sintética de circulación y cruce,"circulación; cruce A_to_B","no representa un video real; oclusión no cubierta"
+synthetic-video-001,synthetic-fragment-002,18.0,28.5,seconds,plantilla sintética de permanencia observable,"permanencia; zona frontal","no representa un video real; entradas reales no evaluadas"

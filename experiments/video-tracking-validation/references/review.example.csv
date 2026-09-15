@@ -1,0 +1,6 @@
+fragment_id,manual_observation_id,automatic_observation_id,match_status,error_category,track_continuity_status,reviewer_notes
+synthetic-fragment-001,synthetic-obs-001,session-a:frag-a:10:7,coincidencia,otro,continua,Ejemplo sintético de coincidencia por ocurrencia observable. No describe un video real.
+synthetic-fragment-001,synthetic-obs-002,,omisión,detección faltante,posible pérdida,Ejemplo sintético de omisión: hay observación manual sin resultado automático comparable.
+synthetic-fragment-001,synthetic-obs-001,session-a:frag-a:12:8,duplicado,duplicado,no evaluable,Ejemplo sintético de segunda caja sobre la misma ocurrencia. No es un cambio de ID.
+synthetic-fragment-001,synthetic-obs-003,session-a:frag-a:20:9,no comparable,otro,no evaluable,Ejemplo sintético de evento no comparable (oscilación o caso fuera de criterio).
+synthetic-fragment-001,,session-a:frag-a:30:11,espurio,detección espuria,cambio de ID,"Ejemplo sintético revisado dentro de la muestra: resultado automático sin observación manual. El cambio de ID respecto de 7 no se marca como duplicado. Un id no revisado (session-a:frag-a:99:99) no es espurio por ausencia de anotación."

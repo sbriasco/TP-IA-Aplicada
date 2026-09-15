@@ -1,0 +1,8 @@
+# CPU candidate requirements for Python 3.11.16 on Windows x86_64.
+# Do not install before explicit approval and compatibility validation.
+# PyTorch CPU wheels are resolved from the official PyTorch index below.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.7.1+cpu
+torchvision==0.22.1+cpu
+ultralytics==8.4.153
+opencv-python==4.10.0.84
