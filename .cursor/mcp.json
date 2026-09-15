@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "my-mcp-server-playwright": {
+			"type": "stdio",
+			"command": "npx",
+			"args": [
+				"@playwright/mcp@latest"
+			]
+		},
+		"my-mcp-server-ado": {
+			"type": "stdio",
+			"command": "npx",
+			"args": [
+				"-y",
+				"@azure-devops/mcp",
+				"sbriascocalvo",
+				"-d",
+				"core",
+				"work",
+				"work-items"
+			]
+		}
+  }
+}
