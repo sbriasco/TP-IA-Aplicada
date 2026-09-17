@@ -1,0 +1,12 @@
+{
+  "recorded_at": "2026-09-16T19:04:24.558512+00:00",
+  "operating_system": "Windows-10-10.0.26200-SP0",
+  "python_version": "3.11.16",
+  "execution_mode": "cpu",
+  "result": "passed",
+  "fixture_median_ms": 1471.14,
+  "health_median_ms": 2.41,
+  "limitations": [
+    "El flujo es sint\u00e9tico y no mide procesamiento de video."
+  ]
+}

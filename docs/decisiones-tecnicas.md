@@ -57,11 +57,16 @@ Las credenciales permanecen en el backend. El modelo consulta herramientas acota
 
 ## Validaciones pendientes
 
-1. Comprobar compatibilidad de versiones y ejecución en la PC con RTX 5080 y en un entorno de CPU.
+La base sintética fue validada en CPU el 16 de septiembre de 2026. El flujo y la consulta de salud cumplieron los límites definidos; la evidencia anonimizada está en `specs/002-entorno-arquitectura-base/validation/`. La RTX 5080 continúa como `not_evaluated` hasta ejecutar el mismo procedimiento en esa PC.
+
+La previsualización base ya cuenta con verificaciones automáticas de reemplazo del frame pendiente, entrega antes del estado terminal y desconexión. La validación con video real y carga sostenida corresponde a las funcionalidades posteriores.
+
+Continúan pendientes:
+
+1. Comprobar compatibilidad y ejecución en la PC con RTX 5080.
 2. Evaluar YOLO y ByteTrack con los videos disponibles, usando referencias manuales y registrando errores y tiempos.
-3. Validar la sincronización de la previsualización y su comportamiento con un cliente lento.
-4. Comprobar acceso y una consulta mínima al servicio de modelo de Azure antes de fijar el SDK y modelo.
-5. Verificar que las migraciones y los datos sintéticos permiten reproducir el entorno en otra computadora.
+3. Comprobar acceso y una consulta mínima al servicio de modelo de Azure antes de fijar el SDK y modelo.
+4. Verificar que las migraciones y los datos sintéticos permiten reproducir el entorno en otra computadora.
 
 Estas validaciones pueden motivar ajustes documentados; no deben presentarse como completadas por haber elegido el stack.
 

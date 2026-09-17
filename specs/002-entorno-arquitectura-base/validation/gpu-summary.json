@@ -1,0 +1,7 @@
+{
+  "execution_mode": "gpu",
+  "result": "not_evaluated",
+  "limitations": [
+    "La PC de referencia RTX 5080 no estuvo disponible para esta validación."
+  ]
+}

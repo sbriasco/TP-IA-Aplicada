@@ -1,2 +1,42 @@
 # Videos locales de evaluación; no versionar.
 /[Vv]ideos/
+
+# Configuración local y secretos.
+.env
+.env.*
+!.env.example
+
+# Python.
+**/.venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.pytest-tmp/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Node y Vite.
+**/node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+frontend/debug.log
+*.tsbuildinfo
+.playwright-mcp/
+
+# Datos locales y artefactos privados.
+*.db
+*.sqlite*
+*.pt
+*.onnx
+**/weights/
+**/outputs/
+**/reports/private/
+
+# Herramientas y datos locales del entorno reproducible.
+/.tools/
+/.postgres-data/
+/.verification/
