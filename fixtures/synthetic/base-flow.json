@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "frames": [
+    {
+      "key": "frame-000",
+      "frame_index": 0,
+      "video_timestamp_seconds": 0.0,
+      "observations": [
+        {"key": "person-1-frame-000", "track_id": 1, "kind": "synthetic_person"}
+      ],
+      "events": []
+    },
+    {
+      "key": "frame-001",
+      "frame_index": 1,
+      "video_timestamp_seconds": 0.5,
+      "observations": [
+        {"key": "person-1-frame-001", "track_id": 1, "kind": "synthetic_person"}
+      ],
+      "events": [
+        {
+          "key": "zone-enter-person-1",
+          "event_type": "zone_enter",
+          "observation_key": "person-1-frame-001"
+        }
+      ]
+    },
+    {
+      "key": "frame-002",
+      "frame_index": 2,
+      "video_timestamp_seconds": 1.0,
+      "observations": [
+        {"key": "person-1-frame-002", "track_id": 1, "kind": "synthetic_person"}
+      ],
+      "events": [
+        {
+          "key": "line-cross-person-1",
+          "event_type": "line_cross",
+          "observation_key": "person-1-frame-002"
+        }
+      ]
+    }
+  ]
+}
