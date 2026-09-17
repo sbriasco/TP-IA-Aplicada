@@ -173,4 +173,4 @@ Setup (T001–T002)
 ## Phase 10: Convergence
 
 - [X] T019 [US4] Verificar contra la API, el worker y el WebSocket reales los clientes lento, tardío, reconectado y desconectado, comprobando último frame, estado REST y finalización independiente per SC-007 y T016 (partial).
-- [ ] T020 [US4] Resolver el ejecutable del worker E2E según la plataforma y validar que el recorrido configurado en GitHub Actions funcione en Ubuntu además de Windows per FR-017, SC-008 y CI E2E (contradicts).
+- [X] T020 [US4] Resolver el ejecutable del worker E2E según la plataforma y validar que el recorrido configurado en GitHub Actions funcione en Ubuntu además de Windows per FR-017, SC-008 y CI E2E (contradicts).

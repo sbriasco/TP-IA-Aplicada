@@ -15,7 +15,7 @@ El proyecto está en desarrollo. Actualmente existen dos incrementos:
 | Incremento | Estado y alcance |
 | --- | --- |
 | [Validación de videos y tracking](experiments/video-tracking-validation/README.md) | Experimento independiente con YOLO y ByteTrack en CPU, referencia manual, eventos y mediciones. Sus conclusiones dependen de los fragmentos y la configuración evaluados. |
-| [Entorno y arquitectura base](specs/002-entorno-arquitectura-base/spec.md) | API, worker, PostgreSQL, sesiones y trabajos persistidos, trazabilidad y previsualización sintética en React mediante WebSocket. Validado localmente en Windows/CPU; pendiente de validar el E2E en Ubuntu mediante GitHub Actions (T020). |
+| [Entorno y arquitectura base](specs/002-entorno-arquitectura-base/spec.md) | API, worker, PostgreSQL, sesiones y trabajos persistidos, trazabilidad y previsualización sintética en React mediante WebSocket. Validado localmente en Windows/CPU y mediante CI en Ubuntu. |
 
 La aplicación base todavía no integra el procesamiento de videos reales. La carga de videos, el editor de escenas, las métricas comerciales, el dashboard y el chat son funcionalidades planificadas. La GPU permanece `not_evaluated`.
 

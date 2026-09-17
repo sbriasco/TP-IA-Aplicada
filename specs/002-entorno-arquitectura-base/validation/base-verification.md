@@ -14,7 +14,7 @@ Fecha: 16 de septiembre de 2026. Equipo CPU local con Windows, Python 3.11.16, N
   reales; se verificaron preview JPEG, estado terminal, cliente lento, desconexión, reconexión
   tardía y trabajo inexistente. Los selectores se
   contrastaron previamente con el snapshot de accesibilidad del MCP de Playwright.
-- Los comandos locales que usa CI quedaron aprobados. La ejecución remota de GitHub Actions se comprobará al publicar el pull request.
+- GitHub Actions en el PR #2 aprobó los jobs de backend, frontend y E2E. El recorrido E2E se ejecutó en Ubuntu con PostgreSQL, API, worker, WebSocket y Chromium.
 
 ## Hallazgos y correcciones
 
@@ -27,9 +27,11 @@ inicia directamente los CLI de Vite y Playwright para cerrar sus procesos sin de
 locales activos.
 
 El worker E2E resuelve `Scripts/python.exe` en Windows y `bin/python` en Linux; ambas rutas están
-cubiertas por pruebas unitarias. La ejecución real del job E2E en Ubuntu permanece pendiente de la
-primera corrida de GitHub Actions del PR, porque este equipo no dispone de WSL accesible ni Docker
-Linux. Por esa razón T020 continúa abierta hasta obtener esa evidencia remota.
+cubiertas por pruebas unitarias. La primera corrida del PR detectó que `requirements.lock` contenía
+una referencia editable al commit anterior de `main`, que no incluía el backend. Se separaron las
+dependencias fijadas de la instalación editable del checkout actual. La siguiente corrida de
+[GitHub Actions](https://github.com/sbriasco/TP-IA-Aplicada/actions/runs/35167977127) aprobó backend,
+frontend y E2E, por lo que T020 quedó completada con evidencia real en Ubuntu.
 
 ## Límites
 
