@@ -1,0 +1,224 @@
+openapi: 3.1.0
+info:
+  title: FlowSight Base API
+  version: 0.1.0
+  description: Contrato mínimo de sesiones y trabajos sintéticos de la Feature 6.
+servers:
+  - url: http://127.0.0.1:8000
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      responses:
+        '200':
+          description: API disponible.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Health'}
+  /sessions:
+    post:
+      operationId: createSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SessionCreate'}
+      responses:
+        '201':
+          description: Sesión creada.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Session'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+  /sessions/{session_id}:
+    get:
+      operationId: getSession
+      parameters:
+        - {$ref: '#/components/parameters/SessionId'}
+      responses:
+        '200':
+          description: Sesión encontrada.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Session'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /sessions/{session_id}/jobs:
+    post:
+      operationId: createJob
+      parameters:
+        - {$ref: '#/components/parameters/SessionId'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/JobCreate'}
+      responses:
+        '201':
+          description: Trabajo pendiente creado.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Job'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+  /jobs/{job_id}:
+    get:
+      operationId: getJob
+      parameters:
+        - {$ref: '#/components/parameters/JobId'}
+      responses:
+        '200':
+          description: Estado persistido.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Job'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /jobs/{job_id}/trace:
+    get:
+      operationId: getJobTrace
+      parameters:
+        - {$ref: '#/components/parameters/JobId'}
+      responses:
+        '200':
+          description: Traza sintética del trabajo.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/JobTrace'}
+        '404': {$ref: '#/components/responses/NotFound'}
+components:
+  parameters:
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    JobId:
+      name: job_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+  responses:
+    NotFound:
+      description: Recurso inexistente.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    ValidationError:
+      description: Entrada inválida.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+  schemas:
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, const: ok}
+    SessionCreate:
+      type: object
+      additionalProperties: false
+      required: [name, camera_id]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 120}
+        camera_id: {type: string, minLength: 1, maxLength: 120}
+    Session:
+      allOf:
+        - {$ref: '#/components/schemas/SessionCreate'}
+        - type: object
+          required: [id, source_kind, created_at]
+          properties:
+            id: {type: string, format: uuid}
+            source_kind: {type: string, const: synthetic}
+            created_at: {type: string, format: date-time}
+    JobCreate:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind: {type: string, const: synthetic_base_flow}
+    Job:
+      type: object
+      required: [id, session_id, kind, status, created_at, transitions]
+      properties:
+        id: {type: string, format: uuid}
+        session_id: {type: string, format: uuid}
+        kind: {type: string, const: synthetic_base_flow}
+        status: {$ref: '#/components/schemas/JobStatus'}
+        created_at: {type: string, format: date-time}
+        started_at: {type: [string, 'null'], format: date-time}
+        finished_at: {type: [string, 'null'], format: date-time}
+        processing_duration_ms: {type: [integer, 'null'], minimum: 0}
+        failure_code: {type: [string, 'null']}
+        failure_message: {type: [string, 'null']}
+        transitions:
+          type: array
+          items: {$ref: '#/components/schemas/Transition'}
+    JobStatus:
+      type: string
+      enum: [pending, processing, completed, failed]
+    JobTrace:
+      type: object
+      required: [job, transitions, frames, observations, events]
+      properties:
+        job: {$ref: '#/components/schemas/Job'}
+        transitions:
+          type: array
+          items: {$ref: '#/components/schemas/Transition'}
+        frames:
+          type: array
+          items: {$ref: '#/components/schemas/Frame'}
+        observations:
+          type: array
+          items: {$ref: '#/components/schemas/Observation'}
+        events:
+          type: array
+          items: {$ref: '#/components/schemas/Event'}
+    Transition:
+      type: object
+      required: [to_status, occurred_at]
+      properties:
+        from_status:
+          oneOf:
+            - {$ref: '#/components/schemas/JobStatus'}
+            - {type: 'null'}
+        to_status: {$ref: '#/components/schemas/JobStatus'}
+        occurred_at: {type: string, format: date-time}
+        reason_code: {type: [string, 'null']}
+    Frame:
+      type: object
+      required: [id, session_id, job_id, camera_id, frame_index, video_timestamp_seconds]
+      properties:
+        id: {type: string, format: uuid}
+        session_id: {type: string, format: uuid}
+        job_id: {type: string, format: uuid}
+        camera_id: {type: string}
+        frame_index: {type: integer, minimum: 0}
+        video_timestamp_seconds: {type: number, minimum: 0}
+    Observation:
+      type: object
+      required: [id, session_id, job_id, frame_id, camera_id, track_id, kind]
+      properties:
+        id: {type: string, format: uuid}
+        session_id: {type: string, format: uuid}
+        job_id: {type: string, format: uuid}
+        frame_id: {type: string, format: uuid}
+        camera_id: {type: string}
+        track_id: {type: integer}
+        kind: {type: string, const: synthetic_person}
+    Event:
+      type: object
+      required: [id, session_id, job_id, frame_id, camera_id, video_timestamp_seconds, event_type]
+      properties:
+        id: {type: string, format: uuid}
+        session_id: {type: string, format: uuid}
+        job_id: {type: string, format: uuid}
+        frame_id: {type: string, format: uuid}
+        observation_id: {type: [string, 'null'], format: uuid}
+        camera_id: {type: string}
+        video_timestamp_seconds: {type: number, minimum: 0}
+        event_type: {type: string}
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: {type: string}
+        message: {type: string}
