@@ -38,7 +38,9 @@ jobs:
           cache-dependency-path: backend/requirements.lock
       - name: Instalar backend
         working-directory: backend
-        run: pip install -r requirements.lock
+        run: |
+          pip install -r requirements.lock
+          pip install --no-deps -e .
       - name: Verificar backend
         working-directory: backend
         run: |
@@ -105,6 +107,7 @@ jobs:
         run: |
           python -m venv backend/.venv
           backend/.venv/bin/pip install -r backend/requirements.lock
+          backend/.venv/bin/pip install --no-deps -e backend
       - name: Preparar frontend y navegador
         working-directory: frontend
         run: |
