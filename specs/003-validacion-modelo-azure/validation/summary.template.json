@@ -1,0 +1,25 @@
+{
+  "checked_at": null,
+  "access_status": "not_evaluated",
+  "service_kind": "azure_ai_foundry",
+  "region": null,
+  "deployment_name": null,
+  "model_name": null,
+  "model_selection_notes": null,
+  "auth_method": "api_key",
+  "simple_call": {
+    "ok": false,
+    "latency_ms": null
+  },
+  "tool_calling_status": "not_evaluated",
+  "runs_policy": "minimal",
+  "quotas_costs": "not_measured",
+  "sc_003_within_5_min": null,
+  "limitations": [
+    "Completar tras corridas mínimas reales contra Foundry."
+  ],
+  "commands": [
+    ".\\scripts\\validate-azure-model.ps1",
+    "Push-Location backend; .\\.venv\\Scripts\\python.exe -m pytest -q tests/unit -k llm; Pop-Location"
+  ]
+}
