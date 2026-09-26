@@ -7,3 +7,7 @@ feature.json
 
 # Per-machine extension config overrides.
 extensions/*/local-config.yml
+
+# Catalog caches written by `specify extension|integration search`.
+extensions/.cache/
+integrations/.cache/
