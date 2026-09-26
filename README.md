@@ -15,7 +15,7 @@ El proyecto está en desarrollo. Actualmente existen dos incrementos:
 | Incremento | Estado y alcance |
 | --- | --- |
 | [Validación de videos y tracking](experiments/video-tracking-validation/README.md) | Experimento independiente con YOLO y ByteTrack en CPU, referencia manual, eventos y mediciones. Sus conclusiones dependen de los fragmentos y la configuración evaluados. |
-| [Entorno y arquitectura base](specs/002-entorno-arquitectura-base/spec.md) | API, worker, PostgreSQL, sesiones y trabajos persistidos, trazabilidad y previsualización sintética en React mediante WebSocket. Validado localmente en Windows/CPU y mediante CI en Ubuntu. |
+| [Entorno y arquitectura base](specs/002-entorno-arquitectura-base/spec.md) | API, worker, PostgreSQL, sesiones y trabajos persistidos, trazabilidad y previsualización sintética en React mediante WebSocket. Validado localmente en Windows/CPU y mediante CI en Ubuntu. *(Persistencia compartida Azure Flexible Server: decisión posterior; ver [decisiones técnicas](docs/decisiones-tecnicas.md).)* |
 
 La aplicación base todavía no integra el procesamiento de videos reales. La carga de videos, el editor de escenas, las métricas comerciales, el dashboard y el chat son funcionalidades planificadas. La GPU permanece `not_evaluated`.
 
@@ -28,7 +28,7 @@ La [evidencia de validación de la base](specs/002-entorno-arquitectura-base/val
 - Carga de videos y configuración visual de locales, zonas y líneas.
 - Detección de personas y tracking por video.
 - Tráfico, flujo temporal, paso frente a locales, entradas/salidas, permanencia y ocupación observable, tasa de ingreso y horarios pico.
-- Historial de sesiones, configuración, eventos y métricas en PostgreSQL local.
+- Historial de sesiones, configuración, eventos y métricas en PostgreSQL (local y/o Azure Flexible Server según configuración).
 - Dashboard y chat mínimo para consultar métricas mediante herramientas del backend.
 - Heatmap, sujeto al avance del proyecto.
 
@@ -50,7 +50,7 @@ El repositorio reúne una interfaz web, una API y un worker Python separado. La 
 | --- | --- |
 | Interfaz | React, TypeScript estricto y Vite; CSS Modules. SVG para el futuro editor y Recharts para gráficos. |
 | API y validación | Python, FastAPI y Pydantic. |
-| Persistencia | PostgreSQL local, SQLAlchemy y migraciones Alembic. |
+| Persistencia | PostgreSQL (SQLAlchemy + Alembic). Local para tests/CI; Azure Flexible Server opcional para integración/demo. Videos en disco local. |
 | Visión | Ultralytics YOLO, PyTorch, OpenCV y ByteTrack inicial, evaluados en el experimento. |
 | Chat previsto | API de modelo en Azure; servicio y modelo pendientes de validar. Credenciales y herramientas de analytics en el backend. |
 | Calidad | pytest, Vitest, Playwright y workflow de GitHub Actions. |
@@ -75,7 +75,7 @@ docs/          Decisiones y documentación del proyecto
 
 Las instrucciones siguientes preparan la **aplicación base con datos sintéticos**. Este recorrido no necesita videos, pesos, GPU ni credenciales de Azure. Para ejecutar el experimento de visión, usá su [README específico](experiments/video-tracking-validation/README.md) y su entorno independiente.
 
-Ejecutá los comandos desde la raíz del repositorio, salvo cuando se indique otra carpeta. Cada integrante utiliza su propia base PostgreSQL.
+Ejecutá los comandos desde la raíz del repositorio, salvo cuando se indique otra carpeta. Para desarrollo aislado y tests usá PostgreSQL local. Para integración/demo del equipo podés apuntar `FLOWSIGHT_DATABASE_URL` a Azure Database for PostgreSQL – Flexible Server (misma app, distinta URL).
 
 ## Requisitos
 
@@ -99,7 +99,7 @@ npm ci
 Pop-Location
 ```
 
-Completá `.env` con un usuario y una base PostgreSQL exclusivos de tu equipo. No uses una base compartida ni subas `.env` al repositorio.
+Completá `.env` con `FLOWSIGHT_DATABASE_URL`. Por defecto el ejemplo apunta a PostgreSQL local. Para la base compartida de integración/demo y para Foundry (API key), seguí **[`docs/acceso-compartido-azure.md`](docs/acceso-compartido-azure.md)**: secretos solo por canal seguro del equipo, nunca en Git. Cada integrante debe agregar su IP al firewall de Azure PostgreSQL.
 
 PostgreSQL 17 puede instalarse con el instalador oficial para Windows. Si no tenés permisos administrativos, también puede usarse el ZIP oficial de binarios en `.tools/postgresql-17/pgsql`; esa carpeta y `.postgres-data` están excluidas de Git.
 
@@ -135,7 +135,7 @@ Si una migración falla, no borres la base ni ejecutes `downgrade`. Corregí la 
 
 ## Orden de inicio
 
-1. PostgreSQL local.
+1. PostgreSQL (local o la URL configurada en `.env`).
 2. `scripts/check-environment.ps1`.
 3. `scripts/start-api.ps1`.
 4. `scripts/start-worker.ps1`.
@@ -180,6 +180,8 @@ PostgreSQL no está disponible.
 
 GitHub contiene el código y los pull requests; [Azure Boards](https://dev.azure.com/sbriascocalvo/IA%20Aplicada/_boards) contiene épicas, features, historias, tareas y bugs.
 
+Validación del modelo en Azure AI Foundry (Feature #5): guía en [`specs/003-validacion-modelo-azure/quickstart.md`](specs/003-validacion-modelo-azure/quickstart.md), credenciales del equipo en [`docs/acceso-compartido-azure.md`](docs/acceso-compartido-azure.md) y evidencia anonimizada en [`specs/003-validacion-modelo-azure/validation/`](specs/003-validacion-modelo-azure/validation/). La CI ordinaria **no** requiere credenciales Azure; las pruebas `pytest -k llm` son locales/mock.
+
 Se trabaja en una rama por cambio y se integra a `main` mediante un PR breve con el cambio, su verificación y la tarea de Azure relacionada. Se utiliza squash merge y se elimina la rama integrada. Los estados del tablero deben reflejar la evidencia de implementación y validación.
 
 El desarrollo se guía con Spec Kit: especificación y clarificaciones, checklist, plan técnico, tareas, análisis e implementación. La convergencia contrasta lo implementado con los requisitos antes de cerrar el incremento. Los documentos viven en `specs/`; su trazabilidad con Azure se mantiene explícitamente.
@@ -189,6 +191,7 @@ Antes de contribuir, consultá:
 - [AGENTS.md](AGENTS.md): alcance, stack y reglas del proyecto.
 - [Constitución](.specify/memory/constitution.md): principios de desarrollo y calidad.
 - [Decisiones técnicas](docs/decisiones-tecnicas.md): fundamentos y validaciones pendientes.
+- [Acceso compartido Azure](docs/acceso-compartido-azure.md): PostgreSQL Flexible Server + Foundry (sin secretos en Git).
 - [Especificaciones](specs/): requisitos, planes y tareas de cada incremento.
 
 Los asistentes de IA apoyan la planificación, implementación y verificación; sus cambios se revisan y sus afirmaciones se contrastan con pruebas. No se versionan credenciales, videos, pesos, bases de datos ni resultados locales. Las licencias de las dependencias y modelos deben revisarse antes de distribuir el proyecto; el experimento registra la procedencia de sus pesos en [SOURCE.md](experiments/video-tracking-validation/weights/SOURCE.md).

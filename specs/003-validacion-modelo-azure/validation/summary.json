@@ -1,0 +1,28 @@
+{
+  "checked_at": "2026-09-26T02:39:00Z",
+  "access_status": "available",
+  "service_kind": "azure_ai_foundry",
+  "region": "brazilsouth",
+  "deployment_name": "gpt-5-mini",
+  "model_name": "gpt-5-mini",
+  "model_selection_notes": "Modelo habilitado por el equipo en Foundry (gpt-5-mini). Región brazilsouth.",
+  "auth_method": "api_key",
+  "simple_call": {
+    "ok": true,
+    "latency_ms": 10782
+  },
+  "tool_calling_status": "demonstrated",
+  "runs_policy": "minimal",
+  "quotas_costs": "not_measured",
+  "sc_003_within_5_min": true,
+  "sdk": "openai==1.109.1",
+  "limitations": [
+    "Cuotas/costos del crédito estudiantil no medidos en portal (not_measured).",
+    "Chat completions a veces devolvió content vacío; la llamada simple usa reintento y fallback a Responses API (evidencia: OK vía responses).",
+    "CI ordinaria no ejecuta llamadas a Foundry."
+  ],
+  "commands": [
+    ".\\scripts\\validate-azure-model.ps1 -Step all",
+    "Push-Location backend; .\\.venv\\Scripts\\python.exe -m pytest -q tests/unit -k llm; Pop-Location"
+  ]
+}

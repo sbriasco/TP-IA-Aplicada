@@ -13,7 +13,7 @@ El usuario carga un video de una cámara fija y configura la escena sobre un fra
 - Carga de videos y configuración visual de locales, zonas y líneas.
 - Detección de personas y tracking por video.
 - Tráfico, flujo temporal, paso frente a locales, entradas/salidas, permanencia y ocupación observable, tasa de ingreso y horarios pico.
-- Persistencia local en PostgreSQL de sesiones, configuración, eventos y métricas.
+- Persistencia en PostgreSQL de sesiones, configuración, eventos y métricas (local para desarrollo/tests; Azure Flexible Server opcional para integración/demo — ver decisiones técnicas).
 - Dashboard y chat mínimo que consulte métricas mediante una API de modelo disponible en Azure.
 - Heatmap solo si el avance lo permite.
 
@@ -36,11 +36,11 @@ Exposición, detención y atención estimada hacia vidrieras; funnel comercial y
 
 - Frontend: React, TypeScript con `strict` y Vite; CSS Modules para estilos, SVG sobre el frame para el editor visual y Recharts para gráficos.
 - Backend: Python, FastAPI y Pydantic. Worker Python separado para visión, en el mismo repositorio.
-- Datos: PostgreSQL local por integrante, SQLAlchemy y migraciones con Alembic. Videos y archivos derivados en disco local.
+- Datos: PostgreSQL (SQLAlchemy + Alembic). **Local** por integrante para desarrollo aislado, tests y CI; **Azure Database for PostgreSQL – Flexible Server** para integración/demo compartida. Selección solo vía `FLOWSIGHT_DATABASE_URL`. Videos y archivos derivados en disco local. El worker de visión permanece local.
 - Visión: Ultralytics YOLO, PyTorch y OpenCV; ByteTrack como punto de partida sujeto a evaluación.
 - Comunicación: REST para carga, configuración y consultas; WebSocket para avances y previsualización sincronizada. Validar el transporte de frames antes de comprometer rendimiento.
-- Chat: API de modelo disponible en Azure, consumida desde el backend mediante herramientas acotadas de analytics; servicio y modelo concretos pendientes de validar.
-- Entorno: Python con `venv` y `pip`, Node.js con `npm` y PostgreSQL instalado localmente. Un worker y trabajos persistidos en PostgreSQL inicialmente.
+- Chat: Azure AI Foundry (suscripción de estudiantes), consumida desde el backend mediante herramientas acotadas de analytics; validado en Feature #5 con `openai==1.109.1` y deployment `gpt-5-mini` (tool calling demostrado; cuotas `not_measured`).
+- Entorno: Python con `venv` y `pip`, Node.js con `npm`. PostgreSQL local para tests/CI; instancia Azure Flexible Server opcional para trabajo integrado. Un worker y trabajos persistidos en PostgreSQL inicialmente.
 - Calidad: pytest y Playwright; GitHub Actions para CI cuando exista código.
 - Fijar versiones en los archivos de dependencias y lockfiles al preparar el entorno. Elegir tecnologías no autoriza su instalación en esta etapa.
 
@@ -84,4 +84,4 @@ Consultar [Decisiones técnicas](docs/decisiones-tecnicas.md) para los motivos, 
 - Usar HTML semántico, controles nativos y etiquetas accesibles.
 - En pruebas, preferir selectores por rol y nombre accesible; agregar `data-testid` solo para identificadores estables necesarios.
 - Verificar cruces, duplicados, tiempos, aislamiento entre sesiones y métricas. No afirmar que algo funciona sin ejecutar pruebas; informar pruebas y limitaciones.
-- No subir secretos, videos, pesos de modelos ni bases de datos a Git. No agregar servicios cloud obligatorios para el procesamiento local.
+- No subir secretos, videos, pesos de modelos ni bases de datos a Git. No agregar servicios cloud obligatorios para el **procesamiento** local de video; la persistencia compartida en Azure PostgreSQL es opcional y se selecciona por configuración.

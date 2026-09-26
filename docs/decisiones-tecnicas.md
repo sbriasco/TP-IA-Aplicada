@@ -14,15 +14,58 @@ Los estilos se organizan con CSS Modules. El editor utiliza SVG sobre el frame d
 
 El backend utiliza Python, FastAPI y Pydantic para exponer la API y validar datos. Python también se utiliza en el worker de visión, lo que permite compartir contratos y reglas sin incorporar otro lenguaje de backend. Se mantiene una API modular y un proceso separado para el trabajo pesado, dentro de un único repositorio.
 
-## Persistencia local
+## Persistencia
 
-Cada integrante utiliza PostgreSQL local, con SQLAlchemy para el acceso a datos y Alembic para las migraciones. Las migraciones, configuración de ejemplo y datos sintéticos pequeños se versionan para reproducir la estructura y las pruebas.
+PostgreSQL sigue siendo la base relacional principal del producto (SQLAlchemy + Alembic).
 
-Esta elección permite desarrollar sin depender de un servidor de base de datos compartido y evita que una prueba modifique los datos de otros integrantes. Una vez disponibles las dependencias y los modelos, el procesamiento y la consulta local de resultados no requieren internet; el chat mediante Azure sí lo requiere.
+### Evolución (2026-09-26)
 
-Las bases no se sincronizan automáticamente. Las sesiones que deban compartirse requieren exportar e importar sus datos y, cuando corresponda, los archivos asociados. La demostración integrada puede ejecutarse desde la PC de referencia.
+**Antes (Feature #6 / spec 002):** cada integrante usaba solo PostgreSQL local. Eso era correcto para el entorno base, pero dificultaba integración, demo y pruebas compartidas de dashboard/historial/agente (seis bases distintas, export/import).
 
-PostgreSQL conserva sesiones, configuración, trabajos, eventos y métricas. Los videos y archivos derivados permanecen en disco local y fuera de Git. No se guarda una fila por persona y frame por defecto; el almacenamiento de trayectorias detalladas se define según las métricas que lo requieran.
+**Ahora:** dos modos de despliegue de la **misma** base, elegidos solo por `FLOWSIGHT_DATABASE_URL`:
+
+| Modo | Uso | Servicio |
+|---|---|---|
+| **Compartido** | Integración entre integrantes, demo del MVP, datos comunes de sesión/métricas | **Azure Database for PostgreSQL – Flexible Server** |
+| **Local** | Desarrollo aislado, tests automatizados, CI, trabajo sin red | PostgreSQL instalado en el equipo |
+
+El código de aplicación **no** distingue Azure vs localhost: solo lee la URL. SSL y parámetros van en la connection string cuando el destino es Azure.
+
+### Qué va en PostgreSQL
+
+Sesiones, cámaras (identificadores), locales, configuración espacial (polígonos/líneas), processing jobs, eventos, métricas/resultados agregados y versiones necesarias para reproducibilidad.
+
+### Qué NO va en PostgreSQL (salvo decisión posterior)
+
+Videos originales, previews y trayectorias/archivos pesados: permanecen en **disco local** (o almacenamiento de archivos). Azure PostgreSQL **no** implica blob storage de video.
+
+### Qué permanece local (sin cambio)
+
+El procesamiento de visión (YOLO, ByteTrack, worker) sigue siendo **local**. Azure PostgreSQL solo aloja la persistencia compartida; no mueve el pipeline de video a la nube.
+
+### Migraciones y secretos
+
+Las mismas migraciones Alembic aplican a local y a Azure. Credenciales de Azure PostgreSQL y Foundry solo en `.env` local / canal seguro del equipo; nunca en Git. Instrucciones para compañeros: [acceso-compartido-azure.md](acceso-compartido-azure.md). CI y pytest usan PostgreSQL local (o efímero) sin depender de la instancia compartida.
+
+**Instancia compartida (2026-09-26):** host `ia-aplicada-flowsight.postgres.database.azure.com`, database `postgres`, usuario `flowsight`, migraciones `0001_initial` aplicadas. Cada integrante debe registrar su IP en el firewall.
+
+### Relación con Feature #6
+
+La spec 002 y la Feature #6 documentan e implementaron correctamente el entorno base **local**. Esta sección **evoluciona** la decisión de persistencia para el MVP integrado; no reescribe la historia de #6.
+
+Arquitectura conceptual:
+
+```text
+Video (disco local)
+    ↓
+Worker local (YOLO + ByteTrack)
+    ↓
+Backend FastAPI
+    ↓
+FLOWSIGHT_DATABASE_URL
+    ├── Azure PostgreSQL Flexible Server  → integración / demo
+    └── PostgreSQL local                  → tests / CI / desarrollo aislado
+```
 
 ## Detección y tracking
 
@@ -42,14 +85,14 @@ La codificación de imágenes, frecuencia de actualización y manejo de clientes
 
 ## Chat analítico
 
-El backend consume por API un modelo disponible mediante Azure. El servicio, SDK y modelo concretos quedan pendientes de comprobar acceso, créditos, región, cuotas y soporte de las herramientas necesarias.
+El backend consume por API un modelo disponible mediante **Azure AI Foundry**, usando la suscripción de estudiantes del equipo (crédito ~100 USD). La Feature #5 validó acceso con API key, cliente **`openai==1.109.1`** (OpenAI-compatible), deployment **`gpt-5-mini`** y región **`brazilsouth`**. La llamada simple y el tool calling con `get_session_traffic` ficticia quedaron demostrados; cuotas/costos del crédito: `not_measured`. Evidencia: `specs/003-validacion-modelo-azure/validation/summary.json`.
 
 Las credenciales permanecen en el backend. El modelo consulta herramientas acotadas de analytics y redacta respuestas basadas en sus resultados; no procesa el video, no calcula las métricas y no ejecuta SQL arbitrario. El MVP utiliza integración directa con la API del modelo, sin incorporar un framework de agentes inicialmente.
 
 ## Entorno y calidad
 
 - Python se gestiona con `venv` y `pip`; el frontend utiliza Node.js y `npm`.
-- PostgreSQL se instala localmente. Los contenedores no son un requisito del entorno inicial.
+- PostgreSQL local sigue disponible para desarrollo aislado, tests y CI. Para integración/demo del MVP el equipo puede usar **Azure Database for PostgreSQL – Flexible Server** vía la misma `FLOWSIGHT_DATABASE_URL` (ver [Decisiones técnicas](docs/decisiones-tecnicas.md)). Los contenedores no son un requisito del entorno inicial.
 - Las versiones compatibles se fijan en archivos de dependencias y lockfiles al preparar el entorno. La configuración de PyTorch debe distinguir CPU y GPU cuando corresponda.
 - pytest verifica reglas, eventos, métricas e integración del backend. Playwright verifica recorridos del navegador, incluido el editor visual.
 - GitHub Actions ejecutará CI cuando exista código, comenzando por build y pruebas relevantes. Las verificaciones ordinarias de PR deben funcionar sin GPU ni credenciales de Azure; las evaluaciones pesadas se ejecutan por separado y se documentan.
@@ -65,8 +108,9 @@ Continúan pendientes:
 
 1. Comprobar compatibilidad y ejecución en la PC con RTX 5080.
 2. Evaluar YOLO y ByteTrack con los videos disponibles, usando referencias manuales y registrando errores y tiempos.
-3. Comprobar acceso y una consulta mínima al servicio de modelo de Azure antes de fijar el SDK y modelo.
-4. Verificar que las migraciones y los datos sintéticos permiten reproducir el entorno en otra computadora.
+3. Comprobar acceso a Azure AI Foundry (suscripción de estudiantes / crédito) y una consulta mínima con tool calling ficticio antes de fijar el SDK y el modelo. **Hecho (2026-09-26)**: Foundry `available`, `openai==1.109.1`, `gpt-5-mini`, tool calling `demonstrated`; ver `specs/003-validacion-modelo-azure/validation/summary.json`. Cuotas/costos siguen `not_measured`.
+4. Verificar que las migraciones y los datos sintéticos permiten reproducir el entorno en otra computadora (PostgreSQL local) y aplicar las mismas migraciones a Azure Flexible Server cuando un integrante se conecte por primera vez (`alembic upgrade head`). **Hecho en instancia compartida (2026-09-26):** schema `0001_initial`.
+5. Comprobar firewall/SSL de **Azure Database for PostgreSQL – Flexible Server** por integrante (IP en portal). Guía: [acceso-compartido-azure.md](acceso-compartido-azure.md).
 
 Estas validaciones pueden motivar ajustes documentados; no deben presentarse como completadas por haber elegido el stack.
 
@@ -76,6 +120,7 @@ Estas validaciones pueden motivar ajustes documentados; no deben presentarse com
 - [Recharts](https://recharts.github.io/).
 - [WebSocket en FastAPI](https://fastapi.tiangolo.com/advanced/websockets/).
 - [Alembic](https://alembic.sqlalchemy.org/en/latest/).
+- [Azure Database for PostgreSQL – Flexible Server](https://learn.microsoft.com/azure/postgresql/flexible-server/).
 - [PostgreSQL en Windows](https://www.postgresql.org/download/windows/).
 - [Tracking con Ultralytics](https://docs.ultralytics.com/modes/track/).
 - [Licencias de Ultralytics](https://www.ultralytics.com/license).
@@ -84,3 +129,5 @@ Estas validaciones pueden motivar ajustes documentados; no deben presentarse com
 ## Registro de asistencia de IA
 
 La selección se preparó con asistencia de IA a partir del alcance, `AGENTS.md`, las preferencias del equipo y documentación oficial. Se documentaron los motivos de elección y se distinguieron las decisiones del stack de las pruebas pendientes. No se instalaron dependencias ni se ejecutaron pruebas de la aplicación en esta etapa.
+
+La evolución de persistencia (PostgreSQL local + Azure Flexible Server para integración/demo, 2026-09-26) y la guía de acceso del equipo (`docs/acceso-compartido-azure.md`) se registraron con asistencia de IA sin modificar Features #4/#5/#6 ni el esquema SQLAlchemy más allá de aplicar migraciones existentes a Azure.
