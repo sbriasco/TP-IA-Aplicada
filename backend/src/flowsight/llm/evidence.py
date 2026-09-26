@@ -71,6 +71,10 @@ def empty_summary_template() -> dict[str, Any]:
         "limitations": [],
         "commands": [
             ".\\scripts\\validate-azure-model.ps1",
-            "Push-Location backend; .\\.venv\\Scripts\\python.exe -m pytest -q tests/unit -k llm; Pop-Location",
+            (
+                "Push-Location backend; "
+                ".\\.venv\\Scripts\\python.exe -m pytest -q tests/unit -k llm; "
+                "Pop-Location"
+            ),
         ],
     }

@@ -8,7 +8,11 @@ from typing import Any, Literal
 
 from openai import APIError, AuthenticationError, OpenAI, OpenAIError
 
-from flowsight.llm.settings import AzureLlmConfigurationError, AzureLlmSettings, load_azure_llm_settings
+from flowsight.llm.settings import (
+    AzureLlmConfigurationError,
+    AzureLlmSettings,
+    load_azure_llm_settings,
+)
 
 CallKind = Literal["simple_completion", "tool_calling"]
 
@@ -133,7 +137,10 @@ def simple_completion(
             ok=False,
             latency_ms=latency_ms,
             error_code="api_error",
-            notes=f"APIError status={getattr(error, 'status_code', None)} type={type(error).__name__}",
+            notes=(
+                f"APIError status={getattr(error, 'status_code', None)} "
+                f"type={type(error).__name__}"
+            ),
         )
     except OpenAIError as error:
         latency_ms = int((time.perf_counter() - started) * 1000)

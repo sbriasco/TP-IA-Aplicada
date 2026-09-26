@@ -105,7 +105,11 @@ def run_tool_loop(
                     notes="El modelo no solicitó tools; marcar not_supported si persiste.",
                     response_text=text[:800] or None,
                 )
-                return ToolLoopResult(status="not_supported", call=call, final_text=text[:800] or None)
+                return ToolLoopResult(
+                    status="not_supported",
+                    call=call,
+                    final_text=text[:800] or None,
+                )
 
             assistant_payload: dict[str, Any] = {
                 "role": "assistant",

@@ -139,7 +139,12 @@ def inventory_cli(output_dir: str) -> int:
 
     inventory = run_inventory(probe=True)
     path = write_inventory_draft(Path(output_dir), inventory)
-    print(json.dumps({"ok": inventory.access_status != "blocked", "path": str(path), **inventory.to_dict()}, ensure_ascii=False))
+    payload = {
+        "ok": inventory.access_status != "blocked",
+        "path": str(path),
+        **inventory.to_dict(),
+    }
+    print(json.dumps(payload, ensure_ascii=False))
     return 0 if inventory.access_status in {"available", "not_evaluated"} else 1
 
 
