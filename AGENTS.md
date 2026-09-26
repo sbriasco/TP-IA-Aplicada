@@ -67,8 +67,10 @@ Consultar [Decisiones técnicas](docs/decisiones-tecnicas.md) para los motivos, 
 ## Flujo de Git
 
 - Usar `main` como rama principal, sin rama `develop`.
-- Trabajar en una rama por cambio, con nombres como
-  `feat/carga-video`, `fix/conteo-entradas` o `docs/entorno`.
+- Trabajar en una rama por cambio. Las features de Spec Kit usan
+  `feature/NNN-slug` (ej. `feature/004-carga-video`), creada por
+  `/speckit-specify` con el número de su carpeta en `specs/`. Otros cambios
+  usan el tipo como prefijo: `fix/conteo-entradas`, `docs/entorno`, `chore/...`.
 - Integrar cambios mediante un pull request breve que indique:
   qué cambió, cómo se verificó y la tarea relacionada de Azure Boards.
 - Usar squash merge y eliminar la rama después de integrarla.
