@@ -31,7 +31,7 @@
 
 ## Notes
 
-- Iteración 1: se reemplazó un escenario con marcador "[supuesto a confirmar]" (US1, escenario 4) por un criterio verificable (relocalización validada por hash, FR-008) y se quitó la mención a la tecnología del editor en Assumptions.
+- Iteración 1: se reemplazó un escenario con marcador "[supuesto a confirmar]" (US1, escenario 4) por un criterio verificable (recarga validada por hash) y se quitó la mención a la tecnología del editor en Assumptions.
 - Los términos `video_file`, `ProcessingJob` y "migraciones" provienen del data-model de specs/002 y de los criterios de Boards; se usan como vocabulario del dominio, no como decisión de implementación.
-- Iteración 2 (2026-09-26): por pedido del usuario, la zona interior pasa a ser **opcional** por local, siguiendo el experimento 001. Se actualizaron US2 escenario 1, FR-013, FR-017, casos borde, SC-003, entidad Local y Assumptions. El checklist sigue aprobado.
-- Supuestos que conviene confirmar en `/speckit-clarify`: configuración versionada **por cámara** (no por sesión), frame de referencia = primer frame decodificable, y frame de referencia accesible desde cualquier equipo conectado a la base compartida.
+- Iteración 2 (2026-09-26): por pedido del usuario, la zona interior pasa a ser **opcional** por local, siguiendo el experimento 001. Se actualizaron US2 escenario 1, los requisitos de composición y validación de locales, casos borde, SC-003, entidad Local y Assumptions. El checklist sigue aprobado.
+- Iteración 3 (`/speckit-clarify`, 2026-09-26): confirmados configuración por cámara y frame de referencia visible desde cualquier equipo; resueltos carga del video (copia a carpeta local), cámaras registradas con nombre único, selección de versión (última preseleccionada, se puede elegir una anterior) y bloqueo por relación de aspecto distinta. El checklist sigue aprobado (16/16).
