@@ -33,6 +33,7 @@ from flowsight.db.models import (
     SyntheticFrame,
 )
 from flowsight.preview.image import load_preview_base64
+from flowsight.services.cameras import get_or_create_camera
 
 router = APIRouter()
 
@@ -56,9 +57,11 @@ def not_found(message: str) -> HTTPException:
 
 @router.post("/sessions", response_model=SessionResponse, status_code=status.HTTP_201_CREATED)
 def create_session(payload: SessionCreate, database: Database) -> Session:
+    camera_id = payload.camera_id.strip()
     flow_session = Session(
         name=payload.name.strip(),
-        camera_id=payload.camera_id.strip(),
+        camera_id=camera_id,
+        registered_camera_id=get_or_create_camera(database, camera_id).id,
         source_kind=SourceKind.SYNTHETIC,
     )
     database.add(flow_session)

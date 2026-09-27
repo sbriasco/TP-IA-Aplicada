@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session as OrmSession
 
 from alembic import command
 from flowsight.db.models import JobKind, JobStatus, ProcessingJob, Session, SourceKind
+from flowsight.services.cameras import get_or_create_camera
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -55,14 +56,24 @@ def test_database_rejects_cross_session_frame_reference(migrated_database) -> No
     job_a = uuid4()
     frame_id = uuid4()
 
+    camera_a = uuid4()
+    camera_b = uuid4()
+
     with migrated_database.begin() as connection:
         connection.execute(
             text(
-                "INSERT INTO sessions (id, name, camera_id, source_kind) "
-                "VALUES (:a, 'A', 'camera-a', 'synthetic'), "
-                "(:b, 'B', 'camera-b', 'synthetic')"
+                "INSERT INTO cameras (id, name, name_key) "
+                "VALUES (:a, 'camera-a', 'camera-a'), (:b, 'camera-b', 'camera-b')"
             ),
-            {"a": session_a, "b": session_b},
+            {"a": camera_a, "b": camera_b},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO sessions (id, name, camera_id, registered_camera_id, source_kind) "
+                "VALUES (:a, 'A', 'camera-a', :camera_a, 'synthetic'), "
+                "(:b, 'B', 'camera-b', :camera_b, 'synthetic')"
+            ),
+            {"a": session_a, "b": session_b, "camera_a": camera_a, "camera_b": camera_b},
         )
         connection.execute(
             text(
@@ -97,6 +108,7 @@ def test_orm_enums_match_database_values(migrated_database) -> None:
             id=session_id,
             name="Sesión ORM",
             camera_id="camera-orm",
+            registered_camera_id=get_or_create_camera(database_session, "camera-orm").id,
             source_kind=SourceKind.SYNTHETIC,
         )
         database_session.add(

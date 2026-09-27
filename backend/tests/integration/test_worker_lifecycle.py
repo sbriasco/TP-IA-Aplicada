@@ -23,6 +23,7 @@ from flowsight.db.models import (
     SourceKind,
     SyntheticFrame,
 )
+from flowsight.services.cameras import get_or_create_camera
 from flowsight.worker.lifecycle import (
     claim_next_job,
     load_synthetic_fixture,
@@ -54,6 +55,7 @@ def create_pending_job(factory, suffix: str = "1") -> uuid.UUID:
         flow_session = Session(
             name=f"Session {suffix}",
             camera_id=f"camera-{suffix}",
+            registered_camera_id=get_or_create_camera(database_session, f"camera-{suffix}").id,
             source_kind=SourceKind.SYNTHETIC,
         )
         job = ProcessingJob(
