@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session as DatabaseSession
 from sqlalchemy.orm import selectinload
 from starlette.websockets import WebSocketDisconnect
 
+from flowsight.api.errors import api_error
 from flowsight.api.schemas import (
     JobCreate,
     JobResponse,
@@ -50,10 +51,7 @@ def health() -> dict[str, str]:
 
 
 def not_found(message: str) -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail={"code": "not_found", "message": message},
-    )
+    return api_error(status.HTTP_404_NOT_FOUND, "not_found", message)
 
 
 @router.post("/sessions", response_model=SessionResponse, status_code=status.HTTP_201_CREATED)
