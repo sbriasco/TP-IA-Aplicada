@@ -17,7 +17,9 @@ iniconfig==2.3.0
 jiter==0.17.0
 Mako==1.4.1
 MarkupSafe==3.0.3
+numpy==2.4.6
 openai==1.109.1
+opencv-python-headless==4.10.0.84
 packaging==26.3
 pluggy==1.6.0
 psycopg==3.3.5
