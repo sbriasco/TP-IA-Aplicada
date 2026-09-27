@@ -27,6 +27,10 @@
 - Q: ¿Los locales mantienen una identidad estable entre versiones? → A: Sí. Cada local tiene una identidad estable por cámara que persiste entre versiones y se puede renombrar. Cada versión guarda la geometría de los locales que incluye; un local que no figura en una versión nueva conserva su historia.
 - Q: ¿Qué tolerancia se usa para rechazar geometría casi degenerada? → A: En píxeles del frame de referencia: línea ≥ 10 px, área de polígono ≥ 100 px², vértices consecutivos a más de 2 px; vértices consecutivos repetidos se rechazan y tocar otra arista cuenta como autointersección.
 
+### Session 2026-09-27
+
+- Q: ¿Qué hace el editor si la última versión de la cámara se dibujó sobre un frame con otra relación de aspecto que el de la sesión? → A: La precarga igual, conservando los locales y su identidad, y muestra una advertencia persistente para revisar las figuras antes de guardar. La versión nueva se guarda sobre el frame de la sesión.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Registrar un video local como sesión (Priority: P1) · Boards #53
@@ -84,6 +88,7 @@ Como operador, quiero dibujar y editar zonas y líneas sobre el frame de referen
 4. **Given** una configuración dibujada, **When** la vista se redimensiona (ventana, zoom del navegador o pantalla distinta), **Then** los elementos siguen alineados con los mismos puntos de la imagen y las coordenadas guardadas no cambian.
 5. **Given** cambios sin guardar, **When** el operador guarda, **Then** se crea una versión nueva mediante las mismas reglas de validación de la User Story 2; si la validación falla, el editor señala los elementos inválidos y no pierde el dibujo.
 6. **Given** cambios sin guardar, **When** el operador intenta salir del editor, **Then** se le advierte que perderá los cambios.
+7. **Given** una última versión dibujada sobre un frame 16:9 y una sesión 4:3 de la misma cámara, **When** el operador abre el editor de esa sesión, **Then** ve la versión precargada con sus locales y una advertencia persistente de que las figuras pueden verse deformadas; al guardar, la versión nueva usa el frame y la resolución de esta sesión.
 
 ---
 
@@ -106,6 +111,7 @@ Como operador, quiero dibujar y editar zonas y líneas sobre el frame de referen
 - Zonas de distintos locales que se superponen: se permite (pasillos y vidrieras vecinas pueden solaparse en la imagen), pero se advierte.
 - Dos personas guardan una versión de la misma cámara al mismo tiempo con la base compartida: ambas versiones se guardan con números distintos y ninguna sobrescribe a la otra.
 - Una sesión de la misma cámara con distinta resolución pero la misma relación de aspecto: las coordenadas normalizadas se aplican igual y el análisis se permite. Si la relación de aspecto difiere, el análisis se bloquea (ver FR-028).
+- El editor se abre sobre una sesión cuya relación de aspecto difiere de la de la última versión: la precarga con advertencia de deformación (ver FR-030) y la versión nueva queda dibujada sobre el frame de esta sesión.
 
 ## Requirements *(mandatory)*
 
@@ -148,7 +154,7 @@ Como operador, quiero dibujar y editar zonas y líneas sobre el frame de referen
 
 **Editor visual (US #55)**
 
-- **FR-030**: El sistema DEBE ofrecer un editor que muestre el frame de referencia de una sesión y dibuje encima la última versión de configuración de su cámara, si existe.
+- **FR-030**: El sistema DEBE ofrecer un editor que muestre el frame de referencia de una sesión y dibuje encima la última versión de configuración de su cámara, si existe. Si la relación de aspecto del frame de esa versión difiere en más de 1 % de la del frame de la sesión (mismo criterio que FR-028), el editor la precarga igual, conservando los locales y su identidad, y muestra una advertencia persistente de que las figuras pueden verse deformadas y deben revisarse antes de guardar.
 - **FR-031**: El editor DEBE permitir crear, mover vértices y eliminar polígonos y líneas, asignarlos a un local y a un rol, y crear, renombrar y quitar locales de la versión en edición; renombrar conserva la identidad del local y quitarlo no borra su historia.
 - **FR-032**: El editor DEBE permitir elegir el sentido de entrada de cada línea y mostrar visualmente los lados A/B y la dirección de entrada.
 - **FR-033**: El editor DEBE mantener la correspondencia entre lo que se ve y las coordenadas normalizadas al redimensionar la vista; redimensionar no DEBE alterar las coordenadas guardadas.
