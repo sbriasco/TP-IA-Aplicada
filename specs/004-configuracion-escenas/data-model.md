@@ -16,6 +16,11 @@ Camera 1───* Session 1───0..1 VideoSource
 
 `name_key = casefold(strip(name))`. Se usa para las cámaras (FR-002) y para los nombres de local dentro de una versión (FR-020). La migración `0002` la calcula en Python con una copia fija de la misma función, no en SQL: `lower(btrim())` no es equivalente (`casefold` convierte `ß` en `ss`; `strip` también quita tabs y saltos de línea).
 
+## `camera_id` y `registered_camera_id`
+
+- En `sessions`, en `processing_jobs` y en la API de sesiones y trabajos, `camera_id` es el **texto** heredado de specs/002 (clave de trazabilidad de sus FK compuestas) y `registered_camera_id` es el **UUID** de `cameras`. Los parámetros que reciben el UUID se llaman `registered_camera_id`. En las respuestas, el UUID se lee en `camera.id`.
+- En las tablas y rutas de escena (`shops`, `scene_versions`, `scene_version_shops`, `/cameras/{camera_id}/…`, `SceneVersionSummary`), `camera_id` es el UUID de `cameras`: ahí no existe el texto de specs/002.
+
 ## Camera (nueva, `cameras`)
 
 | Campo | Tipo | Regla |

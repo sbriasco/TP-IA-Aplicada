@@ -13,7 +13,7 @@ Si falta alguna, la API y el worker arrancan igual, pero registrar o recargar vi
 
 ## Secuencia de registro
 
-1. Se validan `name`, `camera_id` (existe) y la extensión de `filename`. Si la extensión no es válida, se rechaza (`unsupported_format`) sin leer el cuerpo.
+1. Se validan `name`, `registered_camera_id` (existe) y la extensión de `filename`. Si la extensión no es válida, se rechaza (`unsupported_format`) sin leer el cuerpo.
 2. Se verifica que la carpeta esté configurada y se pueda escribir.
 3. El cuerpo se copia por bloques de 1 MiB a `.incoming/<uuid>.partial` mientras se calculan SHA-256 y tamaño. Luego `fsync`.
 4. Se sondea con OpenCV: se cuentan los frames, se obtienen fps y resolución y se toma el primer frame decodificable como JPEG.

@@ -52,7 +52,7 @@ paths:
       operationId: listSessions
       description: Listado liviano; no calcula disponibilidad del video.
       parameters:
-        - {name: camera_id, in: query, required: false, schema: {type: string, format: uuid}}
+        - {name: registered_camera_id, in: query, required: false, description: UUID de la cámara registrada (no el texto `camera_id`)., schema: {type: string, format: uuid}}
       responses:
         '200':
           description: Sesiones, más recientes primero.
@@ -74,7 +74,7 @@ paths:
         el frame de referencia. Si falla, no queda sesión ni archivo parcial.
       parameters:
         - {name: name, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 120}}
-        - {name: camera_id, in: query, required: true, schema: {type: string, format: uuid}}
+        - {name: registered_camera_id, in: query, required: true, description: UUID de la cámara registrada (no el texto `camera_id`)., schema: {type: string, format: uuid}}
         - {name: filename, in: query, required: true, description: Nombre base del archivo elegido; define la extensión., schema: {type: string, maxLength: 255}}
       requestBody:
         required: true
@@ -313,7 +313,7 @@ components:
         - type: object
           required: [camera_id, video, reference_frame, duplicate_session_ids]
           properties:
-            camera_id: {type: string, description: Clave de trazabilidad de specs/002.}
+            camera_id: {type: string, description: "Texto de trazabilidad de specs/002; en sesiones de video es `cameras.name` al registrar. No es el UUID: usar `camera.id`."}
             video:
               oneOf:
                 - {type: 'null'}
