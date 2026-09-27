@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
@@ -8,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
-from dotenv import dotenv_values
+from conftest import destructive_database_url
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 
@@ -38,9 +37,7 @@ FIXTURE_PATH = ROOT_DIR / "fixtures" / "synthetic" / "base-flow.json"
 
 @pytest.fixture()
 def session_factory(monkeypatch: pytest.MonkeyPatch):
-    values = dotenv_values(ROOT_DIR / ".env")
-    database_url = os.environ.get("FLOWSIGHT_DATABASE_URL") or values.get("FLOWSIGHT_DATABASE_URL")
-    assert isinstance(database_url, str)
+    database_url = destructive_database_url()
     monkeypatch.setenv("FLOWSIGHT_DATABASE_URL", database_url)
     config = Config(BACKEND_DIR / "alembic.ini")
     command.downgrade(config, "base")

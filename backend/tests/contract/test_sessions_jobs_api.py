@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
-from dotenv import dotenv_values
+from conftest import destructive_database_url
 from fastapi.testclient import TestClient
 
 from alembic import command
@@ -14,14 +14,11 @@ from flowsight.api.main import create_app
 from flowsight.services.jobs import InvalidJobTransition, transition_job
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
-ROOT_DIR = BACKEND_DIR.parent
 
 
 @pytest.fixture()
 def client() -> TestClient:
-    values = dotenv_values(ROOT_DIR / ".env")
-    database_url = os.environ.get("FLOWSIGHT_DATABASE_URL") or values.get("FLOWSIGHT_DATABASE_URL")
-    assert isinstance(database_url, str)
+    database_url = destructive_database_url()
     os.environ.update(
         {
             "FLOWSIGHT_ENV": "test",

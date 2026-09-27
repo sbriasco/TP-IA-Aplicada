@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 from alembic.config import Config
-from dotenv import dotenv_values
+from conftest import destructive_database_url
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
@@ -15,17 +15,11 @@ from alembic import command
 from flowsight.db.models import JobKind, JobStatus, ProcessingJob, Session, SourceKind
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
-ROOT_DIR = BACKEND_DIR.parent
 
 
 @pytest.fixture(scope="module")
 def database_url() -> str:
-    configured = os.environ.get("FLOWSIGHT_DATABASE_URL")
-    if configured is None:
-        configured = dotenv_values(ROOT_DIR / ".env").get("FLOWSIGHT_DATABASE_URL")
-    if not isinstance(configured, str) or not configured:
-        pytest.fail("FLOWSIGHT_DATABASE_URL no está configurada para las pruebas PostgreSQL")
-    return configured
+    return destructive_database_url()
 
 
 @pytest.fixture()
