@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, SecretStr, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+MACHINE_ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9-]{2,39}")
 
 
 class ConfigurationError(RuntimeError):
@@ -25,6 +29,30 @@ class Settings(BaseSettings):
     preview_max_fps: int = Field(
         default=5, validation_alias="FLOWSIGHT_PREVIEW_MAX_FPS", gt=0, le=5
     )
+    # Optional per-machine settings: the API and worker start without them, and
+    # the video endpoints report them as not configured.
+    videos_dir: Path | None = Field(default=None, validation_alias="FLOWSIGHT_VIDEOS_DIR")
+    machine_id: str | None = Field(default=None, validation_alias="FLOWSIGHT_MACHINE_ID")
+
+    @field_validator("videos_dir", mode="before")
+    @classmethod
+    def validate_videos_dir(cls, value: object) -> object:
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return None
+        if value is not None and not Path(value).is_absolute():
+            raise ValueError("must be an absolute path")
+        return value
+
+    @field_validator("machine_id", mode="before")
+    @classmethod
+    def validate_machine_id(cls, value: object) -> str | None:
+        # An invalid id must not block startup; it is exposed as not configured.
+        if not isinstance(value, str):
+            return None
+        value = value.strip()
+        return value if MACHINE_ID_PATTERN.fullmatch(value) else None
 
     @field_validator("database_url")
     @classmethod
