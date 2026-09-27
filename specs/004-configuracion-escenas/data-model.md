@@ -14,7 +14,7 @@ Camera 1───* Session 1───0..1 VideoSource
 
 ## Normalización de nombres
 
-`name_key = casefold(strip(name))`. Se usa para las cámaras (FR-002) y para los nombres de local dentro de una versión (FR-020). En SQL (migración), `lower(btrim(name))`.
+`name_key = casefold(strip(name))`. Se usa para las cámaras (FR-002) y para los nombres de local dentro de una versión (FR-020). La migración `0002` la calcula en Python con una copia fija de la misma función, no en SQL: `lower(btrim())` no es equivalente (`casefold` convierte `ß` en `ss`; `strip` también quita tabs y saltos de línea).
 
 ## Camera (nueva, `cameras`)
 
@@ -37,7 +37,7 @@ No se renombra ni se borra en el MVP. Crear un nombre con `name_key` existente �
 
 Nueva restricción: UNIQUE `(id, registered_camera_id)` como destino de FK compuestas.
 
-**Migración de datos**: se agrupan las sesiones existentes por `lower(btrim(camera_id))` y cada `camera_id` original distinto genera una cámara. Si hay choque, la primera cámara del grupo (por `min(created_at)`) conserva el nombre y las demás reciben el sufijo ` (n)`. Se registra un `warning` por conflicto y no se fusionan sesiones ([R8](./research.md#r8-cámaras-registradas-y-migración-de-sesiones-sintéticas)).
+**Migración de datos**: se agrupan las sesiones existentes por `name_key` de su `camera_id`, calculado en Python y cada `camera_id` original distinto genera una cámara. Si hay choque, la primera cámara del grupo (por `min(created_at)`) conserva el nombre y las demás reciben el sufijo ` (n)`. Se registra un `warning` por conflicto y no se fusionan sesiones ([R8](./research.md#r8-cámaras-registradas-y-migración-de-sesiones-sintéticas)).
 
 ## VideoSource (nueva, `video_sources`)
 
