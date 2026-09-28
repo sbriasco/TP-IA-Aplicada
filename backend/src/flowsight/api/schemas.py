@@ -8,15 +8,17 @@ from decimal import Decimal
 from typing import Annotated
 
 from pydantic import (
+    AllowInfNan,
     BaseModel,
     ConfigDict,
     Field,
+    Strict,
     StringConstraints,
     computed_field,
     field_validator,
 )
 
-from flowsight.db.models import JobKind, JobStatus, SourceKind
+from flowsight.db.models import EntryDirection, JobKind, JobStatus, SourceKind
 from flowsight.video.storage import Availability
 
 
@@ -114,9 +116,12 @@ class SessionDetail(SessionSummary):
 
 
 class JobCreate(BaseModel):
+    """Extends specs/002: `kind` stays required and `scene_version_id` is optional."""
+
     model_config = ConfigDict(extra="forbid")
 
     kind: JobKind
+    scene_version_id: uuid.UUID | None = None
 
 
 class TransitionResponse(BaseModel):
@@ -134,6 +139,7 @@ class JobResponse(BaseModel):
     id: uuid.UUID
     session_id: uuid.UUID
     kind: JobKind
+    scene_version_id: uuid.UUID | None
     status: JobStatus
     created_at: datetime
     started_at: datetime | None
@@ -186,3 +192,110 @@ class JobTraceResponse(BaseModel):
     frames: list[FrameResponse]
     observations: list[ObservationResponse]
     events: list[EventResponse]
+
+
+# --- Scene versions (specs/004) ---------------------------------------------------
+# Only the shape is validated here. Range and geometry go through
+# `flowsight.scene.validation.validate_scene`, so every problem comes back with its
+# rule inside a single 422 `invalid_scene_configuration`.
+
+# Upper bound on shops per version: overlap warnings compare every zone pair of
+# every shop pair, so the cost grows with the square of this number.
+MAX_SHOPS_PER_VERSION = 20
+
+Coordinate = Annotated[float, Strict(), AllowInfNan(False)]
+Point = tuple[Coordinate, Coordinate]
+
+
+class EntryLineInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start: Point
+    end: Point
+    entry_direction: EntryDirection
+
+
+class ZonesInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    front: list[Point] | None = None
+    interior: list[Point] | None = None
+    showcase: list[Point] | None = None
+
+
+class ShopInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    shop_id: uuid.UUID | None = None
+    name: TrimmedName
+    zones: ZonesInput
+    entry_line: EntryLineInput | None
+
+
+class SceneVersionCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reference_session_id: uuid.UUID
+    base_version_id: uuid.UUID | None = None
+    shops: list[ShopInput] = Field(max_length=MAX_SHOPS_PER_VERSION)
+
+
+class SceneIssueResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    rule: str
+    element: str
+    shop_index: int | None
+    shop_name: str | None
+    message: str
+
+
+class SceneVersionSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    camera_id: uuid.UUID
+    version_number: int
+    reference_session_id: uuid.UUID
+    frame_width: int
+    frame_height: int
+    created_by_machine_id: str | None
+    created_at: datetime
+    shop_count: int
+
+
+class ZonesResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    front: list[tuple[float, float]] | None = None
+    interior: list[tuple[float, float]] | None = None
+    showcase: list[tuple[float, float]] | None = None
+
+
+class EntryLineResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    start: tuple[float, float]
+    end: tuple[float, float]
+    entry_direction: EntryDirection
+
+
+class SceneVersionShopResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    shop_id: uuid.UUID
+    name: str
+    zones: ZonesResponse
+    entry_line: EntryLineResponse
+
+
+class SceneVersionResponse(SceneVersionSummary):
+    """A saved version as `GET /scene-versions/{id}` returns it, identical every time."""
+
+    shops: list[SceneVersionShopResponse]
+
+
+class SceneVersionCreatedResponse(SceneVersionResponse):
+    """`POST` response: the saved version plus its non-blocking warnings."""
+
+    warnings: list[SceneIssueResponse]

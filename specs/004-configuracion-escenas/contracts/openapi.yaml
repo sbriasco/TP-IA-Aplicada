@@ -394,7 +394,7 @@ components:
       properties:
         reference_session_id: {type: string, format: uuid}
         base_version_id: {type: [string, 'null'], format: uuid, description: Versión cargada en el editor; solo sirve para advertir newer_version_exists.}
-        shops: {type: array, items: {$ref: '#/components/schemas/ShopInput'}}
+        shops: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/ShopInput'}, description: 'Tope de 20 locales: las advertencias de superposición comparan cada par de zonas de cada par de locales.'}
     SceneVersionSummary:
       type: object
       required: [id, camera_id, version_number, reference_session_id, frame_width, frame_height, created_at, shop_count]
