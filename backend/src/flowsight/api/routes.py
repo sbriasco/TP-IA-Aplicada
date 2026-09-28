@@ -23,6 +23,11 @@ from flowsight.api.schemas import (
     JobResponse,
     JobTraceResponse,
     ReferenceFrameResponse,
+    SceneIssueResponse,
+    SceneVersionCreate,
+    SceneVersionCreatedResponse,
+    SceneVersionResponse,
+    SceneVersionSummary,
     SessionCreate,
     SessionDetail,
     SessionSummary,
@@ -49,6 +54,13 @@ from flowsight.services.cameras import (
     create_camera,
     get_or_create_camera,
     list_cameras,
+)
+from flowsight.services.scenes import (
+    InvalidSceneConfiguration,
+    SceneError,
+    create_scene_version,
+    get_scene_version,
+    list_scene_versions,
 )
 from flowsight.services.video_sessions import (
     VideoSessionError,
@@ -280,6 +292,75 @@ _VIDEO_ERRORS: dict[str, tuple[int, str, str]] = {
 def video_error(error: StorageError | VideoRejected | VideoSessionError) -> HTTPException:
     status_code, code, message = _VIDEO_ERRORS[error.code]
     return api_error(status_code, code, message)
+
+
+# Status and message for every scene error code.
+_SCENE_ERRORS: dict[str, tuple[int, str, str]] = {
+    "camera_not_found": (404, "not_found", "Cámara inexistente."),
+}
+
+
+def scene_error(error: SceneError) -> HTTPException:
+    status_code, code, message = _SCENE_ERRORS[error.code]
+    return api_error(status_code, code, message)
+
+
+@router.get("/cameras/{camera_id}/scene-versions", response_model=list[SceneVersionSummary])
+def get_scene_versions(camera_id: uuid.UUID, database: Database) -> list[SceneVersionSummary]:
+    try:
+        rows = list_scene_versions(database, camera_id)
+    except SceneError as error:
+        raise scene_error(error) from None
+    return [SceneVersionSummary.model_validate(row) for row in rows]
+
+
+@router.post(
+    "/cameras/{camera_id}/scene-versions",
+    response_model=SceneVersionCreatedResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def post_scene_version(
+    camera_id: uuid.UUID, payload: SceneVersionCreate, request: Request, database: Database
+) -> SceneVersionCreatedResponse:
+    try:
+        created = create_scene_version(
+            database,
+            request.app.state.settings,
+            camera_id,
+            reference_session_id=payload.reference_session_id,
+            base_version_id=payload.base_version_id,
+            shops=payload.model_dump()["shops"],
+        )
+    except SceneError as error:
+        database.rollback()
+        raise scene_error(error) from None
+    except InvalidSceneConfiguration as error:
+        database.rollback()
+        raise api_error(
+            422,
+            "invalid_scene_configuration",
+            "La configuración de la escena tiene errores. Corregilos y volvé a guardar.",
+            errors=[
+                SceneIssueResponse.model_validate(issue).model_dump(mode="json")
+                for issue in error.errors
+            ],
+        ) from None
+    database.commit()
+    version = SceneVersionResponse.model_validate(get_scene_version(database, created.id))
+    return SceneVersionCreatedResponse(
+        **version.model_dump(),
+        warnings=[SceneIssueResponse.model_validate(issue) for issue in created.warnings],
+    )
+
+
+@router.get("/scene-versions/{scene_version_id}", response_model=SceneVersionResponse)
+def get_scene_version_detail(
+    scene_version_id: uuid.UUID, database: Database
+) -> SceneVersionResponse:
+    version = get_scene_version(database, scene_version_id)
+    if version is None:
+        raise not_found("Versión de escena inexistente.")
+    return SceneVersionResponse.model_validate(version)
 
 
 @router.post(
