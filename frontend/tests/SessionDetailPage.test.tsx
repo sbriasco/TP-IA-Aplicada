@@ -3,8 +3,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SessionDetailPage } from "../src/pages/SessionDetailPage";
+import type { SceneVersionSummary } from "../src/types/scene";
 import type { SessionDetail, VideoAvailability } from "../src/types/session";
-import { byLabel, chooseFile, submit } from "./dom";
+import { byButton, byLabel, changeValue, chooseFile, click, submit } from "./dom";
 
 const API = "http://api.test";
 const camera = { id: "cam-1", name: "Cam 01", created_at: "2026-09-28T00:00:00Z" };
@@ -49,6 +50,26 @@ function videoSession(
 
 function response(status: number, body: unknown) {
   return { ok: status >= 200 && status < 300, status, text: async () => JSON.stringify(body) };
+}
+
+interface Reply {
+  status: number;
+  body: unknown;
+}
+
+function sceneVersion(versionNumber: number, overrides: Partial<SceneVersionSummary> = {}) {
+  return {
+    id: `v-${versionNumber}`,
+    camera_id: "cam-1",
+    version_number: versionNumber,
+    reference_session_id: "s-1",
+    frame_width: 1280,
+    frame_height: 720,
+    created_by_machine_id: "pc-lab-01",
+    created_at: `2026-09-2${versionNumber}T10:00:00Z`,
+    shop_count: versionNumber,
+    ...overrides,
+  } satisfies SceneVersionSummary;
 }
 
 class FakeXhr {
@@ -104,10 +125,44 @@ describe("SessionDetailPage", () => {
     vi.unstubAllGlobals();
   });
 
-  async function render(session: SessionDetail | { status: number; body: unknown }) {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  // Responde según la URL: la sesión, las versiones de escena de su cámara y la creación de trabajos.
+  async function render(
+    session: SessionDetail | Reply,
+    { versions = [], job }: { versions?: SceneVersionSummary[] | Reply; job?: Reply } = {},
+  ) {
     const result = "status" in session ? session : { status: 200, body: session };
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(result.status, result.body)));
+    const versionsReply = Array.isArray(versions) ? { status: 200, body: versions } : versions;
+    fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith("/scene-versions")) return response(versionsReply.status, versionsReply.body);
+      if (url.endsWith("/jobs")) {
+        return job === undefined ? response(500, {}) : response(job.status, job.body);
+      }
+      return response(result.status, result.body);
+    });
+    vi.stubGlobal("fetch", fetchMock);
     await act(async () => root.render(<SessionDetailPage sessionId="s-1" apiBaseUrl={API} />));
+  }
+
+  function analysisSection(): HTMLElement {
+    const section = container.querySelector<HTMLElement>('section[aria-labelledby="analysis-title"]');
+    if (section === null) throw new Error("No se encontró la sección Iniciar análisis.");
+    return section;
+  }
+
+  async function startAnalysis(): Promise<void> {
+    await click(byButton(analysisSection(), "Iniciar análisis"));
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/jobs"))).toBe(true),
+      );
+    });
+  }
+
+  function jobRequestBody(): unknown {
+    const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/jobs"));
+    return JSON.parse((call?.[1] as RequestInit).body as string);
   }
 
   function definition(term: string): string | null | undefined {
@@ -211,6 +266,135 @@ describe("SessionDetailPage", () => {
     expect(container.textContent).toContain("no tiene video ni frame de referencia");
     expect(container.querySelector("img")).toBeNull();
     expect(container.querySelector('a[href="/sessions/s-1/editor"]')).toBeNull();
+    expect(container.textContent).not.toContain("Iniciar análisis");
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("scene-versions"))).toBe(false);
+  });
+
+  describe("Iniciar análisis", () => {
+    it("pide las versiones de la cámara y preselecciona la última", async () => {
+      await render(videoSession("available"), {
+        versions: [sceneVersion(3), sceneVersion(2), sceneVersion(1)],
+      });
+
+      expect(fetchMock).toHaveBeenCalledWith(`${API}/cameras/cam-1/scene-versions`, undefined);
+      const select = byLabel<HTMLSelectElement>(analysisSection(), "Versión de escena");
+      expect(Array.from(select.options).map((option) => option.value)).toEqual(["v-3", "v-2", "v-1"]);
+      expect(select.value).toBe("v-3");
+      expect(select.options[0]?.textContent).toContain("Versión 3");
+      expect(byButton(analysisSection(), "Iniciar análisis").disabled).toBe(false);
+    });
+
+    it("crea el trabajo con la versión elegida y lo informa en pending", async () => {
+      await render(videoSession("available"), {
+        versions: [sceneVersion(2), sceneVersion(1)],
+        job: {
+          status: 201,
+          body: {
+            id: "job-9",
+            session_id: "s-1",
+            kind: "video_analysis",
+            scene_version_id: "v-1",
+            status: "pending",
+            created_at: "2026-09-28T11:00:00Z",
+          },
+        },
+      });
+
+      await changeValue(byLabel<HTMLSelectElement>(analysisSection(), "Versión de escena"), "v-1");
+      await startAnalysis();
+
+      expect(jobRequestBody()).toEqual({ kind: "video_analysis", scene_version_id: "v-1" });
+      const status = analysisSection().querySelector('[role="status"]');
+      expect(status?.textContent).toContain("job-9");
+      expect(status?.textContent).toContain("pending");
+      expect(status?.textContent).toContain("versión 1");
+    });
+
+    it("sin versiones avisa y enlaza al editor sin ofrecer el botón", async () => {
+      await render(videoSession("available"), { versions: [] });
+
+      const section = analysisSection();
+      expect(section.textContent).toContain("no tiene ninguna configuración de escena");
+      expect(section.querySelector('a[href="/sessions/s-1/editor"]')).not.toBeNull();
+      expect(section.querySelector("select")).toBeNull();
+      expect(section.querySelector("button")).toBeNull();
+    });
+
+    it("informa scene_not_configured con enlace al editor", async () => {
+      await render(videoSession("available"), {
+        versions: [sceneVersion(1)],
+        job: {
+          status: 409,
+          body: {
+            detail: {
+              code: "scene_not_configured",
+              message: "La cámara no tiene ninguna configuración de escena.",
+            },
+          },
+        },
+      });
+
+      await startAnalysis();
+
+      const alert = analysisSection().querySelector('[role="alert"]');
+      expect(alert?.textContent).toContain("La cámara no tiene ninguna configuración de escena.");
+      expect(alert?.querySelector('a[href="/sessions/s-1/editor"]')).not.toBeNull();
+    });
+
+    it("informa aspect_ratio_mismatch con los ratios y pide una versión sobre este frame", async () => {
+      await render(videoSession("available"), {
+        versions: [sceneVersion(1, { frame_width: 640, frame_height: 480 })],
+        job: {
+          status: 409,
+          body: {
+            detail: {
+              code: "aspect_ratio_mismatch",
+              message: "La relación de aspecto difiere.",
+              video_aspect_ratio: 1.777778,
+              version_aspect_ratio: 1.333333,
+            },
+          },
+        },
+      });
+
+      await startAnalysis();
+
+      const alert = analysisSection().querySelector('[role="alert"]');
+      expect(alert?.textContent).toContain("1.778");
+      expect(alert?.textContent).toContain("1.333");
+      expect(alert?.textContent).toContain("Creá una versión nueva sobre el frame de esta sesión");
+      expect(alert?.querySelector('a[href="/sessions/s-1/editor"]')).not.toBeNull();
+    });
+
+    it("muestra el message del backend ante otros errores", async () => {
+      await render(videoSession("available"), {
+        versions: [sceneVersion(1)],
+        job: {
+          status: 422,
+          body: {
+            detail: {
+              code: "scene_version_other_camera",
+              message: "La versión de escena elegida no existe o es de otra cámara.",
+            },
+          },
+        },
+      });
+
+      await startAnalysis();
+
+      const alert = analysisSection().querySelector('[role="alert"]');
+      expect(alert?.textContent).toBe("La versión de escena elegida no existe o es de otra cámara.");
+      expect(alert?.querySelector("a")).toBeNull();
+    });
+
+    it("informa si no se pudieron cargar las versiones", async () => {
+      await render(videoSession("available"), {
+        versions: { status: 404, body: { detail: { code: "not_found", message: "Cámara inexistente." } } },
+      });
+
+      expect(analysisSection().querySelector('[role="alert"]')?.textContent).toBe("Cámara inexistente.");
+      expect(analysisSection().querySelector("button")).toBeNull();
+    });
   });
 
   it("informa una sesión inexistente", async () => {
