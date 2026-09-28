@@ -1,8 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 
-import { registerVideoSession } from "../api/sessions";
+import { relinkVideo } from "../api/sessions";
 import type { SessionDetail } from "../types/session";
-import { CameraPicker } from "./CameraPicker";
 import {
   VIDEO_ACCEPT,
   canReadFile,
@@ -12,16 +11,15 @@ import {
   type UploadPhase,
 } from "./UploadProgress";
 
-interface VideoUploadFormProps {
+interface VideoRelinkFormProps {
   apiBaseUrl: string;
-  onRegistered: (session: SessionDetail) => void;
+  sessionId: string;
+  onRelinked: (session: SessionDetail) => void;
 }
 
-export function VideoUploadForm({ apiBaseUrl, onRegistered }: VideoUploadFormProps) {
+export function VideoRelinkForm({ apiBaseUrl, sessionId, onRelinked }: VideoRelinkFormProps) {
   const id = useId();
   const [file, setFile] = useState<File | null>(null);
-  const [name, setName] = useState("");
-  const [cameraId, setCameraId] = useState("");
   const [phase, setPhase] = useState<UploadPhase>({ kind: "idle" });
   const [error, setError] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
@@ -32,7 +30,7 @@ export function VideoUploadForm({ apiBaseUrl, onRegistered }: VideoUploadFormPro
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy || file === null || name.trim() === "" || cameraId === "") return;
+    if (busy || file === null) return;
     setError(null);
     if (!(await canReadFile(file))) {
       setError("No se pudo leer el archivo elegido.");
@@ -42,16 +40,13 @@ export function VideoUploadForm({ apiBaseUrl, onRegistered }: VideoUploadFormPro
     controller.current = new AbortController();
     setPhase({ kind: "uploading", loaded: 0, total: file.size });
     try {
-      const session = await registerVideoSession(
-        apiBaseUrl,
-        { name: name.trim(), registeredCameraId: cameraId, file },
-        {
-          signal: controller.current.signal,
-          onUploadProgress: (loaded, total) => setPhase({ kind: "uploading", loaded, total }),
-          onUploadComplete: () => setPhase({ kind: "analyzing" }),
-        },
-      );
-      onRegistered(session);
+      const session = await relinkVideo(apiBaseUrl, sessionId, file, {
+        signal: controller.current.signal,
+        onUploadProgress: (loaded, total) => setPhase({ kind: "uploading", loaded, total }),
+        onUploadComplete: () => setPhase({ kind: "analyzing" }),
+      });
+      setPhase({ kind: "idle" });
+      onRelinked(session);
     } catch (reason) {
       if (isAbort(reason)) return;
       setError(uploadErrorMessage(reason));
@@ -61,7 +56,8 @@ export function VideoUploadForm({ apiBaseUrl, onRegistered }: VideoUploadFormPro
 
   return (
     <form onSubmit={(event) => void handleSubmit(event)} aria-labelledby={`${id}-title`}>
-      <h2 id={`${id}-title`}>Registrar video</h2>
+      <h3 id={`${id}-title`}>Volver a cargar el video</h3>
+      <p>Elegí el mismo archivo que se registró originalmente.</p>
       <fieldset disabled={busy}>
         <label htmlFor={`${id}-file`}>Archivo de video</label>
         <input
@@ -74,19 +70,9 @@ export function VideoUploadForm({ apiBaseUrl, onRegistered }: VideoUploadFormPro
             setError(null);
           }}
         />
-        <label htmlFor={`${id}-name`}>Nombre de la sesión</label>
-        <input
-          id={`${id}-name`}
-          value={name}
-          maxLength={120}
-          required
-          onChange={(event) => setName(event.target.value)}
-        />
-        <CameraPicker apiBaseUrl={apiBaseUrl} value={cameraId} onChange={setCameraId} />
-        <button type="submit">Registrar video</button>
+        <button type="submit">Volver a cargar</button>
       </fieldset>
-
-      <UploadProgress phase={phase} analyzingText="Analizando video…" />
+      <UploadProgress phase={phase} analyzingText="Verificando el video…" />
       {error !== null && <p role="alert">{error}</p>}
     </form>
   );
