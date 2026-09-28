@@ -3,8 +3,8 @@
 Covers `POST /sessions/{session_id}/jobs` as extended by contracts/openapi.yaml:
 `video_analysis` requires `scene_version_id` and `synthetic_base_flow` forbids it
 (FR-025 to FR-028, research R12). Order of the checks (T034):
-`job_kind_mismatch` → `scene_version_not_allowed` → `scene_version_required`, then the
-gate `scene_not_configured` (409) → `scene_version_other_camera` (422) →
+`job_kind_mismatch` → `scene_version_not_allowed` → `scene_not_configured` (409) →
+`scene_version_required` (422) → `scene_version_other_camera` (422) →
 `aspect_ratio_mismatch` (409). Every error body is `{"detail": {"code", "message", ...}}`.
 """
 

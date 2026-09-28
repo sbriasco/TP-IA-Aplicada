@@ -216,7 +216,8 @@ paths:
       operationId: createJob
       description: >
         Extiende specs/002. `video_analysis` exige `scene_version_id`; `synthetic_base_flow` lo prohíbe.
-        Orden de validación: scene_not_configured → scene_version_other_camera → aspect_ratio_mismatch.
+        Orden de validación: job_kind_mismatch → scene_version_not_allowed → scene_not_configured →
+        scene_version_required → scene_version_other_camera (también si la versión no existe) → aspect_ratio_mismatch.
         El trabajo de video queda `pending` hasta que #56 agregue su procesamiento.
       parameters:
         - {$ref: '#/components/parameters/SessionId'}

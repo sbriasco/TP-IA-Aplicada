@@ -112,10 +112,11 @@ Decisiones de Phase 0 para `specs/004-configuracion-escenas`. Cada una resuelve 
 
 - **Decision**:
   - **Tipo de trabajo**: se agrega `JobKind.video_analysis`. `POST /sessions/{id}/jobs` exige `scene_version_id` para sesiones de video y lo prohíbe para las sintéticas (CHK008), y valida en este orden:
-    1. la cámara tiene al menos una versión (`scene_not_configured`, 409);
-    2. la versión es de la misma cámara (`scene_version_other_camera`, 422);
-    3. la relación de aspecto coincide (`aspect_ratio_mismatch`, 409).
-  - **`processing_jobs`**: suma `scene_version_id` y `registered_camera_id`, ambos nullable. Tiene FK compuestas `(session_id, registered_camera_id) → sessions(id, registered_camera_id)` y `(scene_version_id, registered_camera_id) → scene_versions(id, camera_id)`, y un CHECK: `(kind = 'video_analysis') = (scene_version_id IS NOT NULL)`. Ese CHECK se agrega en la misma `0002`, después del bloque autocommit del enum (R9).
+    1. el tipo de trabajo corresponde al origen de la sesión (`job_kind_mismatch`, 422) y una sesión sintética no trae versión (`scene_version_not_allowed`, 422);
+    2. la cámara tiene al menos una versión (`scene_not_configured`, 409), antes de exigir `scene_version_id` (`scene_version_required`, 422), para que la UI sin versiones reciba el enlace al editor;
+    3. la versión existe y es de la misma cámara (`scene_version_other_camera`, 422);
+    4. la relación de aspecto coincide (`aspect_ratio_mismatch`, 409).
+  - **`processing_jobs`**: suma `scene_version_id` y `registered_camera_id`, ambos nullable. Tiene FK compuestas `(session_id, registered_camera_id) → sessions(id, registered_camera_id)` y `(scene_version_id, registered_camera_id) → scene_versions(id, camera_id)`, y un CHECK: `(kind = 'video_analysis') = (scene_version_id IS NOT NULL AND registered_camera_id IS NOT NULL)`. Ese CHECK se agrega en la misma `0002`, después del bloque autocommit del enum (R9).
   - **Worker**: `claim_next_job` filtra por los tipos que el worker sabe procesar (`synthetic_base_flow`). Los trabajos `video_analysis` quedan en `pending` hasta que #56 agregue su handler.
   - **Preselección**: la hace la UI con la última versión (`GET /cameras/{id}/scene-versions`, orden descendente); la API no elige una versión por defecto.
 - **Rationale**: La compuerta y la asociación trabajo → versión son el alcance de esta feature. Filtrar el claim evita que el worker actual marque como fallidos trabajos que todavía no sabe procesar.

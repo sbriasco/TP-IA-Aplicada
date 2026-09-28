@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -39,7 +38,6 @@ from flowsight.db.models import (
     Camera,
     Event,
     JobStatus,
-    JobStatusTransition,
     Observation,
     ProcessingJob,
     ReferenceFrame,
@@ -55,6 +53,7 @@ from flowsight.services.cameras import (
     get_or_create_camera,
     list_cameras,
 )
+from flowsight.services.jobs import JobRequestError, create_job_for_session
 from flowsight.services.scenes import (
     InvalidSceneConfiguration,
     SceneError,
@@ -305,6 +304,39 @@ def scene_error(error: SceneError) -> HTTPException:
     return api_error(status_code, code, message)
 
 
+# Status and message for every job request error code (FR-025 to FR-028).
+_JOB_ERRORS: dict[str, tuple[int, str]] = {
+    "job_kind_mismatch": (
+        422,
+        "El tipo de trabajo no corresponde a la sesión: las sesiones sintéticas usan "
+        "synthetic_base_flow y las de video, video_analysis.",
+    ),
+    "scene_version_not_allowed": (
+        422,
+        "Las sesiones sintéticas no usan una versión de escena. Quitá scene_version_id.",
+    ),
+    "scene_not_configured": (
+        409,
+        "La cámara no tiene ninguna configuración de escena. Creá una en el editor antes "
+        "de iniciar el análisis.",
+    ),
+    "scene_version_required": (
+        422,
+        "Elegí una versión de escena de la cámara para iniciar el análisis.",
+    ),
+    "scene_version_other_camera": (
+        422,
+        "La versión de escena elegida no existe o es de otra cámara. Elegí una versión de "
+        "la cámara de la sesión.",
+    ),
+    "aspect_ratio_mismatch": (
+        409,
+        "La relación de aspecto del video difiere de la del frame de la versión elegida. "
+        "Creá una versión nueva sobre el frame de esta sesión.",
+    ),
+}
+
+
 @router.get("/cameras/{camera_id}/scene-versions", response_model=list[SceneVersionSummary])
 def get_scene_versions(camera_id: uuid.UUID, database: Database) -> list[SceneVersionSummary]:
     try:
@@ -369,23 +401,16 @@ def get_scene_version_detail(
     status_code=status.HTTP_201_CREATED,
 )
 def create_job(session_id: uuid.UUID, payload: JobCreate, database: Database) -> ProcessingJob:
-    if database.get(Session, session_id) is None:
+    flow_session = database.get(Session, session_id)
+    if flow_session is None:
         raise not_found("Sesión inexistente.")
 
-    occurred_at = datetime.now(UTC)
-    job = ProcessingJob(
-        session_id=session_id,
-        kind=payload.kind,
-        status=JobStatus.PENDING,
-        transitions=[
-            JobStatusTransition(
-                from_status=None,
-                to_status=JobStatus.PENDING,
-                occurred_at=occurred_at,
-            )
-        ],
-    )
-    database.add(job)
+    try:
+        job = create_job_for_session(database, flow_session, payload.kind, payload.scene_version_id)
+    except JobRequestError as error:
+        database.rollback()
+        status_code, message = _JOB_ERRORS[error.code]
+        raise api_error(status_code, error.code, message, **error.extra) from None
     database.commit()
     return get_job_record(database, job.id)
 
