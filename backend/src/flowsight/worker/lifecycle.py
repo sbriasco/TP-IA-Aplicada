@@ -12,10 +12,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as DatabaseSession
 from sqlalchemy.orm import sessionmaker
 
-from flowsight.db.models import JobStatus, ProcessingJob
+from flowsight.db.models import JobKind, JobStatus, ProcessingJob
 from flowsight.services.jobs import transition_job
 from flowsight.services.trace import persist_synthetic_trace
 from flowsight.synthetic.trace import generate_synthetic_trace
+
+# Kinds this worker knows how to process; `video_analysis` stays pending until #56 (R12).
+SUPPORTED_JOB_KINDS = (JobKind.SYNTHETIC_BASE_FLOW,)
 
 
 def claim_next_job(
@@ -23,7 +26,10 @@ def claim_next_job(
 ) -> ProcessingJob | None:
     job = database_session.scalar(
         select(ProcessingJob)
-        .where(ProcessingJob.status == JobStatus.PENDING)
+        .where(
+            ProcessingJob.status == JobStatus.PENDING,
+            ProcessingJob.kind.in_(SUPPORTED_JOB_KINDS),
+        )
         .order_by(ProcessingJob.created_at, ProcessingJob.id)
         .with_for_update(skip_locked=True)
         .limit(1)
