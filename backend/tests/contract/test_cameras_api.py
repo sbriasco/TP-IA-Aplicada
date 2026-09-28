@@ -113,6 +113,7 @@ def test_lists_created_and_synthetic_session_cameras_ordered_by_name(
 
     assert response.status_code == 200
     cameras = response.json()
-    assert [camera["name"] for camera in cameras] == ["Pasillo", "camera-01"]
-    assert cameras[0] == created
-    _assert_camera(cameras[1], "camera-01")
+    # Case-insensitive order, whatever the database collation.
+    assert [camera["name"] for camera in cameras] == ["camera-01", "Pasillo"]
+    assert cameras[1] == created
+    _assert_camera(cameras[0], "camera-01")

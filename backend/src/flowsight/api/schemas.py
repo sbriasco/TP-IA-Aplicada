@@ -42,13 +42,13 @@ class SessionResponse(SessionCreate):
     created_at: datetime
 
 
-CameraName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
+TrimmedName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
 
 
 class CameraCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    name: CameraName
+    name: TrimmedName
 
 
 class CameraResponse(BaseModel):

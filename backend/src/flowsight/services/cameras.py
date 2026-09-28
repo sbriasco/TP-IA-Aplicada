@@ -58,4 +58,7 @@ def create_camera(database_session: Session, name: str) -> Camera:
 
 
 def list_cameras(database_session: Session) -> list[Camera]:
-    return list(database_session.scalars(select(Camera).order_by(Camera.name, Camera.id)))
+    # By `name_key` so the order does not depend on the database collation.
+    return list(
+        database_session.scalars(select(Camera).order_by(Camera.name_key, Camera.name, Camera.id))
+    )
