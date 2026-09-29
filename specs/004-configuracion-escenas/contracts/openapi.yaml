@@ -1,0 +1,445 @@
+openapi: 3.1.0
+info:
+  title: FlowSight API — escenas (Feature #12)
+  version: 0.2.0
+  description: >
+    Endpoints nuevos o modificados por specs/004. Extiende specs/002-entorno-arquitectura-base/contracts/openapi.yaml;
+    lo que no aparece acá mantiene ese contrato. Todos los errores usan
+    `{"detail": {"code": string, "message": string, ...}}` y nunca incluyen rutas absolutas ni credenciales (FR-013).
+servers:
+  - url: http://127.0.0.1:8000
+paths:
+  /cameras:
+    get:
+      operationId: listCameras
+      responses:
+        '200':
+          description: Cámaras registradas, ordenadas por nombre.
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Camera'}}
+    post:
+      operationId: createCamera
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CameraCreate'}
+      responses:
+        '201':
+          description: Cámara creada.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Camera'}
+        '409':
+          description: Ya existe una cámara con ese nombre (sin distinguir mayúsculas ni espacios de borde).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    allOf:
+                      - {$ref: '#/components/schemas/ErrorDetail'}
+                      - type: object
+                        properties:
+                          code: {const: camera_exists}
+                          existing_camera: {$ref: '#/components/schemas/Camera'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+
+  /sessions:
+    get:
+      operationId: listSessions
+      description: Listado liviano; no calcula disponibilidad del video.
+      parameters:
+        - {name: registered_camera_id, in: query, required: false, description: UUID de la cámara registrada (no el texto `camera_id`)., schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Sesiones, más recientes primero.
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/SessionSummary'}}
+    post:
+      operationId: createSyntheticSession
+      description: >
+        Sin cambios de contrato respecto de specs/002. `camera_id` (texto) se asocia por get-or-create a
+        una cámara registrada con el mismo `name_key`.
+
+  /video-sessions:
+    post:
+      operationId: registerVideoSession
+      description: >
+        Registra un video local como sesión `video_file` (FR-001..FR-011). El cuerpo es el archivo crudo.
+        La API lo copia a `FLOWSIGHT_VIDEOS_DIR`, calcula SHA-256 durante la copia, sondea con OpenCV y extrae
+        el frame de referencia. Si falla, no queda sesión ni archivo parcial.
+      parameters:
+        - {name: name, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 120}}
+        - {name: registered_camera_id, in: query, required: true, description: UUID de la cámara registrada (no el texto `camera_id`)., schema: {type: string, format: uuid}}
+        - {name: filename, in: query, required: true, description: Nombre base del archivo elegido; define la extensión., schema: {type: string, maxLength: 255}}
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: {type: string, format: binary}
+      responses:
+        '201':
+          description: Sesión creada.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SessionDetail'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/VideoRejected'}
+        '503': {$ref: '#/components/responses/VideoStorageUnavailable'}
+        '507': {$ref: '#/components/responses/InsufficientStorage'}
+
+  /sessions/{session_id}:
+    get:
+      operationId: getSession
+      description: Extiende la respuesta de specs/002 con cámara, video y disponibilidad en este equipo.
+      parameters:
+        - {$ref: '#/components/parameters/SessionId'}
+      responses:
+        '200':
+          description: Sesión encontrada.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SessionDetail'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /sessions/{session_id}/video:
+    put:
+      operationId: relinkSessionVideo
+      description: >
+        Vuelve a cargar el video de una sesión en este equipo (FR-010). Se acepta solo si el SHA-256 coincide
+        con el registrado; si no, se descarta la copia.
+      parameters:
+        - {$ref: '#/components/parameters/SessionId'}
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: {type: string, format: binary}
+      responses:
+        '200':
+          description: Video asociado; `video.availability = available`.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SessionDetail'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: "`hash_mismatch` (es otro archivo) o `not_video_session`."
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '503': {$ref: '#/components/responses/VideoStorageUnavailable'}
+        '507': {$ref: '#/components/responses/InsufficientStorage'}
+
+  /sessions/{session_id}/reference-frame:
+    get:
+      operationId: getReferenceFrame
+      parameters:
+        - {$ref: '#/components/parameters/SessionId'}
+      responses:
+        '200':
+          description: JPEG del frame de referencia (desde la base; no requiere el video).
+          content:
+            image/jpeg:
+              schema: {type: string, format: binary}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /cameras/{camera_id}/scene-versions:
+    get:
+      operationId: listSceneVersions
+      parameters:
+        - {$ref: '#/components/parameters/CameraId'}
+      responses:
+        '200':
+          description: Versiones de la cámara, la más nueva primero (la UI preselecciona la primera).
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/SceneVersionSummary'}}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      operationId: createSceneVersion
+      description: Crea una versión nueva e inmutable (FR-014..FR-022). No existen PUT, PATCH ni DELETE.
+      parameters:
+        - {$ref: '#/components/parameters/CameraId'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SceneVersionCreate'}
+      responses:
+        '201':
+          description: Versión creada, con advertencias no bloqueantes.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: '#/components/schemas/SceneVersion'}
+                  - type: object
+                    required: [warnings]
+                    properties:
+                      warnings: {type: array, items: {$ref: '#/components/schemas/SceneIssue'}}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422':
+          description: Configuración rechazada completa; lista todos los problemas (FR-021).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: object
+                    required: [code, message, errors]
+                    properties:
+                      code: {const: invalid_scene_configuration}
+                      message: {type: string}
+                      errors: {type: array, minItems: 1, items: {$ref: '#/components/schemas/SceneIssue'}}
+
+  /scene-versions/{scene_version_id}:
+    get:
+      operationId: getSceneVersion
+      description: Contenido completo de cualquier versión, aunque existan versiones más nuevas (CHK014).
+      parameters:
+        - {name: scene_version_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Versión encontrada.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SceneVersion'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /sessions/{session_id}/jobs:
+    post:
+      operationId: createJob
+      description: >
+        Extiende specs/002. `video_analysis` exige `scene_version_id`; `synthetic_base_flow` lo prohíbe.
+        Orden de validación: job_kind_mismatch → scene_version_not_allowed → scene_not_configured →
+        scene_version_required → scene_version_other_camera (también si la versión no existe) → aspect_ratio_mismatch.
+        El trabajo de video queda `pending` hasta que #56 agregue su procesamiento.
+      parameters:
+        - {$ref: '#/components/parameters/SessionId'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/JobCreate'}
+      responses:
+        '201':
+          description: Trabajo creado; incluye `scene_version_id`.
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: "`scene_not_configured` o `aspect_ratio_mismatch` (este último con `video_aspect_ratio` y `version_aspect_ratio`)."
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '422':
+          description: "`scene_version_other_camera`, `scene_version_required`, `scene_version_not_allowed` o `job_kind_mismatch`."
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+components:
+  parameters:
+    SessionId: {name: session_id, in: path, required: true, schema: {type: string, format: uuid}}
+    CameraId: {name: camera_id, in: path, required: true, schema: {type: string, format: uuid}}
+
+  responses:
+    NotFound:
+      description: Recurso inexistente (`not_found`).
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    ValidationError:
+      description: Datos inválidos.
+    VideoRejected:
+      description: >
+        Video rechazado sin crear sesión. `code` ∈ file_empty | unsupported_format | no_decodable_frames |
+        fps_unknown | upload_interrupted. Ver contracts/video-registration.md.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    VideoStorageUnavailable:
+      description: "`videos_dir_not_configured`, `videos_dir_not_writable` o `machine_id_not_configured`."
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    InsufficientStorage:
+      description: "`insufficient_storage`: no hay espacio en la carpeta local de videos."
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+
+  schemas:
+    ErrorDetail:
+      type: object
+      required: [code, message]
+      properties:
+        code: {type: string}
+        message: {type: string, description: Causa y acción sugerida, en español.}
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail: {$ref: '#/components/schemas/ErrorDetail'}
+
+    CameraCreate:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 120}
+    Camera:
+      type: object
+      required: [id, name, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        created_at: {type: string, format: date-time}
+
+    SessionSummary:
+      type: object
+      required: [id, name, source_kind, camera, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        source_kind: {enum: [synthetic, video_file]}
+        camera: {$ref: '#/components/schemas/Camera'}
+        created_at: {type: string, format: date-time}
+    SessionDetail:
+      allOf:
+        - {$ref: '#/components/schemas/SessionSummary'}
+        - type: object
+          required: [camera_id, video, reference_frame, duplicate_session_ids]
+          properties:
+            camera_id: {type: string, description: "Texto de trazabilidad de specs/002; en sesiones de video es `cameras.name` al registrar. No es el UUID: usar `camera.id`."}
+            video:
+              oneOf:
+                - {type: 'null'}
+                - {$ref: '#/components/schemas/VideoSource'}
+            reference_frame:
+              oneOf:
+                - {type: 'null'}
+                - {$ref: '#/components/schemas/ReferenceFrame'}
+            duplicate_session_ids:
+              type: array
+              description: Otras sesiones con el mismo SHA-256 (aviso, no error).
+              items: {type: string, format: uuid}
+    VideoSource:
+      type: object
+      required: [relative_path, original_filename, size_bytes, sha256, origin_machine_id, width, height, fps, fps_is_estimated, frame_count, declared_frame_count, appears_incomplete, duration_seconds, registered_at, availability]
+      properties:
+        relative_path: {type: string}
+        original_filename: {type: string}
+        size_bytes: {type: integer, minimum: 1}
+        sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        origin_machine_id: {type: string}
+        width: {type: integer, minimum: 1}
+        height: {type: integer, minimum: 1}
+        fps: {type: number, exclusiveMinimum: 0}
+        fps_is_estimated: {type: boolean}
+        frame_count: {type: integer, minimum: 1}
+        declared_frame_count: {type: [integer, 'null'], minimum: 1, description: 'CAP_PROP_FRAME_COUNT del encabezado; null en .mpg/.mpeg, si no es finito y > 0, o en videos registrados antes de la migración 0003.'}
+        appears_incomplete: {type: boolean, description: 'declared_frame_count - frame_count > max(5, ceil(0.02 * declared_frame_count)); false si declared_frame_count es null. Solo advierte: el video se registra igual (R3).'}
+        duration_seconds: {type: number, minimum: 0}
+        registered_at: {type: string, format: date-time}
+        availability: {enum: [available, missing, mismatch, not_configured]}
+    ReferenceFrame:
+      type: object
+      required: [frame_index, video_timestamp_seconds, width, height, url]
+      properties:
+        frame_index: {type: integer, minimum: 0}
+        video_timestamp_seconds: {type: number, minimum: 0}
+        width: {type: integer, minimum: 1}
+        height: {type: integer, minimum: 1}
+        url: {type: string, description: 'Ruta relativa a la API de /sessions/{id}/reference-frame.'}
+
+    Point:
+      type: array
+      prefixItems: [{type: number, minimum: 0, maximum: 1}, {type: number, minimum: 0, maximum: 1}]
+      minItems: 2
+      maxItems: 2
+    Polygon:
+      type: array
+      items: {$ref: '#/components/schemas/Point'}
+    EntryLine:
+      type: object
+      additionalProperties: false
+      required: [start, end, entry_direction]
+      properties:
+        start: {$ref: '#/components/schemas/Point'}
+        end: {$ref: '#/components/schemas/Point'}
+        entry_direction: {enum: [a_to_b, b_to_a]}
+    ShopInput:
+      type: object
+      additionalProperties: false
+      required: [name, zones, entry_line]
+      properties:
+        shop_id: {type: [string, 'null'], format: uuid, description: Local existente de la cámara; null crea uno nuevo.}
+        name: {type: string, minLength: 1, maxLength: 120}
+        zones:
+          type: object
+          additionalProperties: false
+          properties:
+            front: {$ref: '#/components/schemas/Polygon'}
+            interior: {$ref: '#/components/schemas/Polygon'}
+            showcase: {$ref: '#/components/schemas/Polygon'}
+        entry_line:
+          oneOf:
+            - {$ref: '#/components/schemas/EntryLine'}
+            - {type: 'null'}
+    SceneVersionCreate:
+      type: object
+      additionalProperties: false
+      required: [reference_session_id, shops]
+      properties:
+        reference_session_id: {type: string, format: uuid}
+        base_version_id: {type: [string, 'null'], format: uuid, description: Versión cargada en el editor; solo sirve para advertir newer_version_exists.}
+        shops: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/ShopInput'}, description: 'Tope de 20 locales: las advertencias de superposición comparan cada par de zonas de cada par de locales.'}
+    SceneVersionSummary:
+      type: object
+      required: [id, camera_id, version_number, reference_session_id, frame_width, frame_height, created_at, shop_count]
+      properties:
+        id: {type: string, format: uuid}
+        camera_id: {type: string, format: uuid}
+        version_number: {type: integer, minimum: 1}
+        reference_session_id: {type: string, format: uuid}
+        frame_width: {type: integer}
+        frame_height: {type: integer}
+        created_by_machine_id: {type: [string, 'null']}
+        created_at: {type: string, format: date-time}
+        shop_count: {type: integer}
+    SceneVersion:
+      allOf:
+        - {$ref: '#/components/schemas/SceneVersionSummary'}
+        - type: object
+          required: [shops]
+          properties:
+            shops:
+              type: array
+              items:
+                allOf:
+                  - {$ref: '#/components/schemas/ShopInput'}
+                  - type: object
+                    required: [shop_id]
+                    properties:
+                      shop_id: {type: string, format: uuid}
+    SceneIssue:
+      type: object
+      required: [rule, element, message]
+      properties:
+        rule: {type: string, description: Código estable; ver data-model.md "Validación al guardar una versión".}
+        shop_index: {type: [integer, 'null'], description: Índice del local en la request; null si aplica a la versión.}
+        shop_name: {type: [string, 'null']}
+        element: {enum: [version, shop, 'zone:front', 'zone:interior', 'zone:showcase', entry_line]}
+        message: {type: string}
+
+    JobCreate:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind: {enum: [synthetic_base_flow, video_analysis]}
+        scene_version_id: {type: [string, 'null'], format: uuid}

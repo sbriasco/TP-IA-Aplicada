@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import os
 import uuid
 from pathlib import Path
 
 import pytest
 from alembic.config import Config
-from dotenv import dotenv_values
+from conftest import destructive_database_url
 from fastapi.testclient import TestClient
 
 from alembic import command
@@ -21,9 +20,7 @@ FIXTURE_PATH = ROOT_DIR / "fixtures" / "synthetic" / "base-flow.json"
 
 @pytest.fixture()
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    values = dotenv_values(ROOT_DIR / ".env")
-    database_url = os.environ.get("FLOWSIGHT_DATABASE_URL") or values.get("FLOWSIGHT_DATABASE_URL")
-    assert isinstance(database_url, str)
+    database_url = destructive_database_url()
     monkeypatch.setenv("FLOWSIGHT_ENV", "test")
     monkeypatch.setenv("FLOWSIGHT_DATABASE_URL", database_url)
     monkeypatch.setenv("FLOWSIGHT_API_HOST", "127.0.0.1")

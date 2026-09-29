@@ -8,19 +8,25 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    CHAR,
+    BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
+    Double,
     Enum,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     UniqueConstraint,
     Uuid,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -30,10 +36,12 @@ class Base(DeclarativeBase):
 
 class SourceKind(str, enum.Enum):
     SYNTHETIC = "synthetic"
+    VIDEO_FILE = "video_file"
 
 
 class JobKind(str, enum.Enum):
     SYNTHETIC_BASE_FLOW = "synthetic_base_flow"
+    VIDEO_ANALYSIS = "video_analysis"
 
 
 class JobStatus(str, enum.Enum):
@@ -47,26 +55,65 @@ def enum_values(enum_type: type[enum.Enum]) -> list[str]:
     return [str(member.value) for member in enum_type]
 
 
-class Session(Base):
-    __tablename__ = "sessions"
-    __table_args__ = (UniqueConstraint("id", "camera_id"),)
+class Camera(Base):
+    __tablename__ = "cameras"
+    __table_args__ = (UniqueConstraint("name_key", name="uq_cameras_name_key"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(120))
+    name_key: Mapped[str] = mapped_column(String(120))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Session(Base):
+    __tablename__ = "sessions"
+    __table_args__ = (
+        UniqueConstraint("id", "camera_id"),
+        UniqueConstraint("id", "registered_camera_id", name="uq_sessions_id_registered_camera_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(120))
+    # Texto de specs/002: clave de trazabilidad de las FK compuestas de la traza.
     camera_id: Mapped[str] = mapped_column(String(120))
+    registered_camera_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("cameras.id", name="fk_sessions_registered_camera_id")
+    )
     source_kind: Mapped[SourceKind] = mapped_column(
         Enum(SourceKind, name="source_kind", values_callable=enum_values)
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    jobs: Mapped[list[ProcessingJob]] = relationship(back_populates="session")
+    camera: Mapped[Camera] = relationship()
+    jobs: Mapped[list[ProcessingJob]] = relationship(
+        back_populates="session", foreign_keys="ProcessingJob.session_id"
+    )
 
 
 class ProcessingJob(Base):
     __tablename__ = "processing_jobs"
-    __table_args__ = (UniqueConstraint("id", "session_id"),)
+    __table_args__ = (
+        UniqueConstraint("id", "session_id"),
+        ForeignKeyConstraint(
+            ["session_id", "registered_camera_id"],
+            ["sessions.id", "sessions.registered_camera_id"],
+            name="fk_processing_jobs_session_camera",
+        ),
+        ForeignKeyConstraint(
+            ["scene_version_id", "registered_camera_id"],
+            ["scene_versions.id", "scene_versions.camera_id"],
+            name="fk_processing_jobs_scene_version",
+        ),
+        CheckConstraint(
+            "(kind = 'video_analysis') = "
+            "(scene_version_id IS NOT NULL AND registered_camera_id IS NOT NULL)",
+            name="ck_processing_jobs_video_analysis_scene",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sessions.id"))
+    scene_version_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    registered_camera_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     kind: Mapped[JobKind] = mapped_column(
         Enum(JobKind, name="job_kind", values_callable=enum_values)
     )
@@ -80,7 +127,7 @@ class ProcessingJob(Base):
     failure_code: Mapped[str | None] = mapped_column(String(120))
     failure_message: Mapped[str | None] = mapped_column(String(500))
     processing_duration_ms: Mapped[int | None] = mapped_column(Integer)
-    session: Mapped[Session] = relationship(back_populates="jobs")
+    session: Mapped[Session] = relationship(back_populates="jobs", foreign_keys=[session_id])
     transitions: Mapped[list[JobStatusTransition]] = relationship(
         back_populates="job",
         cascade="all, delete-orphan",
@@ -183,3 +230,177 @@ class Event(Base):
     camera_id: Mapped[str] = mapped_column(String(120))
     video_timestamp_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6))
     event_type: Mapped[str] = mapped_column(String(120))
+
+
+class ZoneRole(str, enum.Enum):
+    INTERIOR = "interior"
+    FRONT = "front"
+    SHOWCASE = "showcase"
+
+
+class EntryDirection(str, enum.Enum):
+    A_TO_B = "a_to_b"
+    B_TO_A = "b_to_a"
+
+
+class VideoSource(Base):
+    __tablename__ = "video_sources"
+    __table_args__ = (
+        CheckConstraint("size_bytes > 0", name="ck_video_sources_size_bytes"),
+        CheckConstraint("width > 0 AND height > 0", name="ck_video_sources_size"),
+        CheckConstraint("fps > 0", name="ck_video_sources_fps"),
+        CheckConstraint("frame_count > 0", name="ck_video_sources_frame_count"),
+        CheckConstraint(
+            "declared_frame_count IS NULL OR declared_frame_count > 0",
+            name="ck_video_sources_declared_frame_count",
+        ),
+        Index("ix_video_sources_sha256", "sha256"),
+    )
+
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sessions.id"), primary_key=True)
+    relative_path: Mapped[str] = mapped_column(String(255))
+    original_filename: Mapped[str] = mapped_column(String(255))
+    size_bytes: Mapped[int] = mapped_column(BigInteger)
+    sha256: Mapped[str] = mapped_column(CHAR(64))
+    origin_machine_id: Mapped[str] = mapped_column(String(40))
+    width: Mapped[int] = mapped_column(Integer)
+    height: Mapped[int] = mapped_column(Integer)
+    fps: Mapped[Decimal] = mapped_column(Numeric(9, 4))
+    fps_is_estimated: Mapped[bool] = mapped_column(Boolean)
+    frame_count: Mapped[int] = mapped_column(Integer)
+    # CAP_PROP_FRAME_COUNT del encabezado; solo sirve para avisar de un video
+    # incompleto. NULL si no es confiable (MPEG) o si el video es anterior a 0003.
+    declared_frame_count: Mapped[int | None] = mapped_column(Integer)
+    duration_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    registered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class ReferenceFrame(Base):
+    __tablename__ = "reference_frames"
+    __table_args__ = (
+        CheckConstraint("frame_index >= 0", name="ck_reference_frames_frame_index"),
+        CheckConstraint(
+            "video_timestamp_seconds >= 0", name="ck_reference_frames_video_timestamp_seconds"
+        ),
+        CheckConstraint("width > 0 AND height > 0", name="ck_reference_frames_size"),
+    )
+
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sessions.id"), primary_key=True)
+    frame_index: Mapped[int] = mapped_column(Integer)
+    video_timestamp_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    width: Mapped[int] = mapped_column(Integer)
+    height: Mapped[int] = mapped_column(Integer)
+    media_type: Mapped[str] = mapped_column(String(40))
+    # El JPEG pesa: solo se carga cuando se pide la imagen.
+    image: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)
+
+
+class Shop(Base):
+    __tablename__ = "shops"
+    __table_args__ = (UniqueConstraint("id", "camera_id", name="uq_shops_id_camera_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    camera_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cameras.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SceneVersion(Base):
+    """Inmutable: un trigger de la base rechaza UPDATE y DELETE."""
+
+    __tablename__ = "scene_versions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["reference_session_id", "camera_id"],
+            ["sessions.id", "sessions.registered_camera_id"],
+            name="fk_scene_versions_reference_session",
+        ),
+        UniqueConstraint(
+            "camera_id", "version_number", name="uq_scene_versions_camera_id_version_number"
+        ),
+        UniqueConstraint("id", "camera_id", name="uq_scene_versions_id_camera_id"),
+        CheckConstraint("version_number >= 1", name="ck_scene_versions_version_number"),
+        CheckConstraint(
+            "frame_width > 0 AND frame_height > 0", name="ck_scene_versions_frame_size"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    camera_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cameras.id"))
+    version_number: Mapped[int] = mapped_column(Integer)
+    reference_session_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    frame_width: Mapped[int] = mapped_column(Integer)
+    frame_height: Mapped[int] = mapped_column(Integer)
+    created_by_machine_id: Mapped[str | None] = mapped_column(String(40))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SceneVersionShop(Base):
+    """Un local tal como aparece en una versión; inmutable."""
+
+    __tablename__ = "scene_version_shops"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["scene_version_id", "camera_id"],
+            ["scene_versions.id", "scene_versions.camera_id"],
+            name="fk_scene_version_shops_scene_version",
+        ),
+        ForeignKeyConstraint(
+            ["shop_id", "camera_id"],
+            ["shops.id", "shops.camera_id"],
+            name="fk_scene_version_shops_shop",
+        ),
+        UniqueConstraint(
+            "scene_version_id", "name_key", name="uq_scene_version_shops_scene_version_id_name_key"
+        ),
+        UniqueConstraint(
+            "scene_version_id", "shop_id", name="uq_scene_version_shops_scene_version_id_shop_id"
+        ),
+        CheckConstraint("position >= 0", name="ck_scene_version_shops_position"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    scene_version_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    shop_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    camera_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    position: Mapped[int] = mapped_column(Integer)
+    name: Mapped[str] = mapped_column(String(120))
+    name_key: Mapped[str] = mapped_column(String(120))
+
+
+class SceneZone(Base):
+    __tablename__ = "scene_zones"
+    __table_args__ = (
+        UniqueConstraint("version_shop_id", "role", name="uq_scene_zones_version_shop_id_role"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    version_shop_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scene_version_shops.id"))
+    role: Mapped[ZoneRole] = mapped_column(
+        Enum(ZoneRole, name="zone_role", values_callable=enum_values)
+    )
+    # Lista de pares [x, y] normalizados a [0, 1].
+    polygon: Mapped[list[list[float]]] = mapped_column(JSONB)
+
+
+class SceneEntryLine(Base):
+    __tablename__ = "scene_entry_lines"
+    __table_args__ = (
+        CheckConstraint(
+            "start_x BETWEEN 0 AND 1 AND start_y BETWEEN 0 AND 1 "
+            "AND end_x BETWEEN 0 AND 1 AND end_y BETWEEN 0 AND 1",
+            name="ck_scene_entry_lines_normalized",
+        ),
+    )
+
+    version_shop_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("scene_version_shops.id"), primary_key=True
+    )
+    start_x: Mapped[float] = mapped_column(Double)
+    start_y: Mapped[float] = mapped_column(Double)
+    end_x: Mapped[float] = mapped_column(Double)
+    end_y: Mapped[float] = mapped_column(Double)
+    entry_direction: Mapped[EntryDirection] = mapped_column(
+        Enum(EntryDirection, name="entry_direction", values_callable=enum_values)
+    )

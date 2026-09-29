@@ -29,6 +29,7 @@ jobs:
       FLOWSIGHT_API_PORT: 8000
       FLOWSIGHT_WORKER_ID: worker-ci
       FLOWSIGHT_PREVIEW_MAX_FPS: 5
+      FLOWSIGHT_MACHINE_ID: backend-ci
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -41,6 +42,11 @@ jobs:
         run: |
           pip install -r requirements.lock
           pip install --no-deps -e .
+      # El contexto `runner` no está disponible en el `env` del job: la ruta se arma acá.
+      - name: Preparar directorio de videos
+        run: |
+          echo "FLOWSIGHT_VIDEOS_DIR=$RUNNER_TEMP/flowsight-videos" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/flowsight-videos"
       - name: Verificar backend
         working-directory: backend
         run: |
@@ -89,6 +95,8 @@ jobs:
       FLOWSIGHT_API_PORT: 8000
       FLOWSIGHT_WORKER_ID: worker-e2e
       FLOWSIGHT_PREVIEW_MAX_FPS: 5
+      # FLOWSIGHT_VIDEOS_DIR y FLOWSIGHT_MACHINE_ID no se fijan acá: frontend/e2e/run-e2e.mjs
+      # los define con un directorio temporal propio antes de levantar la API.
       VITE_API_BASE_URL: http://127.0.0.1:8000
       VITE_WS_BASE_URL: ws://127.0.0.1:8000
     steps:

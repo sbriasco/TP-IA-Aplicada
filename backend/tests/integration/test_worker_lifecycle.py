@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import os
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 from alembic.config import Config
-from dotenv import dotenv_values
+from conftest import destructive_database_url
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 
@@ -20,10 +19,12 @@ from flowsight.db.models import (
     JobStatusTransition,
     Observation,
     ProcessingJob,
+    SceneVersion,
     Session,
     SourceKind,
     SyntheticFrame,
 )
+from flowsight.services.cameras import get_or_create_camera
 from flowsight.worker.lifecycle import (
     claim_next_job,
     load_synthetic_fixture,
@@ -38,9 +39,7 @@ FIXTURE_PATH = ROOT_DIR / "fixtures" / "synthetic" / "base-flow.json"
 
 @pytest.fixture()
 def session_factory(monkeypatch: pytest.MonkeyPatch):
-    values = dotenv_values(ROOT_DIR / ".env")
-    database_url = os.environ.get("FLOWSIGHT_DATABASE_URL") or values.get("FLOWSIGHT_DATABASE_URL")
-    assert isinstance(database_url, str)
+    database_url = destructive_database_url()
     monkeypatch.setenv("FLOWSIGHT_DATABASE_URL", database_url)
     config = Config(BACKEND_DIR / "alembic.ini")
     command.downgrade(config, "base")
@@ -57,6 +56,7 @@ def create_pending_job(factory, suffix: str = "1") -> uuid.UUID:
         flow_session = Session(
             name=f"Session {suffix}",
             camera_id=f"camera-{suffix}",
+            registered_camera_id=get_or_create_camera(database_session, f"camera-{suffix}").id,
             source_kind=SourceKind.SYNTHETIC,
         )
         job = ProcessingJob(
@@ -143,3 +143,56 @@ def test_interrupted_job_becomes_failed_and_is_not_retried(session_factory) -> N
         assert job.status is JobStatus.FAILED
         assert job.failure_code == "worker_interrupted"
         assert job.failure_message == "El worker anterior se interrumpió durante el procesamiento."
+
+
+def test_claim_skips_older_video_analysis_job_and_takes_synthetic(session_factory) -> None:
+    """specs/004 T028: the current worker only claims `synthetic_base_flow` (R12, T035)."""
+
+    older = datetime.now(UTC) - timedelta(minutes=5)
+    with session_factory.begin() as database_session:
+        camera = get_or_create_camera(database_session, "camera-video")
+        video_session = Session(
+            name="Video session",
+            camera_id=camera.name,
+            registered_camera_id=camera.id,
+            source_kind=SourceKind.VIDEO_FILE,
+        )
+        database_session.add(video_session)
+        database_session.flush()
+        version = SceneVersion(
+            camera_id=camera.id,
+            version_number=1,
+            reference_session_id=video_session.id,
+            frame_width=1280,
+            frame_height=720,
+        )
+        database_session.add(version)
+        database_session.flush()
+        video_job = ProcessingJob(
+            session=video_session,
+            kind=JobKind.VIDEO_ANALYSIS,
+            scene_version_id=version.id,
+            registered_camera_id=camera.id,
+            status=JobStatus.PENDING,
+            created_at=older,
+            transitions=[
+                JobStatusTransition(
+                    from_status=None, to_status=JobStatus.PENDING, occurred_at=older
+                )
+            ],
+        )
+        database_session.add(video_job)
+    synthetic_job_id = create_pending_job(session_factory, "synthetic")
+
+    with session_factory.begin() as database_session:
+        claimed = claim_next_job(database_session, "worker-a", datetime.now(UTC))
+        assert claimed is not None
+        assert claimed.id == synthetic_job_id
+        assert claimed.kind is JobKind.SYNTHETIC_BASE_FLOW
+
+    with session_factory() as database_session:
+        stored = database_session.get(ProcessingJob, video_job.id)
+        assert stored is not None
+        assert stored.status is JobStatus.PENDING
+        assert stored.claimed_by is None
+        assert [transition.to_status for transition in stored.transitions] == [JobStatus.PENDING]

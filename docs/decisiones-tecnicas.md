@@ -33,11 +33,13 @@ El código de aplicación **no** distingue Azure vs localhost: solo lee la URL. 
 
 ### Qué va en PostgreSQL
 
-Sesiones, cámaras (identificadores), locales, configuración espacial (polígonos/líneas), processing jobs, eventos, métricas/resultados agregados y versiones necesarias para reproducibilidad.
+Sesiones, cámaras (identificadores), locales, configuración espacial (polígonos/líneas), processing jobs, eventos, métricas/resultados agregados, versiones necesarias para reproducibilidad y, desde specs/004, el **frame de referencia** de cada sesión de video.
 
-### Qué NO va en PostgreSQL (salvo decisión posterior)
+### Qué NO va en PostgreSQL
 
-Videos originales, previews y trayectorias/archivos pesados: permanecen en **disco local** (o almacenamiento de archivos). Azure PostgreSQL **no** implica blob storage de video.
+Los videos originales nunca se guardan en la base (FR-007 de specs/004): permanecen en **disco local**, en la carpeta `FLOWSIGHT_VIDEOS_DIR` de cada equipo. Los previews en vivo del procesamiento y las trayectorias/archivos pesados también permanecen fuera de PostgreSQL, salvo decisión posterior.
+
+**Excepción confirmada (specs/004, R5, 2026-09-26):** el frame de referencia de cada sesión de video sí va en PostgreSQL, como JPEG (calidad 90, resolución original) en la columna `bytea` de la tabla `reference_frames`, separada de `video_sources` para no cargar los listados. Se sirve con `GET /sessions/{id}/reference-frame` (`image/jpeg`, cacheable). Es la única forma de verlo desde un equipo distinto al que registró el video, sin exponer el archivo original ni sumar un file server.
 
 ### Qué permanece local (sin cambio)
 
@@ -70,6 +72,8 @@ FLOWSIGHT_DATABASE_URL
 ## Detección y tracking
 
 Se utiliza Ultralytics YOLO sobre PyTorch, con OpenCV para el manejo de frames. ByteTrack es el tracker inicial. Su adopción definitiva depende de evaluar cruces, oclusiones, pérdidas de tracks y duplicados con los videos seleccionados y un conteo manual de referencia. BoT-SORT es una alternativa a comparar si los resultados lo justifican.
+
+**Dependencia confirmada (specs/004, R4, 2026-09-26):** el backend agrega `opencv-python-headless==4.10.0.84` (con su `numpy` fijado en el lock) a `backend/pyproject.toml` y `backend/requirements.lock`, la misma versión que usa `experiments/video-tracking-validation`. Se eligió la variante *headless* porque no trae dependencias de GUI y se instala en CI (Ubuntu) sin librerías de sistema adicionales; el worker de análisis de video (#56) la va a necesitar igual. No se agrega `python-multipart`: la subida de video usa el cuerpo crudo de la request (ver `specs/004-configuracion-escenas/research.md`, R1).
 
 La variante y los pesos de YOLO, los umbrales del tracker y la combinación de Python, PyTorch y CUDA se fijarán después de la validación técnica. La RTX 5080 de 16 GB es la GPU de referencia, pero el entorno debe contemplar ejecución en CPU y pruebas sintéticas para equipos sin esa GPU. No se promete velocidad de video en tiempo real.
 

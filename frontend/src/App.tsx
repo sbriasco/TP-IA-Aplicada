@@ -1,38 +1,29 @@
-import { useState } from "react";
-
+import { navigate, useRoute } from "./navigation";
 import { JobPreviewPage } from "./pages/JobPreviewPage";
+import { SceneEditorPage } from "./pages/SceneEditorPage";
+import { SessionDetailPage } from "./pages/SessionDetailPage";
+import { SessionsPage } from "./pages/SessionsPage";
 
 export function App() {
-  const initialJobId = new URLSearchParams(window.location.search).get("job") ?? "";
-  const [jobId, setJobId] = useState(initialJobId);
-  const [input, setInput] = useState(initialJobId);
+  const route = useRoute();
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const normalized = input.trim();
-    if (normalized === "") return;
-    window.history.replaceState(null, "", `?job=${encodeURIComponent(normalized)}`);
-    setJobId(normalized);
+  switch (route.name) {
+    case "job":
+      return <JobPreviewPage jobId={route.jobId} />;
+    case "sessions":
+      return <SessionsPage />;
+    case "session":
+      return <SessionDetailPage key={route.sessionId} sessionId={route.sessionId} />;
+    case "editor":
+      return <SceneEditorPage key={route.sessionId} sessionId={route.sessionId} />;
+    case "not_found":
+      return (
+        <main>
+          <h1>Página no encontrada</h1>
+          <button type="button" onClick={() => navigate("/")}>
+            Volver a las sesiones
+          </button>
+        </main>
+      );
   }
-
-  if (jobId !== "") {
-    return <JobPreviewPage jobId={jobId} />;
-  }
-
-  return (
-    <main>
-      <h1>Supervisión de FlowSight</h1>
-      <form onSubmit={handleSubmit}>
-        <label htmlFor="job-id">Identificador del trabajo</label>
-        <input
-          id="job-id"
-          name="job-id"
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          required
-        />
-        <button type="submit">Supervisar</button>
-      </form>
-    </main>
-  );
 }

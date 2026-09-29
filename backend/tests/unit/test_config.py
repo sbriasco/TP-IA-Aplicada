@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from flowsight.core.config import ConfigurationError, load_settings
@@ -89,6 +91,75 @@ class SettingsTests(unittest.TestCase):
         self.assertNotIn(secret_url, message)
         self.assertNotIn("super-secret", message)
         self.assertIn("FLOWSIGHT_PREVIEW_MAX_FPS", message)
+
+    def test_video_settings_are_optional(self) -> None:
+        with patch.dict(os.environ, self.valid_environment(), clear=True):
+            settings = load_settings()
+
+        self.assertIsNone(settings.videos_dir)
+        self.assertIsNone(settings.machine_id)
+
+    def test_empty_video_settings_are_treated_as_missing(self) -> None:
+        environment = self.valid_environment()
+        environment["FLOWSIGHT_VIDEOS_DIR"] = "  "
+        environment["FLOWSIGHT_MACHINE_ID"] = ""
+
+        with patch.dict(os.environ, environment, clear=True):
+            settings = load_settings()
+
+        self.assertIsNone(settings.videos_dir)
+        self.assertIsNone(settings.machine_id)
+
+    def test_loads_valid_video_settings(self) -> None:
+        videos_dir = Path(tempfile.gettempdir()).resolve() / "flowsight-videos"
+        environment = self.valid_environment()
+        environment["FLOWSIGHT_VIDEOS_DIR"] = str(videos_dir)
+        environment["FLOWSIGHT_MACHINE_ID"] = " equipo-03 "
+
+        with patch.dict(os.environ, environment, clear=True):
+            settings = load_settings()
+
+        self.assertEqual(settings.videos_dir, videos_dir)
+        self.assertEqual(settings.machine_id, "equipo-03")
+
+    def test_invalid_machine_id_does_not_block_startup(self) -> None:
+        for invalid in ("Equipo-03", "ab", "-equipo", "equipo_03", "a" * 41):
+            environment = self.valid_environment()
+            environment["FLOWSIGHT_MACHINE_ID"] = invalid
+
+            with self.subTest(machine_id=invalid):
+                with patch.dict(os.environ, environment, clear=True):
+                    settings = load_settings()
+
+                self.assertIsNone(settings.machine_id)
+
+    def test_rejects_relative_videos_dir_without_exposing_it(self) -> None:
+        environment = self.valid_environment()
+        relative_dir = "videos-privados/santiago"
+        environment["FLOWSIGHT_VIDEOS_DIR"] = relative_dir
+
+        with patch.dict(os.environ, environment, clear=True):
+            with self.assertRaises(ConfigurationError) as raised:
+                load_settings()
+
+        message = str(raised.exception)
+        self.assertIn("FLOWSIGHT_VIDEOS_DIR", message)
+        self.assertIn("invalid_format", message)
+        self.assertNotIn(relative_dir, message)
+        self.assertNotIn("santiago", message)
+
+    def test_invalid_machine_id_is_never_echoed(self) -> None:
+        environment = self.valid_environment()
+        environment["FLOWSIGHT_MACHINE_ID"] = "Santiago Alvarez"
+        environment["FLOWSIGHT_API_PORT"] = "70000"
+
+        with patch.dict(os.environ, environment, clear=True):
+            with self.assertRaises(ConfigurationError) as raised:
+                load_settings()
+
+        message = str(raised.exception)
+        self.assertNotIn("Santiago", message)
+        self.assertNotIn("FLOWSIGHT_MACHINE_ID", message)
 
     def test_api_rejects_invalid_configuration_before_starting(self) -> None:
         from flowsight.api.main import create_app
