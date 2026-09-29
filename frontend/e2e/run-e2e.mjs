@@ -1,23 +1,22 @@
 import { spawn, spawnSync } from "node:child_process";
-import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { assertSafeDatabase, loadLocalEnvironment } from "./environment.mjs";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const frontend = path.resolve(currentDirectory, "..");
 const root = path.resolve(frontend, "..");
 const backend = path.join(root, "backend");
-const environment = { ...process.env };
+const environment = loadLocalEnvironment(root, process.env);
 
-const environmentFile = path.join(root, ".env");
-const environmentLines = fs.existsSync(environmentFile)
-  ? fs.readFileSync(environmentFile, "utf8").split(/\r?\n/)
-  : [];
-for (const line of environmentLines) {
-  const separator = line.indexOf("=");
-  if (separator > 0 && !line.trimStart().startsWith("#")) {
-    environment[line.slice(0, separator).trim()] = line.slice(separator + 1).trim();
-  }
+// Antes de migrar o arrancar procesos: nunca contra la base compartida de Azure.
+try {
+  const host = assertSafeDatabase(environment);
+  console.log(`e2e: usando PostgreSQL en ${host}`);
+} catch (error) {
+  console.error(`e2e abortado: ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(2);
 }
 
 const executableDirectory = process.platform === "win32" ? "Scripts" : "bin";

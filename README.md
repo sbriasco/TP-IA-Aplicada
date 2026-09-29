@@ -174,7 +174,10 @@ Pop-Location
 `test:e2e` aplica las migraciones, inicia temporalmente API y frontend, crea una sesión y un
 trabajo sintético, ejecuta el worker y verifica en Chromium la conexión WebSocket, la preview
 JPEG y el estado terminal. Los procesos temporales se cierran al finalizar. La API no inicia si
-PostgreSQL no está disponible.
+PostgreSQL no está disponible. Las variables exportadas en la terminal tienen prioridad sobre `.env`
+(que solo completa las faltantes), y el runner aborta antes de migrar si `FLOWSIGHT_DATABASE_URL`
+apunta a un host `*.postgres.database.azure.com`. Si `FLOWSIGHT_TEST_DATABASE_URL` está definida (en la
+terminal o en `.env`), el e2e la usa como `FLOWSIGHT_DATABASE_URL`, igual que las pruebas del backend.
 
 ## Trabajo en equipo
 

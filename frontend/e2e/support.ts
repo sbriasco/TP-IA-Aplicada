@@ -1,6 +1,7 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import fs from "node:fs";
 import path from "node:path";
+
+import { assertSafeDatabase, loadLocalEnvironment } from "./environment.mjs";
 
 export function resolveWorkerExecutable(root: string, platform: NodeJS.Platform): string {
   const parts =
@@ -11,17 +12,8 @@ export function resolveWorkerExecutable(root: string, platform: NodeJS.Platform)
 }
 
 export function localEnvironment(root: string): NodeJS.ProcessEnv {
-  const values: NodeJS.ProcessEnv = { ...process.env };
-  const environmentFile = path.join(root, ".env");
-  const lines = fs.existsSync(environmentFile)
-    ? fs.readFileSync(environmentFile, "utf8").split(/\r?\n/)
-    : [];
-  for (const line of lines) {
-    const separator = line.indexOf("=");
-    if (separator > 0 && !line.trimStart().startsWith("#")) {
-      values[line.slice(0, separator).trim()] = line.slice(separator + 1).trim();
-    }
-  }
+  const values = loadLocalEnvironment(root, process.env);
+  assertSafeDatabase(values);
   return values;
 }
 
