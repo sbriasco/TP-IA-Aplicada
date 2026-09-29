@@ -13,7 +13,7 @@ Registro de los escenarios de [quickstart.md](../quickstart.md). Fecha: 2026-09-
 | Verificaciones automáticas (T048) | `pass` | backend: ruff OK, pytest 345 passed / 3 skipped (solo Windows); frontend: lint OK, 245 tests, build OK; e2e: 5 passed |
 | SC-001 (video real ~5 min, < 30 s) | **`pending`** | falta un video real de ~5 min. El clip sintético de 2 s tardó 0,10 s de registro a frame, pero **no** sirve como medición de SC-001 |
 | `.mpg` real del experimento 001 (`frame_count` contado frente al encabezado, G1) | **`pending`** | falta el material. Con el MPEG-1 sintético el conteo da 50 de 50 frames generados |
-| SC-002 (rechazo de archivos inválidos) | `pass` | vacío, texto renombrado a `.mp4`, AVI truncado a 4 KB y AVI sin datos de frames rechazados, sin sesión ni archivo nuevo. Ver la observación sobre el AVI truncado a la mitad |
+| SC-002 (rechazo de archivos inválidos) | `pass` | vacío, texto renombrado a `.mp4`, AVI truncado a 4 KB y AVI sin datos de frames rechazados, sin sesión ni archivo nuevo. El AVI truncado a la mitad se acepta con advertencia (T051/T052) |
 | SC-003 (persona que no participó del desarrollo, < 5 min) | **`pending`** | falta una persona que no haya participado del desarrollo |
 | SC-004 (< 0,5 % tras tres tamaños) | `pass` | error máximo 0,0000 % en 13 puntos, con escalas de pantalla 1×, 1,5× y 2× |
 | SC-005 / SC-006 / SC-008 (versiones, inmutabilidad, compuerta) | `pass` | ver escenario 3 |
@@ -34,7 +34,7 @@ Registro de los escenarios de [quickstart.md](../quickstart.md). Fecha: 2026-09-
 | 1.4 sin sesión ni archivo nuevo tras los rechazos | `pass` | cantidad de sesiones y archivos sin cambios |
 | 1.5 mismo video otra vez | `pass` | 201, con la primera sesión en `duplicate_session_ids` |
 
-**Observación (sin decidir)**: un AVI MJPG cortado a la mitad del archivo **se acepta** (201) con `frame_count = 26`, los frames que se pueden decodificar. Es coherente con R3, que rechaza solo si no se decodifica ningún frame. Queda por confirmar si cumple la intención de SC-002 para "video truncado".
+**Observación → T051/T052 (ADO #83)**: un AVI MJPG cortado a la mitad del archivo **se acepta** (201) con `frame_count = 26`, los frames que se pueden decodificar, coherente con R3. Se decidió mantener la aceptación y sumar una advertencia: desde T051/T052 la respuesta trae `declared_frame_count = 50` y `appears_incomplete = true`, y el detalle muestra "El archivo parece incompleto: se leyeron 26 de 50 frames declarados." (umbral: más de max(5, 2 %) frames faltantes; nunca en `.mpg`/`.mpeg`).
 
 ## Escenario 2: disponibilidad (API)
 

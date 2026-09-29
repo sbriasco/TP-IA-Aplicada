@@ -1,7 +1,9 @@
 """Probe a local video with OpenCV: frames, fps, duration and reference frame (R3).
 
 Frames are counted with `grab()` instead of trusting `CAP_PROP_FRAME_COUNT`,
-which is unreliable for MPEG streams. No database or HTTP concerns live here.
+which is unreliable for MPEG streams. The header count is still reported as
+`declared_frame_count`, only to warn about videos that look incomplete (T051).
+No database or HTTP concerns live here.
 """
 
 from __future__ import annotations
@@ -16,6 +18,11 @@ import cv2
 
 MAX_HEADER_FPS = 240
 JPEG_QUALITY = 90
+
+# A video looks incomplete when it decodes fewer frames than its header declares,
+# beyond this margin: max(5 frames, 2 % of the declared count).
+INCOMPLETE_MIN_MISSING_FRAMES = 5
+INCOMPLETE_MISSING_RATIO = Decimal("0.02")
 
 # Precision of `video_sources.fps` and of the numeric(12,6) time columns.
 _FPS_STEP = Decimal("0.0001")
@@ -39,6 +46,7 @@ class ProbeResult:
     fps: Decimal
     fps_is_estimated: bool
     frame_count: int
+    declared_frame_count: int | None
     duration_seconds: Decimal
     reference_frame_index: int
     reference_timestamp_seconds: Decimal
@@ -51,6 +59,7 @@ def probe_video(path: Path) -> ProbeResult:
         if not capture.isOpened():
             raise VideoRejected("unsupported_format")
         header_fps = capture.get(cv2.CAP_PROP_FPS)
+        declared_frame_count = _declared_frame_count(capture.get(cv2.CAP_PROP_FRAME_COUNT))
 
         frame_count = 0
         last_position_msec = 0.0
@@ -82,11 +91,30 @@ def probe_video(path: Path) -> ProbeResult:
         fps=fps,
         fps_is_estimated=fps_is_estimated,
         frame_count=frame_count,
+        declared_frame_count=declared_frame_count,
         duration_seconds=_seconds(Decimal(frame_count) / fps),
         reference_frame_index=reference_index,
         reference_timestamp_seconds=_seconds(Decimal(reference_index) / fps),
         reference_jpeg=jpeg.tobytes(),
     )
+
+
+def appears_incomplete(frame_count: int, declared_frame_count: int | None) -> bool:
+    """True when the header declares clearly more frames than could be decoded."""
+
+    if declared_frame_count is None:
+        return False
+    margin = max(
+        INCOMPLETE_MIN_MISSING_FRAMES,
+        math.ceil(INCOMPLETE_MISSING_RATIO * declared_frame_count),
+    )
+    return declared_frame_count - frame_count > margin
+
+
+def _declared_frame_count(header_count: float) -> int | None:
+    if math.isfinite(header_count) and header_count > 0:
+        return int(header_count)
+    return None
 
 
 def _fps(header_fps: float, frame_count: int, last_position_msec: float) -> tuple[Decimal, bool]:

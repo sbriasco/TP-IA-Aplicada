@@ -41,7 +41,17 @@ def clips(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
     truncated.write_bytes(data[: data.index(b"movi") + 64])
     text_file = directory / "notas.mp4"
     text_file.write_text("esto no es un video\n" * 100, encoding="utf-8")
-    return {"mp4": clip_720, "avi": clip_480, "truncated": truncated, "text": text_file}
+    avi_720 = write_clip(directory, codec="mjpg", size=(1280, 720)).read_bytes()
+    half = directory / "mitad.avi"
+    # T049, scenario 1.4: half of the bytes; the header still declares every frame.
+    half.write_bytes(avi_720[: len(avi_720) // 2])
+    return {
+        "mp4": clip_720,
+        "avi": clip_480,
+        "truncated": truncated,
+        "half": half,
+        "text": text_file,
+    }
 
 
 @pytest.fixture(scope="module")
@@ -209,6 +219,8 @@ def test_registers_video_session_with_full_detail(
     assert video["fps"] == CLIP_FPS
     assert video["fps_is_estimated"] is False
     assert video["frame_count"] == CLIP_FRAMES
+    assert video["declared_frame_count"] == CLIP_FRAMES
+    assert video["appears_incomplete"] is False
     assert video["duration_seconds"] == CLIP_FRAMES / CLIP_FPS
     assert datetime.fromisoformat(video["registered_at"]).tzinfo is not None
     assert video["availability"] == "available"
@@ -236,7 +248,43 @@ def test_registers_mpeg_video(
     assert video["relative_path"].endswith(".mpg")
     assert video["frame_count"] == CLIP_FRAMES
     assert video["duration_seconds"] == pytest.approx(video["frame_count"] / video["fps"])
+    # The MPEG header is not trusted: no declared count and no warning.
+    assert video["declared_frame_count"] is None
+    assert video["appears_incomplete"] is False
     assert _stored_files(videos_dir) == [video["relative_path"]]
+    session_id = response.json()["id"]
+    assert client.get(f"/sessions/{session_id}").json()["video"] == video
+
+
+@pytest.mark.parametrize("filename", ["toma.mpg", "toma.mpeg"])
+def test_mpeg_extension_never_stores_the_declared_frame_count(
+    client: TestClient, camera: dict[str, Any], clips: dict[str, Path], filename: str
+) -> None:
+    # An AVI renamed to .mpg still decodes; its declared count must be dropped anyway.
+    response = _register(client, clips["half"].read_bytes(), camera["id"], filename=filename)
+
+    assert response.status_code == 201
+    video = response.json()["video"]
+    assert video["declared_frame_count"] is None
+    assert video["appears_incomplete"] is False
+
+
+def test_incomplete_video_is_accepted_with_a_warning(
+    client: TestClient, camera: dict[str, Any], videos_dir: Path, clips: dict[str, Path]
+) -> None:
+    content = clips["half"].read_bytes()
+
+    response = _register(client, content, camera["id"], filename="mitad.avi")
+
+    assert response.status_code == 201
+    body = response.json()
+    video = body["video"]
+    assert video["declared_frame_count"] == CLIP_FRAMES
+    assert 0 < video["frame_count"] < CLIP_FRAMES
+    assert video["appears_incomplete"] is True
+    assert video["duration_seconds"] == pytest.approx(video["frame_count"] / video["fps"])
+    assert _stored_files(videos_dir) == [video["relative_path"]]
+    assert client.get(f"/sessions/{body['id']}").json() == body
 
 
 def test_database_rows_do_not_contain_the_video(

@@ -19,6 +19,7 @@ from pydantic import (
 )
 
 from flowsight.db.models import EntryDirection, JobKind, JobStatus, SourceKind
+from flowsight.video import probe
 from flowsight.video.storage import Availability
 
 
@@ -86,9 +87,15 @@ class VideoSourceResponse(BaseModel):
     fps: float
     fps_is_estimated: bool
     frame_count: int
+    declared_frame_count: int | None
     duration_seconds: float
     registered_at: datetime
     availability: Availability
+
+    @computed_field
+    @property
+    def appears_incomplete(self) -> bool:
+        return probe.appears_incomplete(self.frame_count, self.declared_frame_count)
 
 
 class ReferenceFrameResponse(BaseModel):

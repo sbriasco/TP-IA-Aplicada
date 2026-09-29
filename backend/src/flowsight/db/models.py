@@ -250,6 +250,10 @@ class VideoSource(Base):
         CheckConstraint("width > 0 AND height > 0", name="ck_video_sources_size"),
         CheckConstraint("fps > 0", name="ck_video_sources_fps"),
         CheckConstraint("frame_count > 0", name="ck_video_sources_frame_count"),
+        CheckConstraint(
+            "declared_frame_count IS NULL OR declared_frame_count > 0",
+            name="ck_video_sources_declared_frame_count",
+        ),
         Index("ix_video_sources_sha256", "sha256"),
     )
 
@@ -264,6 +268,9 @@ class VideoSource(Base):
     fps: Mapped[Decimal] = mapped_column(Numeric(9, 4))
     fps_is_estimated: Mapped[bool] = mapped_column(Boolean)
     frame_count: Mapped[int] = mapped_column(Integer)
+    # CAP_PROP_FRAME_COUNT del encabezado; solo sirve para avisar de un video
+    # incompleto. NULL si no es confiable (MPEG) o si el video es anterior a 0003.
+    declared_frame_count: Mapped[int | None] = mapped_column(Integer)
     duration_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6))
     registered_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

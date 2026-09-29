@@ -60,10 +60,13 @@ Uno por sesión `video_file`. No existe para las sintéticas.
 | `fps` | numeric(9,4) | > 0 |
 | `fps_is_estimated` | boolean | `true` si no vino de un encabezado confiable |
 | `frame_count` | integer | > 0; contado recorriendo el video |
+| `declared_frame_count` | integer, nullable | > 0 o `NULL`; `CAP_PROP_FRAME_COUNT` del encabezado si es finito y > 0. Siempre `NULL` en `.mpg`/`.mpeg` (encabezado no confiable) y en las filas anteriores a la migración `0003`. Solo se usa para la advertencia de video incompleto |
 | `duration_seconds` | numeric(12,6) | `frame_count / fps` |
 | `registered_at` | datetime UTC | obligatorio |
 
 Índice sobre `sha256`: se usa para avisar que el mismo video ya está registrado en otra sesión (caso borde "mismo hash dos veces").
+
+**Video incompleto** (T051): `appears_incomplete` se calcula al responder y no se persiste. Es `true` si `declared_frame_count - frame_count > max(5, ceil(0.02 * declared_frame_count))` y `false` si `declared_frame_count` es `NULL`. Lo calcula una única función, `flowsight.video.probe.appears_incomplete`. Es solo una advertencia: el registro acepta el video igual ([R3](./research.md#r3-sondeo-del-video-fps-frames-duración-y-frame-de-referencia)).
 
 **Disponibilidad**: se calcula al consultar y no se persiste (FR-009). Los valores posibles son `available`, `missing`, `mismatch` y `not_configured`.
 

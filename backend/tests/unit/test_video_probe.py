@@ -16,7 +16,7 @@ from flowsight.video.fixtures import (
     write_clip,
     write_mpeg_clip,
 )
-from flowsight.video.probe import VideoRejected, probe_video
+from flowsight.video.probe import VideoRejected, appears_incomplete, probe_video
 
 MSEC_PER_FRAME = 1000 / CLIP_FPS
 _REAL_VIDEO_CAPTURE = cv2.VideoCapture
@@ -98,6 +98,7 @@ def test_probe_reports_counted_frames_header_fps_and_reference_frame(
     width, height = size
     assert (result.width, result.height) == (width, height)
     assert result.frame_count == CLIP_FRAMES
+    assert result.declared_frame_count == CLIP_FRAMES
     assert result.fps == Decimal(CLIP_FPS)
     assert result.fps_is_estimated is False
     assert result.duration_seconds == Decimal(CLIP_FRAMES) / result.fps
@@ -204,3 +205,68 @@ def test_probe_counts_mpeg_frames_and_derives_duration_from_the_count(mpeg_clip:
     assert result.reference_frame_index == 0
     assert result.reference_jpeg[:2] == b"\xff\xd8"
     assert _decode_jpeg(result.reference_jpeg).shape[:2] == (480, 640)
+
+
+def test_probe_reports_declared_frame_count_of_a_video_cut_in_half(
+    tmp_path: Path, clips_dir: Path
+) -> None:
+    source = write_clip(clips_dir, codec="mjpg", size=(1280, 720))
+    data = source.read_bytes()
+    # Same cut as the manual validation of T049 (scenario 1.4): the AVI header still
+    # declares every frame, but only about half of them can be decoded.
+    path = tmp_path / "mitad.avi"
+    path.write_bytes(data[: len(data) // 2])
+
+    result = probe_video(path)
+
+    assert result.declared_frame_count == CLIP_FRAMES
+    assert 0 < result.frame_count < CLIP_FRAMES
+    assert appears_incomplete(result.frame_count, result.declared_frame_count) is True
+
+
+@pytest.mark.parametrize("header_count", [0.0, -1.0, math.nan, math.inf])
+def test_probe_ignores_header_frame_count_that_is_not_finite_and_positive(
+    monkeypatch: pytest.MonkeyPatch, mjpg_clip: Path, header_count: float
+) -> None:
+    class HeaderFrameCount(_HeaderOverride):
+        def get(self, prop: int) -> float:
+            if prop == cv2.CAP_PROP_FRAME_COUNT:
+                return header_count
+            return super().get(prop)
+
+    monkeypatch.setattr(
+        cv2,
+        "VideoCapture",
+        lambda path, *args: HeaderFrameCount(
+            path, *args, fps=CLIP_FPS, msec_per_frame=MSEC_PER_FRAME
+        ),
+    )
+
+    result = probe_video(mjpg_clip)
+
+    assert result.declared_frame_count is None
+    assert result.frame_count == CLIP_FRAMES
+
+
+@pytest.mark.parametrize(
+    ("frame_count", "declared_frame_count", "expected"),
+    [
+        # Below 250 declared frames the margin is 5 frames.
+        (45, 50, False),
+        (44, 50, True),
+        (50, 50, False),
+        (60, 50, False),
+        # ceil(0.02 * 251) = 6.
+        (245, 251, False),
+        (244, 251, True),
+        # 2 % of 1000 = 20.
+        (980, 1000, False),
+        (979, 1000, True),
+        (26, 50, True),
+        (1, None, False),
+    ],
+)
+def test_appears_incomplete_uses_the_larger_of_5_frames_and_2_percent(
+    frame_count: int, declared_frame_count: int | None, expected: bool
+) -> None:
+    assert appears_incomplete(frame_count, declared_frame_count) is expected

@@ -30,6 +30,8 @@ from flowsight.video.storage import (
 )
 
 REFERENCE_MEDIA_TYPE = "image/jpeg"
+# The MPEG program stream header does not carry a reliable frame count (R3).
+UNRELIABLE_FRAME_COUNT_EXTENSIONS = frozenset({".mpg", ".mpeg"})
 
 VideoSessionErrorCode = Literal[
     "camera_not_found",
@@ -106,6 +108,11 @@ async def register_video_session(
                     fps=probe.fps,
                     fps_is_estimated=probe.fps_is_estimated,
                     frame_count=probe.frame_count,
+                    declared_frame_count=(
+                        None
+                        if extension in UNRELIABLE_FRAME_COUNT_EXTENSIONS
+                        else probe.declared_frame_count
+                    ),
                     duration_seconds=probe.duration_seconds,
                 ),
                 ReferenceFrame(
