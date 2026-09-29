@@ -29,7 +29,6 @@ jobs:
       FLOWSIGHT_API_PORT: 8000
       FLOWSIGHT_WORKER_ID: worker-ci
       FLOWSIGHT_PREVIEW_MAX_FPS: 5
-      FLOWSIGHT_VIDEOS_DIR: ${{ runner.temp }}/flowsight-videos
       FLOWSIGHT_MACHINE_ID: backend-ci
     steps:
       - uses: actions/checkout@v4
@@ -43,8 +42,11 @@ jobs:
         run: |
           pip install -r requirements.lock
           pip install --no-deps -e .
+      # El contexto `runner` no está disponible en el `env` del job: la ruta se arma acá.
       - name: Preparar directorio de videos
-        run: mkdir -p "$FLOWSIGHT_VIDEOS_DIR"
+        run: |
+          echo "FLOWSIGHT_VIDEOS_DIR=$RUNNER_TEMP/flowsight-videos" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/flowsight-videos"
       - name: Verificar backend
         working-directory: backend
         run: |
