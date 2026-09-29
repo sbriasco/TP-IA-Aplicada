@@ -139,7 +139,7 @@ description: "Lista de tareas de la feature 004: carga, configuración y editor 
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T045 [P] Actualizar `.github/workflows/ci.yml` para que el job de E2E y el de backend definan `FLOWSIGHT_VIDEOS_DIR` (directorio temporal del runner) y `FLOWSIGHT_MACHINE_ID`, y confirmar que la caché usa el `backend/requirements.lock` nuevo; sin videos, pesos ni credenciales. · ADO #82
+- [X] T045 [P] Actualizar `.github/workflows/ci.yml` para que el job de E2E y el de backend definan `FLOWSIGHT_VIDEOS_DIR` (directorio temporal del runner) y `FLOWSIGHT_MACHINE_ID`, y confirmar que la caché usa el `backend/requirements.lock` nuevo; sin videos, pesos ni credenciales. · ADO #82
 - [ ] T046 [P] Registrar en `docs/decisiones-tecnicas.md` la decisión R5 (el frame de referencia se guarda como JPEG en PostgreSQL; el video nunca) reemplazando la línea "previews… no van en PostgreSQL salvo decisión posterior", y la dependencia `opencv-python-headless` en el backend (R4). · ADO #82
 - [ ] T047 [P] Actualizar `README.md` ("Estado del proyecto" y configuración): registro de video, `FLOWSIGHT_VIDEOS_DIR` y `FLOWSIGHT_MACHINE_ID`, editor de escenas, que `video_analysis` queda en `pending` hasta #56 y que la migración `0002` renombra cámaras en conflicto con sufijo; que `pytest` nunca se corre contra la base compartida de Azure y cómo usar `FLOWSIGHT_TEST_DATABASE_URL` (T050). · ADO #82
 - [ ] T048 Correr la regresión completa: desde `backend/`, `.venv/bin/ruff check .` y `.venv/bin/pytest`; desde `frontend/`, `npm run lint`, `npm test`, `npm run build` y `npm run test:e2e`. Analizar el primer fallo si lo hay. · ADO #82
