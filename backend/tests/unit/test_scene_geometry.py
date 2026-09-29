@@ -21,6 +21,7 @@ import json
 from pathlib import Path
 
 import pytest
+
 from flowsight.scene.geometry import (
     MAX_VERTICES,
     MIN_AREA_PX2,

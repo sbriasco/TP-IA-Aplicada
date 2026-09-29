@@ -45,6 +45,7 @@ import math
 from typing import Any
 
 import pytest
+
 from flowsight.scene.validation import SceneIssue, validate_scene
 
 FRAME_W = 1000
