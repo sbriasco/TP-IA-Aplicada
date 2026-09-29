@@ -1,4 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -63,12 +65,34 @@ async function waitFor(url) {
   throw new Error(`El servicio no respondió a tiempo: ${url}`);
 }
 
+// Videos registrados y clip de prueba en directorios temporales: el e2e no toca los de la máquina.
+const videosDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "flowsight-e2e-videos-"));
+const clipDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "flowsight-e2e-clip-"));
+function removeTemporaryDirectories() {
+  fs.rmSync(videosDirectory, { recursive: true, force: true });
+  fs.rmSync(clipDirectory, { recursive: true, force: true });
+}
+environment.FLOWSIGHT_VIDEOS_DIR = videosDirectory;
+environment.FLOWSIGHT_MACHINE_ID = "e2e-ci";
+
+const clip = spawnSync(python, ["-m", "flowsight.video.fixtures", clipDirectory, "--size", "1280x720"], {
+  cwd: backend,
+  env: environment,
+  encoding: "utf8",
+});
+if (clip.status !== 0) {
+  removeTemporaryDirectories();
+  throw new Error(`No se pudo generar el clip de prueba: ${clip.stderr}`);
+}
+environment.FLOWSIGHT_E2E_CLIP = clip.stdout.trim();
+
 const migration = spawnSync(alembic, ["upgrade", "head"], {
   cwd: backend,
   env: environment,
   stdio: "inherit",
 });
 if (migration.status !== 0) {
+  removeTemporaryDirectories();
   throw new Error("No se pudieron aplicar las migraciones para Playwright.");
 }
 
@@ -100,6 +124,7 @@ try {
   if (api !== undefined) {
     stopTree(api);
   }
+  removeTemporaryDirectories();
 }
 
 process.exit(result?.status ?? 1);
