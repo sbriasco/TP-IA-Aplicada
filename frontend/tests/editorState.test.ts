@@ -995,7 +995,7 @@ describe("toSceneVersionCreate", () => {
 
     expect(payload.reference_session_id).toBe(SESSION_ID);
     expect(payload.base_version_id).toBe("v-1");
-    expect(payload.shops.map((shop: EditorShop) => [shop.shop_id, shop.name])).toEqual([
+    expect(payload.shops.map((shop) => [shop.shop_id, shop.name])).toEqual([
       ["shop-a", "Local A"],
       ["shop-b", "Local B2"],
     ]);
