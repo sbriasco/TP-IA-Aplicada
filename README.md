@@ -10,14 +10,15 @@ El procesamiento de video y la persistencia se ejecutan localmente. El chat prev
 
 ## Estado del proyecto
 
-El proyecto está en desarrollo. Actualmente existen dos incrementos:
+El proyecto está en desarrollo. Actualmente existen tres incrementos:
 
 | Incremento | Estado y alcance |
 | --- | --- |
 | [Validación de videos y tracking](experiments/video-tracking-validation/README.md) | Experimento independiente con YOLO y ByteTrack en CPU, referencia manual, eventos y mediciones. Sus conclusiones dependen de los fragmentos y la configuración evaluados. |
 | [Entorno y arquitectura base](specs/002-entorno-arquitectura-base/spec.md) | API, worker, PostgreSQL, sesiones y trabajos persistidos, trazabilidad y previsualización sintética en React mediante WebSocket. Validado localmente en Windows/CPU y mediante CI en Ubuntu. *(Persistencia compartida Azure Flexible Server: decisión posterior; ver [decisiones técnicas](docs/decisiones-tecnicas.md).)* |
+| [Configuración de escenas](specs/004-configuracion-escenas/spec.md) | Registro de video (cámaras, subida, sondeo de frames/fps/SHA-256 con OpenCV, frame de referencia, disponibilidad del video por equipo), configuración de escena versionada e inmutable (locales con zonas frontal/interior/vidriera y línea de entrada con sentido A→B) y editor visual en `/sessions/{id}/editor`. Los trabajos `video_analysis` ya se pueden crear, pero quedan en `pending`: el worker todavía no los procesa (queda para #56). Validado con la suite automática de backend, frontend y Playwright (ver "Pruebas"); las mediciones manuales de [quickstart.md](specs/004-configuracion-escenas/quickstart.md) con un video real (SC-001, SC-003, SC-004) siguen pendientes. |
 
-La aplicación base todavía no integra el procesamiento de videos reales. La carga de videos, el editor de escenas, las métricas comerciales, el dashboard y el chat son funcionalidades planificadas. La GPU permanece `not_evaluated`.
+La aplicación todavía no integra el análisis de video real (detección y tracking con YOLO/ByteTrack): los trabajos `video_analysis` se crean pero no se procesan hasta #56. Las métricas comerciales, el dashboard y el chat son funcionalidades planificadas. La GPU permanece `not_evaluated`.
 
 La [evidencia de validación de la base](specs/002-entorno-arquitectura-base/validation/base-verification.md) detalla pruebas ejecutadas y limitaciones.
 
@@ -101,6 +102,8 @@ Pop-Location
 
 Completá `.env` con `FLOWSIGHT_DATABASE_URL`. Por defecto el ejemplo apunta a PostgreSQL local. Para la base compartida de integración/demo y para Foundry (API key), seguí **[`docs/acceso-compartido-azure.md`](docs/acceso-compartido-azure.md)**: secretos solo por canal seguro del equipo, nunca en Git. Cada integrante debe agregar su IP al firewall de Azure PostgreSQL.
 
+Para registrar videos (specs/004), completá además `FLOWSIGHT_VIDEOS_DIR` (ruta absoluta a una carpeta fuera del repo, donde se copian los videos registrados) y `FLOWSIGHT_MACHINE_ID` (identificador de este equipo, sin tu nombre ni tu usuario del sistema; ver el formato en `.env.example`). Ambas son opcionales: la API y el worker arrancan sin ellas, pero registrar o recargar un video responde 503 (`videos_dir_not_configured` o `machine_id_not_configured`) hasta que estén configuradas.
+
 PostgreSQL 17 puede instalarse con el instalador oficial para Windows. Si no tenés permisos administrativos, también puede usarse el ZIP oficial de binarios en `.tools/postgresql-17/pgsql`; esa carpeta y `.postgres-data` están excluidas de Git.
 
 ## Verificación inicial
@@ -132,6 +135,8 @@ Remove-Item Env:FLOWSIGHT_DATABASE_URL
 ```
 
 Si una migración falla, no borres la base ni ejecutes `downgrade`. Corregí la causa, consultá `alembic current` y volvé a ejecutar `upgrade head`.
+
+La migración `0002` (specs/004) crea una cámara por cada `camera_id` de texto distinto usado en sesiones sintéticas previas. Si dos `camera_id` solo difieren en mayúsculas/espacios (por ejemplo `"Cam01"` y `"cam01 "`), no se fusionan: la cámara con la sesión más antigua conserva el nombre y las siguientes reciben un sufijo (`"cam01 (2)"`, `"cam01 (3)"`, …) para no violar la unicidad de nombre. Cada conflicto queda registrado con `logger.warning` en el log de Alembic, con los nombres involucrados. No se fusionan sesiones ni se modifica `sessions.camera_id`.
 
 ## Orden de inicio
 
@@ -170,6 +175,8 @@ npm run build
 npm run test:e2e
 Pop-Location
 ```
+
+`pytest` nunca corre contra la base compartida de Azure: las pruebas que hacen `downgrade`, `TRUNCATE` o insertan datos usan el helper `destructive_database_url()` (`backend/tests/conftest.py`), que toma `FLOWSIGHT_TEST_DATABASE_URL` si está definida y, si falta, acepta `FLOWSIGHT_DATABASE_URL` solo cuando el host es `localhost`, `127.0.0.1` o `::1`. Un host `*.postgres.database.azure.com` se rechaza siempre, aunque venga en `FLOWSIGHT_TEST_DATABASE_URL`. Si tu `FLOWSIGHT_DATABASE_URL` apunta a Azure, definí `FLOWSIGHT_TEST_DATABASE_URL` con un PostgreSQL local (en la terminal o en `.env`, ver `.env.example`) para poder correr esas pruebas.
 
 `test:e2e` aplica las migraciones, inicia temporalmente API y frontend, crea una sesión y un
 trabajo sintético, ejecuta el worker y verifica en Chromium la conexión WebSocket, la preview
