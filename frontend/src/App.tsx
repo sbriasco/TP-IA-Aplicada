@@ -1,5 +1,6 @@
 import { navigate, useRoute } from "./navigation";
 import { JobPreviewPage } from "./pages/JobPreviewPage";
+import { SceneEditorPage } from "./pages/SceneEditorPage";
 import { SessionDetailPage } from "./pages/SessionDetailPage";
 import { SessionsPage } from "./pages/SessionsPage";
 
@@ -14,12 +15,7 @@ export function App() {
     case "session":
       return <SessionDetailPage key={route.sessionId} sessionId={route.sessionId} />;
     case "editor":
-      return (
-        <main>
-          <h1>Editor de escena</h1>
-          <p>El editor todavía no está disponible.</p>
-        </main>
-      );
+      return <SceneEditorPage key={route.sessionId} sessionId={route.sessionId} />;
     case "not_found":
       return (
         <main>

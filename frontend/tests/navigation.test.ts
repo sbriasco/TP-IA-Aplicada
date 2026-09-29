@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { matchRoute, navigate } from "../src/navigation";
+import { addNavigationGuard, matchRoute, navigate } from "../src/navigation";
 
 describe("matchRoute", () => {
   it("prioriza ?job= sobre la ruta", () => {
@@ -61,5 +61,36 @@ describe("navigate", () => {
     expect(window.history.length).toBe(length);
     expect(listener).not.toHaveBeenCalled();
     window.removeEventListener("flowsight:navigate", listener);
+  });
+
+  it("no navega si una guarda lo bloquea, y vuelve a navegar al quitarla", () => {
+    const guard = vi.fn(() => false);
+    const remove = addNavigationGuard(guard);
+    const listener = vi.fn();
+    window.addEventListener("flowsight:navigate", listener);
+
+    navigate("/sessions/s1");
+    expect(guard).toHaveBeenCalledTimes(1);
+    expect(window.location.pathname).toBe("/");
+    expect(listener).not.toHaveBeenCalled();
+
+    remove();
+    navigate("/sessions/s1");
+    expect(guard).toHaveBeenCalledTimes(1);
+    expect(window.location.pathname).toBe("/sessions/s1");
+    window.removeEventListener("flowsight:navigate", listener);
+  });
+
+  it("navega si todas las guardas lo permiten y no las consulta si la ruta no cambia", () => {
+    const allow = vi.fn(() => true);
+    const remove = addNavigationGuard(allow);
+
+    navigate("/");
+    expect(allow).not.toHaveBeenCalled();
+
+    navigate("/sessions/s1");
+    expect(allow).toHaveBeenCalledTimes(1);
+    expect(window.location.pathname).toBe("/sessions/s1");
+    remove();
   });
 });

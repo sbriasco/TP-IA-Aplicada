@@ -31,9 +31,29 @@ export function matchRoute(pathname: string, search: string): Route {
   return match[2] === undefined ? { name: "session", sessionId } : { name: "editor", sessionId };
 }
 
+/** Devuelve `false` para cancelar una navegación interna (p. ej. cambios sin guardar). */
+export type NavigationGuard = () => boolean;
+
+const guards = new Set<NavigationGuard>();
+
+/**
+ * Registra una guarda que `navigate` consulta antes de cambiar de ruta; devuelve la función que la
+ * quita. Solo cubre la navegación interna: recargar o cerrar la pestaña se avisa con
+ * `beforeunload`, y el botón "atrás" del navegador no pasa por acá.
+ */
+export function addNavigationGuard(guard: NavigationGuard): () => void {
+  guards.add(guard);
+  return () => {
+    guards.delete(guard);
+  };
+}
+
 export function navigate(path: string): void {
   const current = window.location.pathname + window.location.search;
   if (path === current) return;
+  for (const guard of guards) {
+    if (!guard()) return;
+  }
   window.history.pushState(null, "", path);
   window.dispatchEvent(new Event(NAVIGATION_EVENT));
 }
