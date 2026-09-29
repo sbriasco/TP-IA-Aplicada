@@ -27,6 +27,8 @@ export interface VideoSource {
   fps: number;
   fps_is_estimated: boolean;
   frame_count: number;
+  declared_frame_count: number | null;
+  appears_incomplete: boolean;
   duration_seconds: number;
   registered_at: string;
   availability: VideoAvailability;

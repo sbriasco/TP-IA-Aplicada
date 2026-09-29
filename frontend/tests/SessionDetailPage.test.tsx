@@ -32,6 +32,8 @@ function videoSession(
       fps: 25,
       fps_is_estimated: false,
       frame_count: 50,
+      declared_frame_count: null,
+      appears_incomplete: false,
       duration_seconds: 2,
       registered_at: "2026-09-28T10:00:00Z",
       availability,
@@ -190,6 +192,36 @@ describe("SessionDetailPage", () => {
     );
     expect(container.textContent).toContain("Video disponible en este equipo");
     expect(container.textContent).not.toContain("Volver a cargar el video");
+  });
+
+  it("avisa si el archivo de video parece incompleto", async () => {
+    const session = videoSession("available");
+    session.video = {
+      ...session.video!,
+      frame_count: 45,
+      declared_frame_count: 50,
+      appears_incomplete: true,
+    };
+    await render(session);
+
+    const notice = container.querySelector('section[aria-labelledby="video-title"] [role="status"]');
+    expect(notice?.textContent).toBe(
+      "El archivo parece incompleto: se leyeron 45 de 50 frames declarados.",
+    );
+  });
+
+  it("no avisa si el video no parece incompleto", async () => {
+    const session = videoSession("available");
+    session.video = { ...session.video!, declared_frame_count: 50, appears_incomplete: false };
+    await render(session);
+
+    expect(container.textContent).not.toContain("parece incompleto");
+  });
+
+  it("no avisa cuando no hay cantidad de frames declarada", async () => {
+    await render(videoSession("available"));
+
+    expect(container.textContent).not.toContain("parece incompleto");
   });
 
   it("marca el fps estimado", async () => {

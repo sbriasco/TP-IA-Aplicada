@@ -300,6 +300,11 @@ export function SessionDetailPage({ sessionId, apiBaseUrl = API_BASE_URL }: Sess
                 }}
               />
             )}
+            {video.appears_incomplete && (
+              <p role="status">
+                {`El archivo parece incompleto: se leyeron ${video.frame_count} de ${video.declared_frame_count} frames declarados.`}
+              </p>
+            )}
             <VideoMetadata video={video} />
           </section>
 
