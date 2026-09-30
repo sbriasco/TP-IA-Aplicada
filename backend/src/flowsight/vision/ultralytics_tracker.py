@@ -1,4 +1,4 @@
-"""Ultralytics YOLOv8n + ByteTrack. Imported only when the worker selects it."""
+"""Ultralytics YOLO11m + ByteTrack. Imported only when the worker selects it."""
 
 from __future__ import annotations
 
@@ -7,16 +7,21 @@ from pathlib import Path
 from flowsight.vision.detector import Detection, ModelUnavailable
 
 DETECTOR_VERSION = "8.4.153"
+WEIGHT_FILENAME = "yolo11m.pt"
 
 
 class UltralyticsTracker:
-    name = "yolov8n"
+    name = "yolo11m"
     version = DETECTOR_VERSION
     tracker_name = "bytetrack"
     tracker_version = "ultralytics-bytetrack"
 
     def __init__(self, weights: Path | None) -> None:
-        if weights is None or not Path(weights).is_file():
+        if (
+            weights is None
+            or Path(weights).name != WEIGHT_FILENAME
+            or not Path(weights).is_file()
+        ):
             raise ModelUnavailable("model_unavailable")
         self._weights = Path(weights)
         self._model: object | None = None

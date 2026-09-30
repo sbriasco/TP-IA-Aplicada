@@ -520,3 +520,155 @@ class LineCrossing(Base):
     )
     foot_x: Mapped[Decimal] = mapped_column(Numeric(12, 6))
     foot_y: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+
+
+class SceneEventKind(str, enum.Enum):
+    ZONE_ENTER = "zone_enter"
+    ZONE_EXIT = "zone_exit"
+    STORE_PASS = "store_pass"
+    STORE_ENTER = "store_enter"
+    STORE_EXIT = "store_exit"
+    DWELL = "dwell"
+
+
+class SceneZoneRole(str, enum.Enum):
+    FRONT = "front"
+    INTERIOR = "interior"
+    WINDOW = "window"
+
+
+class ShopMetricCode(str, enum.Enum):
+    TRAFFIC_TOTAL = "traffic_total"
+    STORE_PASS = "store_pass"
+    ENTRIES = "entries"
+    EXITS = "exits"
+    ENTRY_RATE = "entry_rate"
+    DWELL_MEAN_SECONDS = "dwell_mean_seconds"
+    DWELL_MEDIAN_SECONDS = "dwell_median_seconds"
+    VISIBLE_OCCUPANCY = "visible_occupancy"
+
+
+class ShopMetricLabel(str, enum.Enum):
+    VISIT_ESTIMATE = "visit_estimate"
+    VISIBLE = "visible"
+    OBSERVABLE = "observable"
+    NONE = "none"
+
+
+class SceneEvent(Base):
+    __tablename__ = "scene_events"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["job_id", "session_id"],
+            ["processing_jobs.id", "processing_jobs.session_id"],
+            name="fk_scene_events_job_session",
+        ),
+        Index(
+            "ix_scene_events_session_id_shop_id_video_timestamp_seconds",
+            "session_id",
+            "shop_id",
+            "video_timestamp_seconds",
+        ),
+        CheckConstraint("frame_index >= 0", name="ck_scene_events_frame_index"),
+        CheckConstraint("video_timestamp_seconds >= 0", name="ck_scene_events_video_timestamp"),
+        CheckConstraint(
+            "(kind = 'dwell') = (duration_seconds IS NOT NULL)",
+            name="ck_scene_events_dwell_duration",
+        ),
+        CheckConstraint(
+            "duration_seconds IS NULL OR duration_seconds >= 0",
+            name="ck_scene_events_duration_non_negative",
+        ),
+        CheckConstraint(
+            "(kind IN ('zone_enter', 'zone_exit', 'dwell')) = (zone_role IS NOT NULL)",
+            name="ck_scene_events_zone_role",
+        ),
+        CheckConstraint(
+            "kind <> 'dwell' OR zone_role = 'front'", name="ck_scene_events_dwell_front"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    job_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    session_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    shop_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("shops.id", name="fk_scene_events_shop_id")
+    )
+    track_id: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[SceneEventKind] = mapped_column(
+        Enum(SceneEventKind, name="scene_event_kind", values_callable=enum_values)
+    )
+    zone_role: Mapped[SceneZoneRole | None] = mapped_column(
+        Enum(SceneZoneRole, name="scene_zone_role", values_callable=enum_values)
+    )
+    frame_index: Mapped[int] = mapped_column(Integer)
+    video_timestamp_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    duration_seconds: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    source_crossing_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("line_crossings.id", name="fk_scene_events_source_crossing_id")
+    )
+
+
+class ShopMetric(Base):
+    __tablename__ = "shop_metrics"
+    __table_args__ = (
+        UniqueConstraint("job_id", "shop_id", "code", name="uq_shop_metrics_job_id_shop_id_code"),
+        ForeignKeyConstraint(
+            ["job_id", "session_id"],
+            ["processing_jobs.id", "processing_jobs.session_id"],
+            name="fk_shop_metrics_job_session",
+        ),
+        CheckConstraint(
+            "(availability = 'unavailable') = (value IS NULL)",
+            name="ck_shop_metrics_unavailable_value",
+        ),
+        CheckConstraint("value IS NULL OR value >= 0", name="ck_shop_metrics_value_non_negative"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    job_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    session_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    shop_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("shops.id", name="fk_shop_metrics_shop_id")
+    )
+    code: Mapped[ShopMetricCode] = mapped_column(
+        Enum(ShopMetricCode, name="shop_metric_code", values_callable=enum_values)
+    )
+    value: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    availability: Mapped[MeasureAvailability] = mapped_column(
+        Enum(MeasureAvailability, name="measure_availability", values_callable=enum_values)
+    )
+    label: Mapped[ShopMetricLabel] = mapped_column(
+        Enum(ShopMetricLabel, name="shop_metric_label", values_callable=enum_values)
+    )
+    unavailable_reason: Mapped[str | None] = mapped_column(String(40))
+
+
+class TrafficBucket(Base):
+    __tablename__ = "traffic_buckets"
+    __table_args__ = (
+        UniqueConstraint(
+            "job_id",
+            "shop_id",
+            "bucket_index",
+            name="uq_traffic_buckets_job_id_shop_id_bucket_index",
+        ),
+        ForeignKeyConstraint(
+            ["job_id", "session_id"],
+            ["processing_jobs.id", "processing_jobs.session_id"],
+            name="fk_traffic_buckets_job_session",
+        ),
+        CheckConstraint("bucket_index >= 0", name="ck_traffic_buckets_bucket_index"),
+        CheckConstraint("start_seconds >= 0", name="ck_traffic_buckets_start_seconds"),
+        CheckConstraint("track_count >= 0", name="ck_traffic_buckets_track_count"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    job_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    session_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    shop_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("shops.id", name="fk_traffic_buckets_shop_id")
+    )
+    bucket_index: Mapped[int] = mapped_column(Integer)
+    start_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    track_count: Mapped[int] = mapped_column(Integer)

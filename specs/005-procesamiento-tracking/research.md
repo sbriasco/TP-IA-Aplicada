@@ -4,11 +4,11 @@ Decisiones para cerrar el plan. No quedan `NEEDS CLARIFICATION`.
 
 ## R1 — Detector y tracker
 
-**Decision**: El worker real usa Ultralytics `8.4.153` con el peso `yolov8n.pt` (el mismo del experimento 001, no se versiona) y el tracker ByteTrack de ese paquete. El lock del backend fija la variante CPU (`torch==2.7.1+cpu`, `torchvision==0.22.1+cpu`) para tests y CI. En el equipo de referencia, el mismo código elige el dispositivo gráfico si está disponible; el wheel de GPU no entra al lock de CI.
+**Decision**: El worker real usa Ultralytics `8.4.153` con el peso `yolo11m.pt` (YOLO11 medium, no se versiona) y el tracker ByteTrack de ese paquete. Un archivo con otro nombre, incluidos `yolov8n.pt` y `yolov8s.pt`, se rechaza como `model_unavailable`. El lock del backend fija la variante CPU (`torch==2.7.1+cpu`, `torchvision==0.22.1+cpu`) para tests y CI. En el equipo de referencia, el mismo código elige el dispositivo gráfico si está disponible; el wheel de GPU no entra al lock de CI. No hace falta otra dependencia: YOLO11 entra en Ultralytics desde la 8.3.0.
 
-**Rationale**: El stack ya acordó YOLO y ByteTrack. El experimento los evaluó como viables con ajustes para cruces, zona frontal y oclusión, y dejó ocupación total y permanencia interior como no viables. BoT-SORT no se compara en esta feature.
+**Rationale**: El stack ya acordó YOLO y ByteTrack. El experimento 001 evaluó `yolov8n` como viable para cruces y zona frontal, y dejó ocupación total y permanencia interior como no viables. En un video real ese peso marcó un cartel y no marcó a la persona. Se prioriza detectar personas. Ultralytics documenta YOLO11m con mAP 51,5 en COCO val y 20,1 millones de parámetros, 22 % menos que YOLOv8m a mayor mAP. Esa cifra es de COCO, no de estos videos. BoT-SORT no se compara en esta feature.
 
-**Alternatives considered**: Elegir otro peso o otro tracker ahora. Se rechaza: la spec usa el método ya evaluado y solo registra la versión. Instalar GPU en CI. Se rechaza: las pruebas ordinarias deben correr sin ese equipo.
+**Alternatives considered**: Seguir con `yolov8n` porque ya estaba medido. Se rechaza el 2026-09-30: el error de detección pesa más que repetir esa corrida. Instalar GPU en CI. Se rechaza: las pruebas ordinarias deben correr sin ese equipo. La medición de la RTX (`validation/reference-run.json`) sigue siendo la de `yolov8n`; `yolo11m` no se midió.
 
 ## R2 — Qué se guarda y qué no
 

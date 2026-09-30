@@ -30,6 +30,7 @@ class ShopGeometry:
     line_start: tuple[float, float] | None
     line_end: tuple[float, float] | None
     entry_direction: Literal["a_to_b", "b_to_a"] | None
+    window_polygon: Sequence[Sequence[float]] | None = None
 
 
 @dataclass(frozen=True)

@@ -12,7 +12,7 @@ Extiende [specs/002](../002-entorno-arquitectura-base/data-model.md) y [specs/00
 | `frames_total` | integer nullable | conteo registrado del video; obligatorio en `video_analysis` |
 | `analyzed_video_timestamp_seconds` | decimal nullable | instante del último fotograma recorrido |
 | `result_complete` | boolean | `true` solo en `completed` |
-| `detector_name` | string nullable | `yolov8n` o `fake` |
+| `detector_name` | string nullable | `yolo11m` o `fake` |
 | `detector_version` | string nullable | versión del paquete o `fake` |
 | `tracker_name` | string nullable | `bytetrack` o `fake` |
 | `tracker_version` | string nullable | versión o archivo de configuración |

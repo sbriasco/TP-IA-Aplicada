@@ -7,7 +7,7 @@ Esta guía valida la feature. No la implementa. El modelo está en [data-model.m
 - El entorno de specs/002 y specs/004 funcionando, con PostgreSQL local y `alembic upgrade head` desde `backend/` (incluida la migración de esta feature). No hacer `downgrade`.
 - `.env` con `FLOWSIGHT_VIDEOS_DIR` y `FLOWSIGHT_MACHINE_ID`, como en specs/004.
 - Para la suite y el recorrido reproducible: `FLOWSIGHT_DETECTOR=fake`. No hace falta el peso ni la GPU.
-- Para un video real: el peso `yolov8n.pt` fuera de Git y `FLOWSIGHT_DETECTOR=ultralytics`. El lock agrega las versiones de CPU del experimento 001 (`ultralytics==8.4.153`, `torch==2.7.1+cpu`). Son dependencias del stack ya acordado.
+- Para un video real: el peso `yolo11m.pt` fuera de Git y `FLOWSIGHT_DETECTOR=ultralytics`. El worker no acepta `yolov8n.pt` ni `yolov8s.pt`. El lock agrega las versiones de CPU del experimento 001 (`ultralytics==8.4.153`, `torch==2.7.1+cpu`). Son dependencias del stack ya acordado.
 
 ## Verificaciones automáticas
 
