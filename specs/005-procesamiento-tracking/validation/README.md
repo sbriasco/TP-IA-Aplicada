@@ -72,6 +72,10 @@ En el navegador, `http://127.0.0.1:5173`:
 3. Volver a la sesión y pulsar **Iniciar análisis**. El texto que dice que el trabajo queda pendiente es viejo: si el worker está corriendo, lo toma solo.
 4. Abrir `http://127.0.0.1:5173/?job=<id>` con el id que muestra la página y esperar a que el estado pase a completado.
 
+## Resultado
+
+`reference-run.json` es la corrida del 2026-09-29 en la RTX, con PostgreSQL local. `execution_mode` es `cuda`, sin limitaciones. El video tiene 2360 frames y la tasa fue 29,8 frames por segundo de procesamiento.
+
 ## Qué devolver
 
 Al terminar, el worker escribe `derived/<sesión>/<trabajo>/evidence.json` dentro de `FLOWSIGHT_VIDEOS_DIR`. Mandar solo ese archivo. Copiarlo acá como `reference-run.json`.

@@ -75,7 +75,9 @@ Se utiliza Ultralytics YOLO sobre PyTorch, con OpenCV para el manejo de frames. 
 
 **Dependencia confirmada (specs/004, R4, 2026-09-26):** el backend agrega `opencv-python-headless==4.10.0.84` (con su `numpy` fijado en el lock) a `backend/pyproject.toml` y `backend/requirements.lock`, la misma versión que usa `experiments/video-tracking-validation`. Se eligió la variante *headless* porque no trae dependencias de GUI y se instala en CI (Ubuntu) sin librerías de sistema adicionales; el worker de análisis de video (#56) la va a necesitar igual. No se agrega `python-multipart`: la subida de video usa el cuerpo crudo de la request (ver `specs/004-configuracion-escenas/research.md`, R1).
 
-La variante y los pesos de YOLO, los umbrales del tracker y la combinación de Python, PyTorch y CUDA se fijarán después de la validación técnica. La RTX 5080 de 16 GB es la GPU de referencia, pero el entorno debe contemplar ejecución en CPU y pruebas sintéticas para equipos sin esa GPU. No se promete velocidad de video en tiempo real.
+**Combinación fijada para el MVP (specs/005, 2026-09-29):** Ultralytics `8.4.153`, peso `yolov8n.pt` y ByteTrack. El lock del repositorio trae `torch==2.7.1+cpu` y `torchvision==0.22.1+cpu`. El wheel de GPU no se versiona: en la RTX se instala `torch==2.7.1` y `torchvision==0.22.1` desde el índice CUDA 12.8, después del lock. Tests y CI usan `FLOWSIGHT_DETECTOR=fake` y no cargan el peso. Las tres medidas oficiales (entradas, salidas y ocupación visible) viven en `analysis_measures`.
+
+En la RTX, un video de 2360 frames terminó con `execution_mode=cuda`, sin limitaciones, a 29,8 frames por segundo de procesamiento. Evidencia: `specs/005-procesamiento-tracking/validation/reference-run.json`. Esa corrida no promete la misma velocidad para otros videos. Los equipos sin placa siguen en CPU.
 
 Antes de distribuir el proyecto, registrar las condiciones de licencia aplicables a la versión de Ultralytics y a los pesos seleccionados.
 
@@ -104,16 +106,16 @@ Las credenciales permanecen en el backend. El modelo consulta herramientas acota
 
 ## Validaciones pendientes
 
-La base sintética fue validada en CPU el 16 de septiembre de 2026. El flujo y la consulta de salud cumplieron los límites definidos; la evidencia anonimizada está en `specs/002-entorno-arquitectura-base/validation/`. La RTX 5080 continúa como `not_evaluated` hasta ejecutar el mismo procedimiento en esa PC.
+La base sintética fue validada en CPU el 16 de septiembre de 2026. El flujo y la consulta de salud cumplieron los límites definidos; la evidencia anonimizada está en `specs/002-entorno-arquitectura-base/validation/`. La RTX 5080 quedó medida el 29 de septiembre de 2026: CUDA, 2360 frames, 29,8 frames por segundo de procesamiento (`specs/005-procesamiento-tracking/validation/reference-run.json`).
 
 La previsualización base ya cuenta con verificaciones automáticas de reemplazo del frame pendiente, entrega antes del estado terminal y desconexión. La validación con video real y carga sostenida corresponde a las funcionalidades posteriores.
 
 Continúan pendientes:
 
-1. Comprobar compatibilidad y ejecución en la PC con RTX 5080.
+1. Comprobar compatibilidad y ejecución en la PC con RTX 5080. **Hecho (2026-09-29):** `execution_mode=cuda`, yolov8n 8.4.153, ByteTrack, 2360 frames, 29,8 frames por segundo de procesamiento. Ver `specs/005-procesamiento-tracking/validation/reference-run.json`.
 2. Evaluar YOLO y ByteTrack con los videos disponibles, usando referencias manuales y registrando errores y tiempos.
 3. Comprobar acceso a Azure AI Foundry (suscripción de estudiantes / crédito) y una consulta mínima con tool calling ficticio antes de fijar el SDK y el modelo. **Hecho (2026-09-26)**: Foundry `available`, `openai==1.109.1`, `gpt-5-mini`, tool calling `demonstrated`; ver `specs/003-validacion-modelo-azure/validation/summary.json`. Cuotas/costos siguen `not_measured`.
-4. Verificar que las migraciones y los datos sintéticos permiten reproducir el entorno en otra computadora (PostgreSQL local) y aplicar las mismas migraciones a Azure Flexible Server cuando un integrante se conecte por primera vez (`alembic upgrade head`). **Hecho en instancia compartida (2026-09-26):** schema `0001_initial`.
+4. Verificar que las migraciones y los datos sintéticos permiten reproducir el entorno en otra computadora (PostgreSQL local) y aplicar las mismas migraciones a Azure Flexible Server cuando un integrante se conecte por primera vez (`alembic upgrade head`). **Hecho en instancia compartida (2026-09-30):** schema `0004_video_analysis`.
 5. Comprobar firewall/SSL de **Azure Database for PostgreSQL – Flexible Server** por integrante (IP en portal). Guía: [acceso-compartido-azure.md](acceso-compartido-azure.md).
 
 Estas validaciones pueden motivar ajustes documentados; no deben presentarse como completadas por haber elegido el stack.

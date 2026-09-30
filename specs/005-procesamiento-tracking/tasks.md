@@ -162,7 +162,7 @@ description: "Lista de tareas de la feature 005: procesamiento y seguimiento con
 
 **Purpose**: Cerrar documentación y la regresión de las features anteriores.
 
-- [ ] T035 [P] Actualizar `README.md` y `docs/decisiones-tecnicas.md`: `video_analysis` ya no queda pendiente hasta #56; el detector por defecto de tests es `fake`; el lock de CPU no incluye el wheel de GPU; las tres medidas oficiales viven en `analysis_measures`.
+- [X] T035 [P] Actualizar `README.md` y `docs/decisiones-tecnicas.md`: `video_analysis` ya no queda pendiente hasta #56; el detector por defecto de tests es `fake`; el lock de CPU no incluye el wheel de GPU; las tres medidas oficiales viven en `analysis_measures`.
 - [ ] T036 Seguir [quickstart.md](./quickstart.md): correr la suite de `backend/` (sin marker `gpu`) y `npm run lint`, `npm test`, `npm run build` y `npm run test:e2e` en `frontend/`. La suite de specs/002 y specs/004, incluido `frontend/e2e/job-preview.spec.ts`, queda en verde.
 
 ---

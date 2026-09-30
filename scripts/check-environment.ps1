@@ -2,13 +2,16 @@
 param(
     [ValidateSet("Text", "Json")]
     [string]$OutputFormat = "Text",
-    [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
+    [string]$ProjectRoot,
     [string]$EnvFile,
     [string]$PythonPath,
     [string]$PostgresBin
 )
 
 $ErrorActionPreference = "Stop"
+if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
+    $ProjectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+}
 $startedAt = [System.Diagnostics.Stopwatch]::StartNew()
 $checks = [System.Collections.Generic.List[object]]::new()
 

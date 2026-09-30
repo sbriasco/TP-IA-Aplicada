@@ -1,0 +1,10 @@
+{
+  "execution_mode": "cuda",
+  "detector_name": "yolov8n",
+  "detector_version": "8.4.153",
+  "tracker_name": "bytetrack",
+  "tracker_version": "ultralytics-bytetrack",
+  "frames_total": 2360,
+  "frames_per_processing_second": 29.782186214381262,
+  "limitations": []
+}
