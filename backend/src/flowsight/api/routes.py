@@ -25,6 +25,9 @@ from flowsight.api.schemas import (
     JobResponse,
     JobTraceResponse,
     MetricValueResponse,
+    PositionSampleResponse,
+    PositionSamplesResponse,
+    ProcessedSessionResponse,
     ReferenceFrameResponse,
     SceneEventResponse,
     SceneIssueResponse,
@@ -69,6 +72,8 @@ from flowsight.services.jobs import (
     transition_job,
 )
 from flowsight.services.measures import list_measures
+from flowsight.services.position_samples import JobNotFound, list_position_samples
+from flowsight.services.processed_sessions import list_processed_sessions
 from flowsight.services.scene_metrics import (
     ResultIncomplete,
     ShopNotInSession,
@@ -144,6 +149,12 @@ def list_sessions(
     if registered_camera_id is not None:
         query = query.where(Session.registered_camera_id == registered_camera_id)
     return list(database.scalars(query.order_by(Session.created_at.desc(), Session.id.desc())))
+
+
+@router.get("/processed-sessions", response_model=list[ProcessedSessionResponse])
+def get_processed_sessions(request: Request, database: Database) -> list[ProcessedSessionResponse]:
+    rows = list_processed_sessions(database, request.app.state.settings)
+    return [ProcessedSessionResponse.model_validate(row, from_attributes=True) for row in rows]
 
 
 @router.post("/sessions", response_model=SessionDetail, status_code=status.HTTP_201_CREATED)
@@ -535,6 +546,26 @@ def cancel_job(job_id: uuid.UUID, database: Database) -> ProcessingJob:
     if stored is None:
         raise not_found("Trabajo inexistente.")
     return stored
+
+
+@router.get("/jobs/{job_id}/position-samples", response_model=PositionSamplesResponse)
+def get_position_samples(
+    job_id: uuid.UUID, request: Request, database: Database
+) -> PositionSamplesResponse:
+    try:
+        sample_set = list_position_samples(database, request.app.state.settings, job_id)
+    except JobNotFound:
+        raise not_found("El análisis no existe.") from None
+    return PositionSamplesResponse(
+        job_id=sample_set.job_id,
+        availability=sample_set.availability,
+        samples=[
+            PositionSampleResponse(
+                video_timestamp_seconds=sample.video_timestamp_seconds, foot=sample.foot
+            )
+            for sample in sample_set.samples
+        ],
+    )
 
 
 @router.get("/jobs/{job_id}/measures", response_model=list[AnalysisMeasureResponse])

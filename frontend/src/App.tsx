@@ -2,6 +2,7 @@ import { navigate, useRoute } from "./navigation";
 import { JobPreviewPage } from "./pages/JobPreviewPage";
 import { SceneEditorPage } from "./pages/SceneEditorPage";
 import { SessionDetailPage } from "./pages/SessionDetailPage";
+import { SessionResultsPage } from "./pages/SessionResultsPage";
 import { SessionsPage } from "./pages/SessionsPage";
 
 export function App() {
@@ -14,6 +15,8 @@ export function App() {
       return <SessionsPage />;
     case "session":
       return <SessionDetailPage key={route.sessionId} sessionId={route.sessionId} />;
+    case "results":
+      return <SessionResultsPage key={route.sessionId} sessionId={route.sessionId} />;
     case "editor":
       return <SceneEditorPage key={route.sessionId} sessionId={route.sessionId} />;
     case "not_found":

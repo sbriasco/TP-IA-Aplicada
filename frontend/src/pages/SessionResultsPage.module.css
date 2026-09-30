@@ -1,0 +1,23 @@
+.frame {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.frame img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.chart {
+  width: 100%;
+  max-width: 40rem;
+  height: 16rem;
+}
+
+.estimate,
+.partial,
+.unavailable {
+  font-weight: 600;
+}

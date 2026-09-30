@@ -18,6 +18,8 @@ describe("matchRoute", () => {
     expect(matchRoute("/sessions/s1", "")).toEqual({ name: "session", sessionId: "s1" });
     expect(matchRoute("/sessions/s1/", "")).toEqual({ name: "session", sessionId: "s1" });
     expect(matchRoute("/sessions/s1/editor", "")).toEqual({ name: "editor", sessionId: "s1" });
+    expect(matchRoute("/sessions/s1/results", "")).toEqual({ name: "results", sessionId: "s1" });
+    expect(matchRoute("/sessions/s1/results/", "")).toEqual({ name: "results", sessionId: "s1" });
   });
 
   it("decodifica el identificador de sesión", () => {
@@ -27,6 +29,7 @@ describe("matchRoute", () => {
   it("marca como inexistentes las rutas desconocidas o mal codificadas", () => {
     expect(matchRoute("/sessions", "")).toEqual({ name: "not_found" });
     expect(matchRoute("/sessions/s1/otra", "")).toEqual({ name: "not_found" });
+    expect(matchRoute("/sessions/s1/results/extra", "")).toEqual({ name: "not_found" });
     expect(matchRoute("/otra", "")).toEqual({ name: "not_found" });
     expect(matchRoute("/sessions/%E0%A4%A", "")).toEqual({ name: "not_found" });
   });
