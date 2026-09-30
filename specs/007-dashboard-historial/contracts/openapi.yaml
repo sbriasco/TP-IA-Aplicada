@@ -1,0 +1,150 @@
+openapi: 3.1.0
+info:
+  title: FlowSight API — historial
+  version: 0.5.0
+  description: >
+    Lecturas nuevas de specs/007. No modifican GET /sessions ni el pedido de
+    métricas de specs/006. Los errores usan
+    {"detail": {"code": string, "message": string}}.
+servers:
+  - url: http://127.0.0.1:8000
+paths:
+  /processed-sessions:
+    get:
+      operationId: listProcessedSessions
+      description: >
+        Una fila por sesión que ya tiene un análisis. El análisis es el más
+        reciente. No incluye las ocho métricas.
+      responses:
+        "200":
+          description: Puede ser una lista vacía.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProcessedSession"
+  /jobs/{job_id}/position-samples:
+    get:
+      operationId: listPositionSamples
+      description: >
+        Pies normalizados de la muestra ya escrita. No calcula métricas.
+        Si el archivo no está en este equipo, la muestra queda no disponible
+        y la respuesta sigue siendo 200.
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      responses:
+        "200":
+          description: Muestra, o unavailable si el archivo no está aquí.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PositionSamples"
+        "404":
+          description: El análisis no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  parameters:
+    JobId:
+      name: job_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    ProcessedSession:
+      type: object
+      additionalProperties: false
+      required:
+        - session_id
+        - name
+        - video_filename
+        - video_availability
+        - job_id
+        - status
+        - finished_at
+        - failure_code
+        - failure_message
+        - scene_version_id
+        - version_number
+        - result_complete
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        video_filename:
+          type: string
+          nullable: true
+        video_availability:
+          type: string
+          nullable: true
+          enum: [available, missing, mismatch, not_configured, null]
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, processing, completed, failed, cancelled]
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        failure_code:
+          type: string
+          nullable: true
+        failure_message:
+          type: string
+          nullable: true
+        scene_version_id:
+          type: string
+          format: uuid
+          nullable: true
+        version_number:
+          type: integer
+          nullable: true
+        result_complete:
+          type: boolean
+    PositionSamples:
+      type: object
+      additionalProperties: false
+      required: [job_id, availability, samples]
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        availability:
+          type: string
+          enum: [available, unavailable]
+        samples:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [video_timestamp_seconds, foot]
+            properties:
+              video_timestamp_seconds:
+                type: number
+              foot:
+                type: array
+                minItems: 2
+                maxItems: 2
+                items:
+                  type: number
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string

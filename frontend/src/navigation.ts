@@ -5,10 +5,11 @@ export type Route =
   | { name: "sessions" }
   | { name: "session"; sessionId: string }
   | { name: "editor"; sessionId: string }
+  | { name: "results"; sessionId: string }
   | { name: "not_found" };
 
 const NAVIGATION_EVENT = "flowsight:navigate";
-const SESSION_PATH = /^\/sessions\/([^/]+)(\/editor)?\/?$/;
+const SESSION_PATH = /^\/sessions\/([^/]+)(\/editor|\/results)?\/?$/;
 
 export function matchRoute(pathname: string, search: string): Route {
   const jobId = (new URLSearchParams(search).get("job") ?? "").trim();
@@ -28,7 +29,9 @@ export function matchRoute(pathname: string, search: string): Route {
   } catch {
     return { name: "not_found" };
   }
-  return match[2] === undefined ? { name: "session", sessionId } : { name: "editor", sessionId };
+  if (match[2] === "/editor") return { name: "editor", sessionId };
+  if (match[2] === "/results") return { name: "results", sessionId };
+  return { name: "session", sessionId };
 }
 
 /** Devuelve `false` para cancelar una navegación interna (p. ej. cambios sin guardar). */

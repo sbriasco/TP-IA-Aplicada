@@ -13,9 +13,12 @@ function response(status: number, body: unknown) {
 }
 
 function routeFetch(sessions: unknown) {
-  return vi.fn((url: string) =>
-    Promise.resolve(response(200, url.startsWith(`${API}/sessions`) ? sessions : [camera])),
-  );
+  return vi.fn((url: string) => {
+    if (url.startsWith(`${API}/processed-sessions`)) {
+      return Promise.resolve(response(200, []));
+    }
+    return Promise.resolve(response(200, url.startsWith(`${API}/sessions`) ? sessions : [camera]));
+  });
 }
 
 describe("SessionsPage", () => {

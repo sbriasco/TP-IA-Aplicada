@@ -365,6 +365,38 @@ class ShopMetricsResponse(BaseModel):
     peak: TrafficBucketResponse
 
 
+class ProcessedSessionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: uuid.UUID
+    name: str
+    video_filename: str | None
+    video_availability: str | None
+    job_id: uuid.UUID
+    status: str
+    finished_at: datetime | None
+    failure_code: str | None
+    failure_message: str | None
+    scene_version_id: uuid.UUID | None
+    version_number: int | None
+    result_complete: bool
+
+
+class PositionSampleResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    video_timestamp_seconds: float
+    foot: tuple[float, float]
+
+
+class PositionSamplesResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    job_id: uuid.UUID
+    availability: str
+    samples: list[PositionSampleResponse]
+
+
 class SceneEventResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

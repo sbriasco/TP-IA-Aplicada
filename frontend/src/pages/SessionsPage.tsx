@@ -7,6 +7,7 @@ import { Link } from "../components/Link";
 import { VideoUploadForm } from "../components/VideoUploadForm";
 import { navigate } from "../navigation";
 import type { SessionSummary, SourceKind } from "../types/session";
+import { ProcessedSessionsSection } from "./ProcessedSessionsSection";
 
 const SOURCE_KIND_LABEL: Record<SourceKind, string> = {
   synthetic: "Sintética",
@@ -82,6 +83,8 @@ export function SessionsPage({ apiBaseUrl = API_BASE_URL }: SessionsPageProps) {
           </table>
         )}
       </section>
+
+      <ProcessedSessionsSection apiBaseUrl={apiBaseUrl} />
     </main>
   );
 }
