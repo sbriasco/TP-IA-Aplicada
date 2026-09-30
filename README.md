@@ -16,9 +16,10 @@ El proyecto está en desarrollo. Actualmente existen tres incrementos:
 | --- | --- |
 | [Validación de videos y tracking](experiments/video-tracking-validation/README.md) | Experimento independiente con YOLO y ByteTrack en CPU, referencia manual, eventos y mediciones. Sus conclusiones dependen de los fragmentos y la configuración evaluados. |
 | [Entorno y arquitectura base](specs/002-entorno-arquitectura-base/spec.md) | API, worker, PostgreSQL, sesiones y trabajos persistidos, trazabilidad y previsualización sintética en React mediante WebSocket. Validado localmente en Windows/CPU y mediante CI en Ubuntu. *(Persistencia compartida Azure Flexible Server: decisión posterior; ver [decisiones técnicas](docs/decisiones-tecnicas.md).)* |
-| [Configuración de escenas](specs/004-configuracion-escenas/spec.md) | Registro de video (cámaras, subida, sondeo de frames/fps/SHA-256 con OpenCV, frame de referencia, disponibilidad del video por equipo), configuración de escena versionada e inmutable (locales con zonas frontal/interior/vidriera y línea de entrada con sentido A→B) y editor visual en `/sessions/{id}/editor`. Los trabajos `video_analysis` ya se pueden crear, pero quedan en `pending`: el worker todavía no los procesa (queda para #56). Validado con la suite automática de backend, frontend y Playwright (ver "Pruebas"); las mediciones manuales de [quickstart.md](specs/004-configuracion-escenas/quickstart.md) con un video real (SC-001, SC-003, SC-004) siguen pendientes. |
+| [Configuración de escenas](specs/004-configuracion-escenas/spec.md) | Registro de video (cámaras, subida, sondeo de frames/fps/SHA-256 con OpenCV, frame de referencia, disponibilidad del video por equipo), configuración de escena versionada e inmutable (locales con zonas frontal/interior/vidriera y línea de entrada con sentido A→B) y editor visual en `/sessions/{id}/editor`. Desde ahí se crea el trabajo `video_analysis`. Validado con la suite automática de backend, frontend y Playwright (ver "Pruebas") y con las mediciones manuales de [quickstart.md](specs/004-configuracion-escenas/quickstart.md): SC-004 en la suite, SC-003 en aproximadamente 3 min y SC-001 en 0,77 s sobre el video real más largo disponible (94 s; no había uno de ~5 min). El escenario de un segundo equipo con la base compartida sigue pendiente. |
+| [Procesamiento y tracking](specs/005-procesamiento-tracking/spec.md) | El worker procesa `video_analysis` con YOLO y ByteTrack. Tests y CI usan el detector `fake` y no cargan el peso. El lock fija PyTorch de CPU (`torch==2.7.1+cpu`); el wheel de GPU no entra al repositorio. Entradas, salidas y ocupación visible se guardan en `analysis_measures`. La vista en vivo muestra el seguimiento y el avance. En la RTX, un video de 2360 frames se procesó en CUDA a 29,8 frames por segundo ([reference-run.json](specs/005-procesamiento-tracking/validation/reference-run.json)). |
 
-La aplicación todavía no integra el análisis de video real (detección y tracking con YOLO/ByteTrack): los trabajos `video_analysis` se crean pero no se procesan hasta #56. Las métricas comerciales, el dashboard y el chat son funcionalidades planificadas. La GPU permanece `not_evaluated`.
+El worker procesa los trabajos `video_analysis`. Las métricas comerciales ampliadas, el dashboard y el chat siguen planificados.
 
 La [evidencia de validación de la base](specs/002-entorno-arquitectura-base/validation/base-verification.md) detalla pruebas ejecutadas y limitaciones.
 
@@ -81,18 +82,23 @@ Ejecutá los comandos desde la raíz del repositorio, salvo cuando se indique ot
 ## Requisitos
 
 - Git.
-- Python 3.11.16 de 64 bits.
-- Node.js 22.20.0 y npm.
-- PostgreSQL 17 local.
 - PowerShell.
+- Python 3.11.16 de 64 bits, Node.js 22.20.0 y PostgreSQL 17. No van en `requirements.lock` ni en `package.json`: son los programas donde después se instalan las librerías.
+
+En Windows, este script los descarga en `.tools/` (no va a Git), crea `backend\.venv` y una base local `flowsight` en el puerto 5432, la misma del `.env.example`:
+
+```powershell
+.\scripts\install-prerequisites.ps1
+```
+
+Si Node quedó en `.tools\node`, abrí una terminal nueva para que `npm` esté en el PATH. Si el puerto 5432 ya está ocupado, el script no toca ese servidor.
 
 ## Preparación
 
 ```powershell
-Copy-Item .env.example .env
+.\scripts\install-prerequisites.ps1
 
-& "C:\ruta\a\python-3.11.16.exe" -m venv backend\.venv
-& "backend\.venv\Scripts\python.exe" -m pip install -r backend\requirements.lock
+& "backend\.venv\Scripts\python.exe" -m pip install -r backend\requirements.lock --no-deps
 & "backend\.venv\Scripts\python.exe" -m pip install --no-deps -e backend
 
 Push-Location frontend
@@ -104,7 +110,11 @@ Completá `.env` con `FLOWSIGHT_DATABASE_URL`. Por defecto el ejemplo apunta a P
 
 Para registrar videos (specs/004), completá además `FLOWSIGHT_VIDEOS_DIR` (ruta absoluta a una carpeta fuera del repo, donde se copian los videos registrados) y `FLOWSIGHT_MACHINE_ID` (identificador de este equipo, sin tu nombre ni tu usuario del sistema; ver el formato en `.env.example`). Ambas son opcionales: la API y el worker arrancan sin ellas, pero registrar o recargar un video responde 503 (`videos_dir_not_configured` o `machine_id_not_configured`) hasta que estén configuradas.
 
-PostgreSQL 17 puede instalarse con el instalador oficial para Windows. Si no tenés permisos administrativos, también puede usarse el ZIP oficial de binarios en `.tools/postgresql-17/pgsql`; esa carpeta y `.postgres-data` están excluidas de Git.
+PostgreSQL queda en `.tools/postgresql-17/pgsql`. Esa carpeta y `.postgres-data` están excluidas de Git. Para volver a levantarlo:
+
+```powershell
+& ".tools\postgresql-17\pgsql\bin\pg_ctl.exe" -D ".postgres-data" -l ".postgres-data\server.log" start
+```
 
 ## Verificación inicial
 

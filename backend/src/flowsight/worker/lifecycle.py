@@ -12,13 +12,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as DatabaseSession
 from sqlalchemy.orm import sessionmaker
 
+from flowsight.core.config import Settings
 from flowsight.db.models import JobKind, JobStatus, ProcessingJob
 from flowsight.services.jobs import transition_job
 from flowsight.services.trace import persist_synthetic_trace
 from flowsight.synthetic.trace import generate_synthetic_trace
 
-# Kinds this worker knows how to process; `video_analysis` stays pending until #56 (R12).
-SUPPORTED_JOB_KINDS = (JobKind.SYNTHETIC_BASE_FLOW,)
+# Kinds this worker knows how to process. `video_analysis` is the real-video path (US1).
+SUPPORTED_JOB_KINDS = (JobKind.SYNTHETIC_BASE_FLOW, JobKind.VIDEO_ANALYSIS)
 
 
 def claim_next_job(
@@ -92,12 +93,20 @@ def process_next_job(
     worker_id: str,
     fixture_path: Path,
     now: Callable[[], datetime],
+    settings: Settings | None = None,
 ) -> uuid.UUID | None:
     with factory.begin() as database_session:
         job = claim_next_job(database_session, worker_id, now())
         if job is None:
             return None
         job_id = job.id
+        kind = job.kind
+
+    if kind is JobKind.VIDEO_ANALYSIS:
+        from flowsight.worker.video_analysis import process_video_analysis_job
+
+        process_video_analysis_job(factory, job_id, settings=settings, now=now)
+        return job_id
 
     try:
         payload = json.loads(fixture_path.read_text(encoding="utf-8"))

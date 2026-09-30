@@ -2,13 +2,16 @@
 param(
     [ValidateSet("Text", "Json")]
     [string]$OutputFormat = "Text",
-    [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
+    [string]$ProjectRoot,
     [string]$EnvFile,
     [string]$PythonPath,
     [string]$PostgresBin
 )
 
 $ErrorActionPreference = "Stop"
+if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
+    $ProjectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+}
 $startedAt = [System.Diagnostics.Stopwatch]::StartNew()
 $checks = [System.Collections.Generic.List[object]]::new()
 
@@ -77,17 +80,34 @@ if (Test-Path -LiteralPath $PythonPath) {
 }
 
 $expectedNode = (Get-Content -Raw (Join-Path $ProjectRoot ".node-version")).Trim()
-$nodeCommand = Get-Command node -ErrorAction SilentlyContinue
-if ($nodeCommand) {
-    $nodeVersion = (& node --version).TrimStart("v")
+$nodeExe = $null
+$localNode = Join-Path $ProjectRoot ".tools\node\node.exe"
+if (Test-Path -LiteralPath $localNode) {
+    $localVersion = (& $localNode --version).TrimStart("v")
+    if ($localVersion -eq $expectedNode) { $nodeExe = $localNode }
+}
+if (-not $nodeExe) {
+    $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+    if ($nodeCommand) { $nodeExe = $nodeCommand.Source }
+}
+if ($nodeExe) {
+    $nodeVersion = (& $nodeExe --version).TrimStart("v")
     Add-Check "Node.js" ($nodeVersion -eq $expectedNode) "Versión $nodeVersion. Requerida: $expectedNode."
 } else {
-    Add-Check "Node.js" $false "Node.js no está disponible. Instalá la versión de .node-version."
+    Add-Check "Node.js" $false "Node.js no está disponible. Corré scripts/install-prerequisites.ps1."
 }
 
-$npmCommand = Get-Command npm -ErrorAction SilentlyContinue
-if ($npmCommand) {
-    Add-Check "npm" $true ("Versión {0}." -f (& npm --version))
+$npmExe = $null
+if ($nodeExe) {
+    $npmNextToNode = Join-Path (Split-Path -Parent $nodeExe) "npm.cmd"
+    if (Test-Path -LiteralPath $npmNextToNode) { $npmExe = $npmNextToNode }
+}
+if (-not $npmExe) {
+    $npmCommand = Get-Command npm -ErrorAction SilentlyContinue
+    if ($npmCommand) { $npmExe = $npmCommand.Source }
+}
+if ($npmExe) {
+    Add-Check "npm" $true ("Versión {0}." -f (& $npmExe --version))
 } else {
     Add-Check "npm" $false "npm no está disponible junto con Node.js."
 }

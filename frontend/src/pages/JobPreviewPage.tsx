@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import {
+  cancelJob,
   getJob,
   previewUrl,
   type JobState,
@@ -30,7 +31,11 @@ export function JobPreviewPage({
         const current = await getJob(apiBaseUrl, jobId);
         if (!active) return;
         setJob(current);
-        if (current.status === "completed" || current.status === "failed") {
+        if (current.status === "failed") {
+          setConnection("El análisis falló");
+          return;
+        }
+        if (current.status === "completed" || current.status === "cancelled") {
           setConnection("Trabajo finalizado");
           return;
         }
@@ -39,6 +44,9 @@ export function JobPreviewPage({
         socket.addEventListener("message", (event: MessageEvent<string>) => {
           const message = JSON.parse(event.data) as PreviewMessage | TerminalMessage;
           if (message.type === "preview.update") {
+            if (message.schema_version !== "1" && message.schema_version !== "2") {
+              return;
+            }
             setPreview(message);
           } else {
             setJob((value) => (value === null ? value : { ...value, status: message.status }));
@@ -68,6 +76,20 @@ export function JobPreviewPage({
     };
   }, [apiBaseUrl, jobId]);
 
+  async function onCancel() {
+    try {
+      const updated = await cancelJob(apiBaseUrl, jobId);
+      setJob(updated);
+      setConnection(
+        updated.status === "failed" ? "El análisis falló" : "Trabajo finalizado",
+      );
+    } catch {
+      setConnection("API no disponible");
+    }
+  }
+
+  const canCancel = job?.status === "pending" || job?.status === "processing";
+
   return (
     <main>
       <h1>Supervisión del trabajo</h1>
@@ -79,13 +101,24 @@ export function JobPreviewPage({
         <dd>{preview?.frame_index ?? "sin previsualización"}</dd>
         <dt>Timestamp del video</dt>
         <dd>{preview === null ? "—" : `${preview.video_timestamp_seconds} s`}</dd>
+        <dt>Avance</dt>
+        <dd>{preview === null ? "—" : `${preview.progress_percent} %`}</dd>
       </dl>
+      <p>Esta vista acompaña el análisis y no promete la velocidad del video.</p>
+      {job?.status === "cancelled" && (
+        <p>Análisis cancelado. El resultado quedó incompleto.</p>
+      )}
+      {job?.status === "failed" && <p>El análisis falló.</p>}
+      {canCancel && (
+        <button type="button" onClick={() => void onCancel()}>
+          Cancelar análisis
+        </button>
+      )}
       {preview !== null && (
         <img
           alt={`Previsualización del frame ${preview.frame_index}`}
           src={`data:${preview.image_media_type};base64,${preview.image_base64}`}
-          width="320"
-          height="180"
+          {...(preview.schema_version === "1" ? { width: 320, height: 180 } : {})}
         />
       )}
     </main>

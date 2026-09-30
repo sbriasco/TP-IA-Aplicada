@@ -43,6 +43,7 @@ def redact_paths(text: str, settings: Settings) -> str:
         for spelling in {str(videos_dir), videos_dir.as_posix()}:
             boundary = re.escape(spelling.rstrip("\\/")) + r"(?=[\\/\s'\"]|$)"
             text = re.sub(boundary, VIDEOS_DIR_MARKER, text)
+        text = text.replace(f"{VIDEOS_DIR_MARKER}\\", f"{VIDEOS_DIR_MARKER}/")
 
     text = _QUOTED_PATH.sub(lambda match: f"{match[1]}{PATH_MARKER}{match[1]}", text)
     text = _WINDOWS_PATH.sub(PATH_MARKER, text)

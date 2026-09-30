@@ -31,6 +31,7 @@ def run_worker() -> None:
                 worker_id=settings.worker_id,
                 fixture_path=fixture_path,
                 now=lambda: datetime.now(UTC),
+                settings=settings,
             )
             if processed is None:
                 time.sleep(1)

@@ -143,10 +143,11 @@ def test_interrupted_job_becomes_failed_and_is_not_retried(session_factory) -> N
         assert job.status is JobStatus.FAILED
         assert job.failure_code == "worker_interrupted"
         assert job.failure_message == "El worker anterior se interrumpió durante el procesamiento."
+        assert job.result_complete is False
 
 
-def test_claim_skips_older_video_analysis_job_and_takes_synthetic(session_factory) -> None:
-    """specs/004 T028: the current worker only claims `synthetic_base_flow` (R12, T035)."""
+def test_claim_takes_older_video_analysis_before_synthetic(session_factory) -> None:
+    """The worker claims the oldest pending job, including `video_analysis` (US1)."""
 
     older = datetime.now(UTC) - timedelta(minutes=5)
     with session_factory.begin() as database_session:
@@ -187,12 +188,12 @@ def test_claim_skips_older_video_analysis_job_and_takes_synthetic(session_factor
     with session_factory.begin() as database_session:
         claimed = claim_next_job(database_session, "worker-a", datetime.now(UTC))
         assert claimed is not None
-        assert claimed.id == synthetic_job_id
-        assert claimed.kind is JobKind.SYNTHETIC_BASE_FLOW
+        assert claimed.id == video_job.id
+        assert claimed.kind is JobKind.VIDEO_ANALYSIS
+        assert claimed.status is JobStatus.PROCESSING
 
     with session_factory() as database_session:
-        stored = database_session.get(ProcessingJob, video_job.id)
+        stored = database_session.get(ProcessingJob, synthetic_job_id)
         assert stored is not None
         assert stored.status is JobStatus.PENDING
         assert stored.claimed_by is None
-        assert [transition.to_status for transition in stored.transitions] == [JobStatus.PENDING]

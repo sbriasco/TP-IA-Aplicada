@@ -49,6 +49,7 @@ class JobStatus(str, enum.Enum):
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 def enum_values(enum_type: type[enum.Enum]) -> list[str]:
@@ -108,6 +109,10 @@ class ProcessingJob(Base):
             "(scene_version_id IS NOT NULL AND registered_camera_id IS NOT NULL)",
             name="ck_processing_jobs_video_analysis_scene",
         ),
+        CheckConstraint(
+            "result_complete = false OR status = 'completed'",
+            name="ck_processing_jobs_result_complete",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -127,6 +132,15 @@ class ProcessingJob(Base):
     failure_code: Mapped[str | None] = mapped_column(String(120))
     failure_message: Mapped[str | None] = mapped_column(String(500))
     processing_duration_ms: Mapped[int | None] = mapped_column(Integer)
+    frames_analyzed: Mapped[int | None] = mapped_column(Integer)
+    frames_total: Mapped[int | None] = mapped_column(Integer)
+    analyzed_video_timestamp_seconds: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    result_complete: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    detector_name: Mapped[str | None] = mapped_column(String(40))
+    detector_version: Mapped[str | None] = mapped_column(String(40))
+    tracker_name: Mapped[str | None] = mapped_column(String(40))
+    tracker_version: Mapped[str | None] = mapped_column(String(80))
+    trajectory_relative_path: Mapped[str | None] = mapped_column(String(255))
     session: Mapped[Session] = relationship(back_populates="jobs", foreign_keys=[session_id])
     transitions: Mapped[list[JobStatusTransition]] = relationship(
         back_populates="job",
@@ -404,3 +418,105 @@ class SceneEntryLine(Base):
     entry_direction: Mapped[EntryDirection] = mapped_column(
         Enum(EntryDirection, name="entry_direction", values_callable=enum_values)
     )
+
+
+class MeasureCode(str, enum.Enum):
+    ENTRIES = "entries"
+    EXITS = "exits"
+    VISIBLE_OCCUPANCY = "visible_occupancy"
+
+
+class MeasureAvailability(str, enum.Enum):
+    AVAILABLE = "available"
+    UNAVAILABLE = "unavailable"
+
+
+class CrossingDirection(str, enum.Enum):
+    ENTRY = "entry"
+    EXIT = "exit"
+
+
+class CrossingDisposition(str, enum.Enum):
+    CONFIRMED = "confirmed"
+    OSCILLATION = "oscillation"
+
+
+class AnalysisMeasure(Base):
+    __tablename__ = "analysis_measures"
+    __table_args__ = (
+        UniqueConstraint(
+            "job_id", "shop_id", "code", name="uq_analysis_measures_job_id_shop_id_code"
+        ),
+        ForeignKeyConstraint(
+            ["job_id", "session_id"],
+            ["processing_jobs.id", "processing_jobs.session_id"],
+            name="fk_analysis_measures_job_session",
+        ),
+        CheckConstraint(
+            "value IS NULL OR value >= 0", name="ck_analysis_measures_value_non_negative"
+        ),
+        CheckConstraint(
+            "(availability = 'unavailable') = (value IS NULL)",
+            name="ck_analysis_measures_unavailable_value",
+        ),
+        CheckConstraint(
+            "video_timestamp_seconds >= 0", name="ck_analysis_measures_video_timestamp"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    job_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    session_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    shop_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("shops.id", name="fk_analysis_measures_shop_id")
+    )
+    code: Mapped[MeasureCode] = mapped_column(
+        Enum(MeasureCode, name="measure_code", values_callable=enum_values)
+    )
+    value: Mapped[int | None] = mapped_column(Integer)
+    availability: Mapped[MeasureAvailability] = mapped_column(
+        Enum(MeasureAvailability, name="measure_availability", values_callable=enum_values)
+    )
+    partial: Mapped[bool] = mapped_column(Boolean)
+    video_timestamp_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+
+
+class LineCrossing(Base):
+    __tablename__ = "line_crossings"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["job_id", "session_id"],
+            ["processing_jobs.id", "processing_jobs.session_id"],
+            name="fk_line_crossings_job_session",
+        ),
+        Index(
+            "ix_line_crossings_session_id_shop_id_track_id",
+            "session_id",
+            "shop_id",
+            "track_id",
+        ),
+        CheckConstraint("frame_index >= 0", name="ck_line_crossings_frame_index"),
+        CheckConstraint("video_timestamp_seconds >= 0", name="ck_line_crossings_video_timestamp"),
+        CheckConstraint(
+            "foot_x BETWEEN 0 AND 1 AND foot_y BETWEEN 0 AND 1",
+            name="ck_line_crossings_foot",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    job_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    session_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    shop_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("shops.id", name="fk_line_crossings_shop_id")
+    )
+    track_id: Mapped[int] = mapped_column(Integer)
+    frame_index: Mapped[int] = mapped_column(Integer)
+    video_timestamp_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    direction: Mapped[CrossingDirection] = mapped_column(
+        Enum(CrossingDirection, name="crossing_direction", values_callable=enum_values)
+    )
+    disposition: Mapped[CrossingDisposition] = mapped_column(
+        Enum(CrossingDisposition, name="crossing_disposition", values_callable=enum_values)
+    )
+    foot_x: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    foot_y: Mapped[Decimal] = mapped_column(Numeric(12, 6))

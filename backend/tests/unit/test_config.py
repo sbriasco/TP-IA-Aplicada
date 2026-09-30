@@ -205,6 +205,49 @@ class SettingsTests(unittest.TestCase):
             with self.assertRaises(ConfigurationError):
                 bootstrap_worker()
 
+    def test_detector_absent_is_fake(self) -> None:
+        with patch.dict(os.environ, self.valid_environment(), clear=True):
+            settings = load_settings()
+
+        self.assertEqual(settings.detector, "fake")
+        self.assertIsNone(settings.yolo_weights)
+
+    def test_detector_accepts_fake_and_ultralytics(self) -> None:
+        environment = self.valid_environment()
+        environment["FLOWSIGHT_DETECTOR"] = "fake"
+        with patch.dict(os.environ, environment, clear=True):
+            self.assertEqual(load_settings().detector, "fake")
+
+        environment["FLOWSIGHT_DETECTOR"] = "ultralytics"
+        environment["FLOWSIGHT_YOLO_WEIGHTS"] = "weights/yolov8n.pt"
+        with patch.dict(os.environ, environment, clear=True):
+            settings = load_settings()
+
+        self.assertEqual(settings.detector, "ultralytics")
+        self.assertEqual(settings.yolo_weights, Path("weights/yolov8n.pt"))
+
+    def test_invalid_detector_falls_back_to_fake(self) -> None:
+        environment = self.valid_environment()
+        environment["FLOWSIGHT_DETECTOR"] = "gpu-mystery"
+        environment["FLOWSIGHT_YOLO_WEIGHTS"] = "  "
+        environment["FLOWSIGHT_API_PORT"] = "70000"
+        absolute_weight = r"C:\secretos\yolov8n.pt"
+        environment["FLOWSIGHT_YOLO_WEIGHTS"] = absolute_weight
+
+        with patch.dict(os.environ, environment, clear=True):
+            with self.assertRaises(ConfigurationError) as raised:
+                load_settings()
+
+        message = str(raised.exception)
+        self.assertNotIn(absolute_weight, message)
+        self.assertNotIn("secretos", message)
+
+        environment["FLOWSIGHT_API_PORT"] = "8000"
+        with patch.dict(os.environ, environment, clear=True):
+            settings = load_settings()
+
+        self.assertEqual(settings.detector, "fake")
+
     def test_worker_starts_with_valid_configuration(self) -> None:
         from flowsight.worker.main import bootstrap_worker
 
