@@ -103,7 +103,7 @@ backend/
 │   ├── vision/                              # puro: sin FastAPI ni DB
 │   │   ├── detector.py                      # interfaz
 │   │   ├── fake.py                          # secuencia fija para tests
-│   │   ├── ultralytics_tracker.py           # yolov8n + ByteTrack
+│   │   ├── ultralytics_tracker.py           # yolo11m + ByteTrack
 │   │   ├── spatial.py                       # pie, cruce, oscilación de 10 fotogramas
 │   │   └── trajectory.py                    # JSONL cada 5 fotogramas
 │   ├── services/measures.py                 # medidas oficiales y parciales

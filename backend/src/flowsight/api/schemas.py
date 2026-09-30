@@ -335,3 +335,42 @@ class SceneVersionCreatedResponse(SceneVersionResponse):
     """`POST` response: the saved version plus its non-blocking warnings."""
 
     warnings: list[SceneIssueResponse]
+
+
+class MetricValueResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", from_attributes=True)
+
+    code: str
+    availability: str
+    value: float | None = None
+    label: str
+    unavailable_reason: str | None = None
+
+
+class TrafficBucketResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", from_attributes=True)
+
+    bucket_index: int
+    start_seconds: float
+    track_count: int
+
+
+class ShopMetricsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: uuid.UUID
+    shop_id: uuid.UUID
+    metrics: list[MetricValueResponse]
+    flow: list[TrafficBucketResponse]
+    peak: TrafficBucketResponse
+
+
+class SceneEventResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str
+    zone_role: str | None = None
+    track_id: int
+    shop_id: uuid.UUID
+    video_timestamp_seconds: float
+    duration_seconds: float | None = None

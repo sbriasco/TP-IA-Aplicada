@@ -10,7 +10,7 @@ Archivo JSONL referenciado por `ProcessingJob.trajectory_relative_path`. No es u
   "session_id": "uuid",
   "job_id": "uuid",
   "sample_every_frames": 5,
-  "detector_name": "yolov8n",
+  "detector_name": "yolo11m",
   "detector_version": "8.4.153",
   "tracker_name": "bytetrack",
   "tracker_version": "ultralytics-bytetrack"

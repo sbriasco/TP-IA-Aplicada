@@ -29,11 +29,13 @@ from flowsight.preview.broker import PreviewUpdate
 from flowsight.preview.snapshot import snapshot_path, write_preview_snapshot
 from flowsight.services.jobs import transition_job
 from flowsight.services.measures import close_measures, sync_measures
+from flowsight.services.scene_metrics import persist_completed_scene
 from flowsight.video.storage import video_path
 from flowsight.vision.detector import Detection, Detector, ModelUnavailable, build_detector
+from flowsight.vision.events import SceneEventRecorder
 from flowsight.vision.evidence import build_reference_summary, write_reference_summary
 from flowsight.vision.overlay import render_overlay_jpeg
-from flowsight.vision.spatial import ShopGeometry, SpatialCounter
+from flowsight.vision.spatial import ShopGeometry, SpatialCounter, normalized_foot
 from flowsight.vision.trajectory import TrajectoryWriter, trajectory_relative_path
 
 _FAILURE_MESSAGES = {
@@ -117,6 +119,7 @@ def _run(
         tracker_version=detector.tracker_version,
     )
     counter = SpatialCounter(shops)
+    recorder = SceneEventRecorder(shops, fps=float(fps))
     frame_index = 0
     cancelled = False
     try:
@@ -134,9 +137,16 @@ def _run(
                 height=height,
             )
             facts = counter.observe(frame_index, detections, width=width, height=height)
+            feet = [
+                (detection.track_id, normalized_foot(detection, width, height))
+                for detection in detections
+            ]
+            recorder.observe(frame_index, feet, facts)
             frames_analyzed = frame_index + 1
             if frames_analyzed == frames_total:
-                facts.extend(counter.finish())
+                finished = counter.finish()
+                facts.extend(finished)
+                recorder.accept_crossings(finished)
             with factory.begin() as database_session:
                 stored = database_session.get(ProcessingJob, job_id)
                 if stored is None or stored.status not in {
@@ -183,6 +193,16 @@ def _run(
     evidence = None
     with factory.begin() as database_session:
         close_measures(database_session, job_id)
+        persist_completed_scene(
+            database_session,
+            job_id=job_id,
+            session_id=session_id,
+            events=recorder.finish(),
+            fps=float(fps),
+            duration_seconds=frames_total / float(fps),
+            front_by_shop={shop.shop_id: bool(shop.front_polygon) for shop in shops},
+            line_by_shop={shop.shop_id: shop.line_start is not None for shop in shops},
+        )
         finished = transition_job(
             database_session,
             job_id=job_id,
@@ -228,6 +248,7 @@ def _scene_context(
     for shop in version_shops:
         front = None
         interior = None
+        window = None
         for zone in database_session.scalars(
             select(SceneZone).where(SceneZone.version_shop_id == shop.id)
         ):
@@ -237,6 +258,8 @@ def _scene_context(
                 front = polygon
             elif zone.role is ZoneRole.INTERIOR:
                 interior = polygon
+            elif zone.role is ZoneRole.SHOWCASE:
+                window = polygon
         entry = database_session.get(SceneEntryLine, shop.id)
         line_start = None
         line_end = None
@@ -257,6 +280,7 @@ def _scene_context(
                 line_start=line_start,
                 line_end=line_end,
                 entry_direction=direction,
+                window_polygon=window,
             )
         )
     return zones, entry_line, shops

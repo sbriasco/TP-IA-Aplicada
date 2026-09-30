@@ -8,7 +8,7 @@ La rama es `feature/005-procesamiento-tracking`. Hasta que esté en el remoto, e
 
 Python, Node y PostgreSQL no entran en `backend/requirements.lock` ni en `frontend/package.json`. Esos archivos instalan librerías dentro de un Python y un Node que ya están en la máquina. En Windows los baja `scripts/install-prerequisites.ps1`: Python 3.11.16 de 64 bits, Node.js 22.20.0 y PostgreSQL 17, más la base local `flowsight` del `.env.example`.
 
-También hace falta un driver reciente de la RTX 5080. No hace falta instalar el CUDA Toolkit: el wheel de PyTorch trae el runtime. Y un video corto (uno o dos minutos alcanza) más el peso `yolov8n.pt` fuera del repositorio.
+También hace falta un driver reciente de la RTX 5080. No hace falta instalar el CUDA Toolkit: el wheel de PyTorch trae el runtime. Y un video corto (uno o dos minutos alcanza) más el peso `yolo11m.pt` fuera del repositorio. El worker no acepta `yolov8n.pt` ni `yolov8s.pt`.
 
 ## Instalación
 
@@ -26,7 +26,7 @@ Abrí una terminal nueva si el script avisó que agregó Node al PATH, y desde `
 
 El segundo `pip` tiene que ir después del lock. Si se invierte el orden, el lock vuelve a dejar PyTorch de CPU y la placa no se usa. No commitear ese cambio.
 
-Descargar el peso desde la URL de `experiments/video-tracking-validation/weights/SOURCE.md` a una carpeta fuera del repo, por ejemplo `C:\FlowSight\weights\yolov8n.pt`. El SHA-256 esperado es `F59B3D833E2FF32E194B5BB8E08D211DC7C5BDF144B90D2C8412C47CCFC83B36`.
+Descargar `yolo11m.pt` desde https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11m.pt a una carpeta fuera del repo, por ejemplo `C:\FlowSight\weights\yolo11m.pt`. Es el modelo medium de detección, licencia AGPL-3.0. Tamaño 40684120 bytes. SHA-256: `D5FFC1A674953A08E11A8D21E022781B1B23A19B730AFC309290BD9FB5305B95`. El experimento 001 sigue usando `yolov8n.pt`; ese archivo no sirve para el worker.
 
 Comprobar la placa antes de analizar un video:
 
@@ -74,11 +74,11 @@ En el navegador, `http://127.0.0.1:5173`:
 
 ## Resultado
 
-`reference-run.json` es la corrida del 2026-09-29 en la RTX, con PostgreSQL local. `execution_mode` es `cuda`, sin limitaciones. El video tiene 2360 frames y la tasa fue 29,8 frames por segundo de procesamiento.
+`reference-run.json` es la corrida del 2026-09-29 en la RTX, con PostgreSQL local y `yolov8n`. `execution_mode` es `cuda`, sin limitaciones. El video tiene 2360 frames y la tasa fue 29,8 frames por segundo de procesamiento. El worker pasó a `yolo11m` y esa medición no se repitió.
 
 ## Qué devolver
 
-Al terminar, el worker escribe `derived/<sesión>/<trabajo>/evidence.json` dentro de `FLOWSIGHT_VIDEOS_DIR`. Mandar solo ese archivo. Copiarlo acá como `reference-run.json`.
+Al terminar, el worker escribe `derived/<sesión>/<trabajo>/evidence.json` dentro de `FLOWSIGHT_VIDEOS_DIR`. Ese archivo de la corrida con `yolov8n` ya está copiado como `reference-run.json`. Una corrida nueva con `yolo11m` no reemplaza ese JSON.
 
 Tiene que traer `execution_mode` en `cuda`, las versiones del detector y del tracker, y `frames_per_processing_second`. Si `execution_mode` es `cpu` o `limitations` dice que la placa no se usó, la medición no cuenta.
 

@@ -1,0 +1,204 @@
+openapi: 3.1.0
+info:
+  title: FlowSight API — métricas de sesión (Feature #14)
+  version: 0.4.0
+  description: >
+    Consulta de sesiones, hechos y métricas. Extiende specs/005. Lo que no
+    aparece acá se mantiene. Las tres medidas oficiales se leen, no se
+    recalculan. Errores: {"detail": {"code": string, "message": string}}.
+    Sin rutas absolutas, nombres de equipo ni secretos.
+servers:
+  - url: http://127.0.0.1:8000
+paths:
+  /sessions:
+    get:
+      operationId: listSessions
+      description: >
+        Sin cambio de forma respecto de specs/002. No embebe hechos ni métricas.
+      responses:
+        "200":
+          description: Sesiones de este entorno, aisladas entre sí.
+  /sessions/{session_id}/shops/{shop_id}/metrics:
+    get:
+      operationId: getShopMetrics
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/ShopId"
+      responses:
+        "200":
+          description: Ocho métricas, flujo y horario pico de ese local.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopMetrics"
+        "404":
+          description: La sesión o el local no existen, o el local no es de esa sesión.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: No hay un análisis completado. code result_incomplete.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /sessions/{session_id}/events:
+    get:
+      operationId: listSessionEvents
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - name: shop_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: from_seconds
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: 0
+        - name: to_seconds
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: 0
+      responses:
+        "200":
+          description: >
+            Hechos de esa sesión cuyo instante de video cumple
+            from_seconds <= t < to_seconds. Sin límites, todos los de la sesión.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SceneEvent"
+        "409":
+          description: No hay un análisis completado. code result_incomplete.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  parameters:
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ShopId:
+      name: shop_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+    MetricValue:
+      type: object
+      required: [code, availability, label]
+      properties:
+        code:
+          type: string
+          enum:
+            - traffic_total
+            - store_pass
+            - entries
+            - exits
+            - entry_rate
+            - dwell_mean_seconds
+            - dwell_median_seconds
+            - visible_occupancy
+        availability:
+          type: string
+          enum: [available, unavailable]
+        value:
+          type: number
+          nullable: true
+        label:
+          type: string
+          enum: [visit_estimate, visible, observable, none]
+        unavailable_reason:
+          type: string
+          nullable: true
+    TrafficBucket:
+      type: object
+      required: [bucket_index, start_seconds, track_count]
+      properties:
+        bucket_index:
+          type: integer
+          minimum: 0
+        start_seconds:
+          type: number
+        track_count:
+          type: integer
+          minimum: 0
+    ShopMetrics:
+      type: object
+      required: [session_id, shop_id, metrics, flow, peak]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        shop_id:
+          type: string
+          format: uuid
+        metrics:
+          type: array
+          minItems: 8
+          maxItems: 8
+          items:
+            $ref: "#/components/schemas/MetricValue"
+        flow:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrafficBucket"
+        peak:
+          type: object
+          required: [bucket_index, start_seconds, track_count]
+          properties:
+            bucket_index:
+              type: integer
+            start_seconds:
+              type: number
+            track_count:
+              type: integer
+    SceneEvent:
+      type: object
+      required: [kind, track_id, video_timestamp_seconds, shop_id]
+      properties:
+        kind:
+          type: string
+          enum: [zone_enter, zone_exit, store_pass, store_enter, store_exit, dwell]
+        zone_role:
+          type: string
+          nullable: true
+          enum: [front, interior, window]
+        track_id:
+          type: integer
+        shop_id:
+          type: string
+          format: uuid
+        video_timestamp_seconds:
+          type: number
+        duration_seconds:
+          type: number
+          nullable: true

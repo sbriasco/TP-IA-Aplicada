@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Annotated
 
@@ -23,7 +24,9 @@ from flowsight.api.schemas import (
     JobCreate,
     JobResponse,
     JobTraceResponse,
+    MetricValueResponse,
     ReferenceFrameResponse,
+    SceneEventResponse,
     SceneIssueResponse,
     SceneVersionCreate,
     SceneVersionCreatedResponse,
@@ -32,6 +35,8 @@ from flowsight.api.schemas import (
     SessionCreate,
     SessionDetail,
     SessionSummary,
+    ShopMetricsResponse,
+    TrafficBucketResponse,
     TrimmedName,
     VideoSourceResponse,
 )
@@ -64,6 +69,12 @@ from flowsight.services.jobs import (
     transition_job,
 )
 from flowsight.services.measures import list_measures
+from flowsight.services.scene_metrics import (
+    ResultIncomplete,
+    ShopNotInSession,
+    load_events,
+    load_shop_metrics,
+)
 from flowsight.services.scenes import (
     InvalidSceneConfiguration,
     SceneError,
@@ -171,6 +182,73 @@ async def register_video(
 @router.get("/sessions/{session_id}", response_model=SessionDetail)
 def get_session(session_id: uuid.UUID, request: Request, database: Database) -> SessionDetail:
     return session_detail(database, request.app.state.settings, session_id)
+
+
+@router.get(
+    "/sessions/{session_id}/shops/{shop_id}/metrics",
+    response_model=ShopMetricsResponse,
+)
+def get_shop_metrics(
+    session_id: uuid.UUID, shop_id: uuid.UUID, database: Database
+) -> ShopMetricsResponse:
+    if database.get(Session, session_id) is None:
+        raise not_found("La sesión no existe.")
+    try:
+        rows, flow, peak = load_shop_metrics(database, session_id, shop_id)
+    except ResultIncomplete:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "result_incomplete",
+            "No hay un análisis completado para consultar.",
+        ) from None
+    except ShopNotInSession:
+        raise not_found("El local no pertenece a esta sesión.") from None
+    return ShopMetricsResponse(
+        session_id=session_id,
+        shop_id=shop_id,
+        metrics=[MetricValueResponse.model_validate(row) for row in rows],
+        flow=[TrafficBucketResponse.model_validate(bucket) for bucket in flow],
+        peak=TrafficBucketResponse.model_validate(peak),
+    )
+
+
+@router.get("/sessions/{session_id}/events", response_model=list[SceneEventResponse])
+def get_session_events(
+    session_id: uuid.UUID,
+    database: Database,
+    shop_id: uuid.UUID | None = None,
+    from_seconds: Annotated[Decimal | None, Query(ge=0)] = None,
+    to_seconds: Annotated[Decimal | None, Query(ge=0)] = None,
+) -> list[SceneEventResponse]:
+    if database.get(Session, session_id) is None:
+        raise not_found("La sesión no existe.")
+    try:
+        events = load_events(
+            database,
+            session_id,
+            shop_id=shop_id,
+            from_seconds=from_seconds,
+            to_seconds=to_seconds,
+        )
+    except ResultIncomplete:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "result_incomplete",
+            "No hay un análisis completado para consultar.",
+        ) from None
+    except ShopNotInSession:
+        raise not_found("El local no pertenece a esta sesión.") from None
+    return [
+        SceneEventResponse(
+            kind=event.kind.value,
+            zone_role=None if event.zone_role is None else event.zone_role.value,
+            track_id=event.track_id,
+            shop_id=event.shop_id,
+            video_timestamp_seconds=event.video_timestamp_seconds,
+            duration_seconds=event.duration_seconds,
+        )
+        for event in events
+    ]
 
 
 @router.put("/sessions/{session_id}/video", response_model=SessionDetail)
