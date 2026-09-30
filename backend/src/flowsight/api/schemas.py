@@ -18,7 +18,14 @@ from pydantic import (
     field_validator,
 )
 
-from flowsight.db.models import EntryDirection, JobKind, JobStatus, SourceKind
+from flowsight.db.models import (
+    EntryDirection,
+    JobKind,
+    JobStatus,
+    MeasureAvailability,
+    MeasureCode,
+    SourceKind,
+)
 from flowsight.video import probe
 from flowsight.video.storage import Availability
 
@@ -152,9 +159,31 @@ class JobResponse(BaseModel):
     started_at: datetime | None
     finished_at: datetime | None
     processing_duration_ms: int | None
+    result_complete: bool
+    frames_analyzed: int | None
+    frames_total: int | None
+    analyzed_video_timestamp_seconds: Decimal | None
+    detector_name: str | None
+    detector_version: str | None
+    tracker_name: str | None
+    tracker_version: str | None
     failure_code: str | None
     failure_message: str | None
     transitions: list[TransitionResponse]
+
+
+class AnalysisMeasureResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    job_id: uuid.UUID
+    session_id: uuid.UUID
+    shop_id: uuid.UUID
+    shop_name: str
+    code: MeasureCode
+    value: int | None
+    availability: MeasureAvailability
+    partial: bool
+    video_timestamp_seconds: Decimal
 
 
 class FrameResponse(BaseModel):

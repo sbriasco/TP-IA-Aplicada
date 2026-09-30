@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     # the video endpoints report them as not configured.
     videos_dir: Path | None = Field(default=None, validation_alias="FLOWSIGHT_VIDEOS_DIR")
     machine_id: str | None = Field(default=None, validation_alias="FLOWSIGHT_MACHINE_ID")
+    # Tests and CI stay on the fake detector. A bad value must not block startup.
+    detector: Literal["fake", "ultralytics"] = Field(
+        default="fake", validation_alias="FLOWSIGHT_DETECTOR"
+    )
+    yolo_weights: Path | None = Field(default=None, validation_alias="FLOWSIGHT_YOLO_WEIGHTS")
 
     @field_validator("videos_dir", mode="before")
     @classmethod
@@ -43,6 +48,23 @@ class Settings(BaseSettings):
                 return None
         if value is not None and not Path(value).is_absolute():
             raise ValueError("must be an absolute path")
+        return value
+
+    @field_validator("detector", mode="before")
+    @classmethod
+    def validate_detector(cls, value: object) -> str:
+        if not isinstance(value, str) or not value.strip():
+            return "fake"
+        normalized = value.strip().lower()
+        return normalized if normalized in {"fake", "ultralytics"} else "fake"
+
+    @field_validator("yolo_weights", mode="before")
+    @classmethod
+    def validate_yolo_weights(cls, value: object) -> object:
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return None
         return value
 
     @field_validator("machine_id", mode="before")

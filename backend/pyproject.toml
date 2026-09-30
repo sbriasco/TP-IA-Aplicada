@@ -16,6 +16,9 @@ dependencies = [
     "psycopg[binary]==3.3.5",
     "pydantic-settings==2.15.0",
     "sqlalchemy==2.0.54",
+    "torch==2.7.1+cpu",
+    "torchvision==0.22.1+cpu",
+    "ultralytics==8.4.153",
     "uvicorn==0.53.0",
     "websockets==17.1",
 ]
@@ -32,9 +35,12 @@ dev = [
 where = ["src"]
 
 [tool.pytest.ini_options]
-addopts = "-ra --basetemp=.pytest-tmp"
+addopts = "-ra --basetemp=.pytest-tmp -m \"not gpu\""
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = [
+    "gpu: ejecución real en el equipo de referencia; queda fuera de la suite y de CI",
+]
 filterwarnings = [
     "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
     "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",

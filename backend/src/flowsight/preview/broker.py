@@ -16,11 +16,13 @@ class PreviewUpdate:
     video_timestamp_seconds: Decimal
     progress_percent: float
     image_base64: str
+    schema_version: str = "1"
+    measures: tuple[dict[str, object], ...] = ()
 
     def as_message(self) -> dict[str, object]:
-        return {
+        message: dict[str, object] = {
             "type": "preview.update",
-            "schema_version": "1",
+            "schema_version": self.schema_version,
             "session_id": str(self.session_id),
             "job_id": str(self.job_id),
             "frame_index": self.frame_index,
@@ -29,6 +31,9 @@ class PreviewUpdate:
             "image_media_type": "image/jpeg",
             "image_base64": self.image_base64,
         }
+        if self.schema_version == "2":
+            message["measures"] = [dict(item) for item in self.measures]
+        return message
 
 
 @dataclass

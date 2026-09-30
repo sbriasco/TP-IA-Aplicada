@@ -27,10 +27,11 @@ class InvalidJobTransition(ValueError):
 
 
 _ALLOWED_TRANSITIONS = {
-    JobStatus.PENDING: {JobStatus.PROCESSING},
-    JobStatus.PROCESSING: {JobStatus.COMPLETED, JobStatus.FAILED},
+    JobStatus.PENDING: {JobStatus.PROCESSING, JobStatus.CANCELLED},
+    JobStatus.PROCESSING: {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED},
     JobStatus.COMPLETED: set(),
     JobStatus.FAILED: set(),
+    JobStatus.CANCELLED: set(),
 }
 
 
@@ -59,11 +60,17 @@ def transition_job(
     job.status = target_status
     if target_status is JobStatus.PROCESSING:
         job.started_at = occurred_at
-    if target_status in {JobStatus.COMPLETED, JobStatus.FAILED}:
+        if job.frames_analyzed is None:
+            job.frames_analyzed = 0
+    if target_status in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}:
         job.finished_at = occurred_at
         if job.started_at is not None:
             elapsed = occurred_at - job.started_at
             job.processing_duration_ms = max(0, round(elapsed.total_seconds() * 1000))
+    if target_status is JobStatus.COMPLETED:
+        job.result_complete = True
+    elif target_status in {JobStatus.FAILED, JobStatus.CANCELLED}:
+        job.result_complete = False
     if target_status is JobStatus.FAILED:
         job.failure_code = reason_code
         job.failure_message = failure_message

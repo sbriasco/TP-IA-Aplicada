@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -16,6 +17,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from flowsight.api.errors import api_error
 from flowsight.api.schemas import (
+    AnalysisMeasureResponse,
     CameraCreate,
     CameraResponse,
     JobCreate,
@@ -37,6 +39,7 @@ from flowsight.core.config import Settings
 from flowsight.db.models import (
     Camera,
     Event,
+    JobKind,
     JobStatus,
     Observation,
     ProcessingJob,
@@ -47,13 +50,20 @@ from flowsight.db.models import (
     VideoSource,
 )
 from flowsight.preview.image import load_preview_base64
+from flowsight.preview.snapshot import read_preview_snapshot, snapshot_path
 from flowsight.services.cameras import (
     CameraExists,
     create_camera,
     get_or_create_camera,
     list_cameras,
 )
-from flowsight.services.jobs import JobRequestError, create_job_for_session
+from flowsight.services.jobs import (
+    InvalidJobTransition,
+    JobRequestError,
+    create_job_for_session,
+    transition_job,
+)
+from flowsight.services.measures import list_measures
 from flowsight.services.scenes import (
     InvalidSceneConfiguration,
     SceneError,
@@ -423,6 +433,40 @@ def get_job(job_id: uuid.UUID, database: Database) -> ProcessingJob:
     return job
 
 
+@router.post("/jobs/{job_id}/cancel", response_model=JobResponse)
+def cancel_job(job_id: uuid.UUID, database: Database) -> ProcessingJob:
+    if database.get(ProcessingJob, job_id) is None:
+        raise not_found("Trabajo inexistente.")
+    try:
+        transition_job(
+            database,
+            job_id=job_id,
+            target=JobStatus.CANCELLED,
+            occurred_at=datetime.now(UTC),
+            reason_code="operator_cancelled",
+        )
+    except InvalidJobTransition:
+        database.rollback()
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "invalid_job_transition",
+            "El trabajo ya no se puede cancelar.",
+        ) from None
+    database.commit()
+    stored = get_job_record(database, job_id)
+    if stored is None:
+        raise not_found("Trabajo inexistente.")
+    return stored
+
+
+@router.get("/jobs/{job_id}/measures", response_model=list[AnalysisMeasureResponse])
+def get_job_measures(job_id: uuid.UUID, database: Database) -> list[AnalysisMeasureResponse]:
+    job = database.get(ProcessingJob, job_id)
+    if job is None:
+        raise not_found("Trabajo inexistente.")
+    return [AnalysisMeasureResponse.model_validate(row) for row in list_measures(database, job)]
+
+
 @router.get("/jobs/{job_id}/trace", response_model=JobTraceResponse)
 def get_job_trace(job_id: uuid.UUID, database: Database) -> JobTraceResponse:
     job = get_job_record(database, job_id)
@@ -469,6 +513,21 @@ def get_job_record(database: DatabaseSession, job_id: uuid.UUID) -> ProcessingJo
     )
 
 
+_TERMINAL_STATUSES = {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}
+
+
+def _terminal_message(
+    session_id: uuid.UUID, job_id: uuid.UUID, status: JobStatus
+) -> dict[str, str]:
+    return {
+        "type": "job.terminal",
+        "schema_version": "1",
+        "session_id": str(session_id),
+        "job_id": str(job_id),
+        "status": status.value,
+    }
+
+
 @router.websocket("/ws/jobs/{job_id}/preview")
 async def preview_job(websocket: WebSocket, job_id: uuid.UUID) -> None:
     factory = websocket.app.state.session_factory
@@ -479,18 +538,14 @@ async def preview_job(websocket: WebSocket, job_id: uuid.UUID) -> None:
             return
         session_id = job.session_id
         job_status = job.status
+        job_kind = job.kind
 
     await websocket.accept()
-    if job_status in {JobStatus.COMPLETED, JobStatus.FAILED}:
-        await websocket.send_json(
-            {
-                "type": "job.terminal",
-                "schema_version": "1",
-                "session_id": str(session_id),
-                "job_id": str(job_id),
-                "status": job_status.value,
-            }
-        )
+    if job_status in _TERMINAL_STATUSES:
+        await websocket.send_json(_terminal_message(session_id, job_id, job_status))
+        return
+    if job_kind is JobKind.VIDEO_ANALYSIS:
+        await _preview_video_analysis(websocket, job_id, session_id)
         return
     preview_path = (
         Path(__file__).resolve().parents[4] / "fixtures" / "synthetic" / "preview-320x180.jpg"
@@ -522,17 +577,56 @@ async def preview_job(websocket: WebSocket, job_id: uuid.UUID) -> None:
                         "image_base64": image_base64,
                     }
                 )
-            if job is not None and job.status in {JobStatus.COMPLETED, JobStatus.FAILED}:
-                await websocket.send_json(
-                    {
-                        "type": "job.terminal",
-                        "schema_version": "1",
-                        "session_id": str(session_id),
-                        "job_id": str(job_id),
-                        "status": job.status.value,
-                    }
-                )
+            if job is not None and job.status in _TERMINAL_STATUSES:
+                await websocket.send_json(_terminal_message(session_id, job_id, job.status))
                 break
             await asyncio.sleep(1 / websocket.app.state.settings.preview_max_fps)
     except WebSocketDisconnect:
         pass
+
+
+async def _preview_video_analysis(
+    websocket: WebSocket, job_id: uuid.UUID, session_id: uuid.UUID
+) -> None:
+    """Subscribe to the broker. The worker writes the latest frame; this loop publishes it.
+
+    Publishing replaces the single pending update, so a slow client does not
+    make the worker wait. Disconnecting drops only this subscription.
+    """
+
+    factory = websocket.app.state.session_factory
+    broker = websocket.app.state.preview_broker
+    subscription = broker.subscribe(job_id)
+    videos_dir = websocket.app.state.settings.videos_dir
+    path = None if videos_dir is None else snapshot_path(videos_dir, session_id, job_id)
+    last_frame_index = -1
+    interval = 1 / websocket.app.state.settings.preview_max_fps
+    try:
+        while True:
+            if path is not None:
+                snapshot = read_preview_snapshot(path)
+                if snapshot is not None and snapshot.frame_index > last_frame_index:
+                    last_frame_index = snapshot.frame_index
+                    broker.publish(snapshot)
+            try:
+                message = await asyncio.wait_for(subscription.receive(), timeout=interval)
+            except TimeoutError:
+                message = None
+            if message is not None:
+                await websocket.send_json(message)
+                if message["type"] == "job.terminal":
+                    break
+            with factory() as database:
+                job = database.get(ProcessingJob, job_id)
+            if job is not None and job.status in _TERMINAL_STATUSES:
+                broker.finish(session_id, job_id, job.status.value)
+                if message is None or message["type"] != "job.terminal":
+                    message = await subscription.receive()
+                    await websocket.send_json(message)
+                    if message["type"] != "job.terminal":
+                        await websocket.send_json(await subscription.receive())
+                break
+    except WebSocketDisconnect:
+        pass
+    finally:
+        broker.unsubscribe(job_id, subscription)

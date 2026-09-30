@@ -1,0 +1,157 @@
+openapi: 3.1.0
+info:
+  title: FlowSight API — análisis de video (Feature #13)
+  version: 0.3.0
+  description: >
+    Endpoints nuevos o modificados por specs/005. Extiende el contrato de specs/004.
+    Lo que no aparece acá se mantiene. Los errores usan
+    {"detail": {"code": string, "message": string}} y no incluyen rutas absolutas,
+    nombres de equipo ni secretos.
+servers:
+  - url: http://127.0.0.1:8000
+paths:
+  /sessions/{session_id}/jobs:
+    post:
+      operationId: createSessionJob
+      description: >
+        Sin cambio de compuerta para video_analysis (specs/004). Esta feature
+        hace que el worker reclame ese trabajo. La respuesta agrega los campos
+        de avance de Job.
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "201":
+          description: Trabajo creado en pending.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+  /jobs/{job_id}:
+    get:
+      operationId: getJob
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      responses:
+        "200":
+          description: Estado, avance y versiones del método.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+  /jobs/{job_id}/cancel:
+    post:
+      operationId: cancelJob
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      responses:
+        "200":
+          description: El trabajo quedó cancelled. Lo ya guardado sigue, con result_complete false.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "409":
+          description: El trabajo ya está completed, failed o cancelled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /jobs/{job_id}/measures:
+    get:
+      operationId: listJobMeasures
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      responses:
+        "200":
+          description: >
+            Entradas, salidas y ocupación visible por local. partial true hasta
+            que el trabajo está completed; entonces son los números oficiales.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AnalysisMeasure"
+  /jobs/{job_id}/trajectory:
+    get:
+      operationId: getTrajectory
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      responses:
+        "200":
+          description: Metadatos de la muestra. No incluye la ruta absoluta ni el archivo entero.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrajectoryInfo"
+        "404":
+          description: El trabajo no existe, o la muestra no está en este equipo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  parameters:
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    JobId:
+      name: job_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+  schemas:
+    Job:
+      type: object
+      required: [id, session_id, kind, status, result_complete]
+      properties:
+        id: {type: string, format: uuid}
+        session_id: {type: string, format: uuid}
+        scene_version_id: {type: string, format: uuid, nullable: true}
+        kind: {type: string, enum: [synthetic_base_flow, video_analysis]}
+        status:
+          type: string
+          enum: [pending, processing, completed, failed, cancelled]
+        result_complete: {type: boolean}
+        frames_analyzed: {type: integer, minimum: 0, nullable: true}
+        frames_total: {type: integer, minimum: 0, nullable: true}
+        analyzed_video_timestamp_seconds: {type: number, minimum: 0, nullable: true}
+        detector_name: {type: string, nullable: true}
+        detector_version: {type: string, nullable: true}
+        tracker_name: {type: string, nullable: true}
+        tracker_version: {type: string, nullable: true}
+        failure_code: {type: string, nullable: true}
+        failure_message: {type: string, nullable: true}
+    AnalysisMeasure:
+      type: object
+      required: [job_id, session_id, shop_id, code, availability, partial, video_timestamp_seconds]
+      properties:
+        job_id: {type: string, format: uuid}
+        session_id: {type: string, format: uuid}
+        shop_id: {type: string, format: uuid}
+        shop_name: {type: string}
+        code: {type: string, enum: [entries, exits, visible_occupancy]}
+        value: {type: integer, minimum: 0, nullable: true}
+        availability: {type: string, enum: [available, unavailable]}
+        partial: {type: boolean}
+        video_timestamp_seconds: {type: number, minimum: 0}
+    TrajectoryInfo:
+      type: object
+      required: [job_id, available, sample_every_frames]
+      properties:
+        job_id: {type: string, format: uuid}
+        available: {type: boolean}
+        relative_path: {type: string, nullable: true}
+        sample_every_frames: {type: integer, const: 5}
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: object
+          required: [code, message]
+          properties:
+            code: {type: string}
+            message: {type: string}
