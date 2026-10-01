@@ -26,6 +26,8 @@ describe("JobPreviewPage", () => {
     await act(async () => root.render(<JobPreviewPage jobId="job-1" />));
 
     expect(container.textContent).toContain("API no disponible");
+    expect(container.querySelector("h1")?.textContent).toBe("Supervisión del trabajo");
+    expect(container.querySelector("header")).not.toBeNull();
   });
 
   it("muestra un trabajo cancelado sin abrir WebSocket", async () => {

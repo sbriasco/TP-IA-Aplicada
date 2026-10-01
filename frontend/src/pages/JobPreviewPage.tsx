@@ -8,6 +8,8 @@ import {
   type PreviewMessage,
   type TerminalMessage,
 } from "../api/jobs";
+import { AppShell } from "../components/AppShell";
+import { Split } from "../components/Split";
 
 interface JobPreviewPageProps {
   jobId: string;
@@ -91,36 +93,41 @@ export function JobPreviewPage({
   const canCancel = job?.status === "pending" || job?.status === "processing";
 
   return (
-    <main>
-      <h1>Supervisión del trabajo</h1>
-      <p role="status">{connection}</p>
-      <dl>
-        <dt>Estado</dt>
-        <dd>{job?.status ?? "desconocido"}</dd>
-        <dt>Frame</dt>
-        <dd>{preview?.frame_index ?? "sin previsualización"}</dd>
-        <dt>Timestamp del video</dt>
-        <dd>{preview === null ? "—" : `${preview.video_timestamp_seconds} s`}</dd>
-        <dt>Avance</dt>
-        <dd>{preview === null ? "—" : `${preview.progress_percent} %`}</dd>
-      </dl>
-      <p>Esta vista acompaña el análisis y no promete la velocidad del video.</p>
-      {job?.status === "cancelled" && (
-        <p>Análisis cancelado. El resultado quedó incompleto.</p>
-      )}
-      {job?.status === "failed" && <p>El análisis falló.</p>}
-      {canCancel && (
-        <button type="button" onClick={() => void onCancel()}>
-          Cancelar análisis
-        </button>
-      )}
-      {preview !== null && (
-        <img
-          alt={`Previsualización del frame ${preview.frame_index}`}
-          src={`data:${preview.image_media_type};base64,${preview.image_base64}`}
-          {...(preview.schema_version === "1" ? { width: 320, height: 180 } : {})}
-        />
-      )}
-    </main>
+    <AppShell title="Supervisión del trabajo">
+      <Split
+        main={
+          preview !== null ? (
+            <img
+              alt={`Previsualización del frame ${preview.frame_index}`}
+              src={`data:${preview.image_media_type};base64,${preview.image_base64}`}
+              {...(preview.schema_version === "1" ? { width: 320, height: 180 } : {})}
+            />
+          ) : undefined
+        }
+        side={
+          <>
+            <p role="status">{connection}</p>
+            <dl>
+              <dt>Estado</dt>
+              <dd>{job?.status ?? "desconocido"}</dd>
+              <dt>Frame</dt>
+              <dd>{preview?.frame_index ?? "sin previsualización"}</dd>
+              <dt>Timestamp del video</dt>
+              <dd>{preview === null ? "—" : `${preview.video_timestamp_seconds} s`}</dd>
+              <dt>Avance</dt>
+              <dd>{preview === null ? "—" : `${preview.progress_percent} %`}</dd>
+            </dl>
+            <p>Esta vista acompaña el análisis y no promete la velocidad del video.</p>
+            {job?.status === "cancelled" && <p>Análisis cancelado. El resultado quedó incompleto.</p>}
+            {job?.status === "failed" && <p>El análisis falló.</p>}
+            {canCancel && (
+              <button type="button" onClick={() => void onCancel()}>
+                Cancelar análisis
+              </button>
+            )}
+          </>
+        }
+      />
+    </AppShell>
   );
 }
