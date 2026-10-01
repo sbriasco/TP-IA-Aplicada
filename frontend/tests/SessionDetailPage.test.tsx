@@ -176,6 +176,8 @@ describe("SessionDetailPage", () => {
     await render(videoSession("available"));
 
     expect(container.querySelector("h1")?.textContent).toBe("Mañana");
+    expect(container.querySelector("header")).not.toBeNull();
+    expect(container.querySelector("img")?.className).not.toBe("");
     expect(definition("Resolución")).toBe("1280 × 720");
     expect(definition("FPS")).toBe("25");
     expect(definition("Duración")).toBe("2.00 s");

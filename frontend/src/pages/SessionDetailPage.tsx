@@ -4,10 +4,13 @@ import { API_BASE_URL } from "../api/config";
 import { ApiRequestError } from "../api/http";
 import { aspectRatioMismatch, createVideoAnalysisJob, listSceneVersions } from "../api/scenes";
 import { getSession, referenceFrameUrl } from "../api/sessions";
+import { AppShell } from "../components/AppShell";
 import { Link } from "../components/Link";
 import { VideoRelinkForm } from "../components/VideoRelinkForm";
 import type { AnalysisJob, AspectRatios, SceneVersionSummary } from "../types/scene";
 import type { SessionDetail, VideoAvailability, VideoSource } from "../types/session";
+
+import styles from "./SessionDetailPage.module.css";
 
 const AVAILABILITY_TEXT: Record<VideoAvailability, string> = {
   available: "Video disponible en este equipo",
@@ -32,7 +35,7 @@ function formatSeconds(seconds: number): string {
 
 function VideoMetadata({ video }: { video: VideoSource }) {
   return (
-    <dl>
+    <dl className={styles.rows}>
       <dt>Resolución</dt>
       <dd>
         {video.width} × {video.height}
@@ -247,20 +250,18 @@ export function SessionDetailPage({ sessionId, apiBaseUrl = API_BASE_URL }: Sess
 
   if (state.kind === "loading") {
     return (
-      <main>
+      <AppShell title="Sesión">
         {backLink}
-        <h1>Sesión</h1>
         <p role="status">Cargando sesión…</p>
-      </main>
+      </AppShell>
     );
   }
   if (state.kind === "error") {
     return (
-      <main>
+      <AppShell title="Sesión">
         {backLink}
-        <h1>Sesión</h1>
         <p role="alert">{state.message}</p>
-      </main>
+      </AppShell>
     );
   }
 
@@ -268,10 +269,9 @@ export function SessionDetailPage({ sessionId, apiBaseUrl = API_BASE_URL }: Sess
   const { video, reference_frame: frame } = session;
 
   return (
-    <main>
+    <AppShell title={session.name}>
       {backLink}
-      <h1>{session.name}</h1>
-      <dl>
+      <dl className={styles.rows}>
         <dt>Cámara</dt>
         <dd>{session.camera.name}</dd>
         <dt>Tipo</dt>
@@ -331,11 +331,11 @@ export function SessionDetailPage({ sessionId, apiBaseUrl = API_BASE_URL }: Sess
             Frame {frame.frame_index} ({formatSeconds(frame.video_timestamp_seconds)} del video)
           </p>
           <img
+            className={styles.frame}
             src={referenceFrameUrl(apiBaseUrl, frame)}
             alt={`Frame de referencia de ${session.name}`}
             width={frame.width}
             height={frame.height}
-            style={{ maxWidth: "100%", height: "auto" }}
           />
           <p>
             <Link href={`/sessions/${encodeURIComponent(session.id)}/editor`}>Editar escena</Link>
@@ -346,6 +346,6 @@ export function SessionDetailPage({ sessionId, apiBaseUrl = API_BASE_URL }: Sess
       {session.source_kind === "video_file" && (
         <StartAnalysisSection apiBaseUrl={apiBaseUrl} session={session} />
       )}
-    </main>
+    </AppShell>
   );
 }

@@ -1,0 +1,25 @@
+.frame {
+  display: block;
+  width: 240px;
+  max-width: 100%;
+  height: auto;
+  margin: 0.75rem 0;
+}
+
+.rows {
+  display: grid;
+  grid-template-columns: 11rem 1fr;
+  margin: 0;
+}
+
+.rows dt {
+  margin: 0;
+  padding: 0.35rem 0.75rem 0.35rem 0;
+  color: var(--fs-muted);
+}
+
+.rows dd {
+  margin: 0;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--fs-line);
+}
