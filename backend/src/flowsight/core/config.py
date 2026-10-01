@@ -38,6 +38,10 @@ class Settings(BaseSettings):
         default="fake", validation_alias="FLOWSIGHT_DETECTOR"
     )
     yolo_weights: Path | None = Field(default=None, validation_alias="FLOWSIGHT_YOLO_WEIGHTS")
+    # The API starts without Azure. This only bounds one chat question.
+    chat_timeout_seconds: float = Field(
+        default=20, validation_alias="FLOWSIGHT_CHAT_TIMEOUT_SECONDS", gt=0, le=120
+    )
 
     @field_validator("videos_dir", mode="before")
     @classmethod

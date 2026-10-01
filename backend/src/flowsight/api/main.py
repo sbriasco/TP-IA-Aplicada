@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -44,6 +45,10 @@ def create_app() -> FastAPI:
     application.state.session_factory = create_session_factory(application.state.engine)
     prepare_videos_dir(settings)
     application.state.preview_broker = PreviewBroker()
+    if os.environ.get("FLOWSIGHT_CHAT_FAKE_DRAFTER") == "1":
+        from flowsight.services.chat import suite_drafter
+
+        application.state.chat_drafter = suite_drafter
     application.include_router(router)
 
     @application.exception_handler(RequestValidationError)

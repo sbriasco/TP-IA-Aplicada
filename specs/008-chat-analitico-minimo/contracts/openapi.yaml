@@ -1,0 +1,157 @@
+openapi: 3.1.0
+info:
+  title: FlowSight API — chat analítico mínimo
+  version: 0.6.0
+  description: >
+    Pedido nuevo de specs/008. No modifica el pedido de métricas de specs/006
+    ni el historial de specs/007. No calcula cifras. Los errores de transporte
+    usan {"detail": {"code": string, "message": string}}. Un fallo del
+    servicio de redacción no usa ese sobre: vuelve en el cuerpo como status
+    error, para que el tablero siga.
+servers:
+  - url: http://127.0.0.1:8000
+paths:
+  /chat:
+    post:
+      operationId: askChat
+      description: >
+        Responde una pregunta sobre una sesión y un local. Las cifras son las
+        ya registradas de toda la sesión. No llama al modelo si la pregunta
+        se rechaza, si falta elegir sesión o local, o si el análisis no está
+        completo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+      responses:
+        "200":
+          description: >
+            Resultado de la pregunta, incluido un fallo del servicio de
+            redacción. El tablero no cambia.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatResponse"
+        "400":
+          description: La pregunta está vacía.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: La sesión abierta no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  schemas:
+    ChatRequest:
+      type: object
+      additionalProperties: false
+      required: [question, session_id, shop_id]
+      properties:
+        question:
+          type: string
+          minLength: 1
+        session_id:
+          type: string
+          format: uuid
+          description: Sesión abierta en resultados. La pregunta puede nombrar otra.
+        shop_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Local elegido en resultados. Nulo si todavía no hay uno.
+    ChatResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - message
+        - session_id
+        - shop_id
+        - shop_name
+        - scope
+        - figures
+        - model_calls
+      properties:
+        status:
+          type: string
+          enum: [answered, refused, needs_clarification, unavailable, error]
+        message:
+          type: string
+        session_id:
+          type: string
+          format: uuid
+          nullable: true
+        shop_id:
+          type: string
+          format: uuid
+          nullable: true
+        shop_name:
+          type: string
+          nullable: true
+        scope:
+          type: string
+          nullable: true
+          enum: [whole_session, null]
+        figures:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatFigure"
+        model_calls:
+          type: integer
+          minimum: 0
+          maximum: 2
+    ChatFigure:
+      type: object
+      additionalProperties: false
+      required: [code, label, availability, value, unavailable_reason]
+      properties:
+        code:
+          type: string
+          enum:
+            - traffic_total
+            - entries
+            - visible_occupancy
+            - dwell_mean_seconds
+            - dwell_median_seconds
+            - peak
+        label:
+          type: string
+          enum: [visit_estimate, visible, observable, none]
+        availability:
+          type: string
+          enum: [available, unavailable]
+        value:
+          type: number
+          nullable: true
+        unavailable_reason:
+          type: string
+          nullable: true
+        start_seconds:
+          type: number
+          nullable: true
+        track_count:
+          type: integer
+          nullable: true
+        bucket_index:
+          type: integer
+          nullable: true
+    Error:
+      type: object
+      additionalProperties: false
+      required: [detail]
+      properties:
+        detail:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
