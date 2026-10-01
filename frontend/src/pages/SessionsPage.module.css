@@ -1,0 +1,9 @@
+.upload {
+  padding: 0.75rem 0 1rem;
+  border-bottom: 1px solid var(--fs-line);
+}
+
+.upload h2 {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+}

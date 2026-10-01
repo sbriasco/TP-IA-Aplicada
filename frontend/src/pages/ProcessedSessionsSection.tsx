@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { ApiRequestError } from "../api/http";
 import { listProcessedSessions, type ProcessedSession } from "../api/processedSessions";
 import { Link } from "../components/Link";
+import ruled from "../styles/ruled.module.css";
 
 import styles from "./ProcessedSessionsSection.module.css";
 
@@ -47,7 +48,7 @@ export function ProcessedSessionsSection({ apiBaseUrl }: ProcessedSessionsSectio
       {error === null && rows === null && <p role="status">Cargando sesiones procesadas…</p>}
       {rows !== null && rows.length === 0 && <p>Todavía no hay sesiones procesadas.</p>}
       {rows !== null && rows.length > 0 && (
-        <table>
+        <table className={ruled.table}>
           <thead>
             <tr>
               <th scope="col">Nombre</th>

@@ -50,6 +50,9 @@ describe("SessionsPage", () => {
 
     await act(async () => root.render(<SessionsPage apiBaseUrl={API} />));
 
+    expect(container.querySelector("h1")?.textContent).toBe("Sesiones");
+    expect(container.querySelector("header")?.textContent).toContain("2 registradas");
+
     const rows = Array.from(container.querySelectorAll("tbody tr")).map((row) =>
       Array.from(row.querySelectorAll("td"))
         .slice(0, 3)
