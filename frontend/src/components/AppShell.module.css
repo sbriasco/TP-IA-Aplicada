@@ -1,0 +1,24 @@
+.bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--fs-line);
+}
+
+.bar h1 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.context {
+  margin: 0;
+  color: var(--fs-muted);
+  font-size: 0.875rem;
+}
+
+.main {
+  padding: 0 1rem 2rem;
+}

@@ -40,3 +40,4 @@ frontend/debug.log
 /.tools/
 /.postgres-data/
 /.verification/
+/.superpowers/

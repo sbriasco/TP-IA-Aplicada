@@ -1,0 +1,14 @@
+:root {
+  --fs-bg: #f7f7f5;
+  --fs-ink: #1c1c1c;
+  --fs-muted: #6a6a66;
+  --fs-line: #e4e2dc;
+  --fs-surface: #ffffff;
+}
+
+body {
+  margin: 0;
+  background: var(--fs-bg);
+  color: var(--fs-ink);
+  font-family: system-ui, sans-serif;
+}
