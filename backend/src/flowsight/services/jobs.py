@@ -10,11 +10,13 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from flowsight.db.models import (
+    Camera,
     JobKind,
     JobStatus,
     JobStatusTransition,
     ProcessingJob,
     SceneVersion,
+    SceneVersionRemoval,
     SourceKind,
     VideoSource,
 )
@@ -89,6 +91,8 @@ def transition_job(
 
 
 JobRequestErrorCode = Literal[
+    "camera_removed",
+    "scene_version_removed",
     "session_not_found",
     "job_kind_mismatch",
     "scene_version_not_allowed",
@@ -135,6 +139,14 @@ def create_job_for_session(
     if current_session is None:
         raise JobRequestError("session_not_found")
     flow_session = current_session
+    camera = database_session.scalar(
+        select(Camera)
+        .where(Camera.id == flow_session.registered_camera_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if camera is None or camera.deleted_at is not None:
+        raise JobRequestError("camera_removed")
     job_kind = JobKind(kind)
     if _KIND_FOR_SOURCE[flow_session.source_kind] is not job_kind:
         raise JobRequestError("job_kind_mismatch")
@@ -149,6 +161,7 @@ def create_job_for_session(
             select(func.count())
             .select_from(SceneVersion)
             .where(SceneVersion.camera_id == camera_id)
+            .where(SceneVersion.id.not_in(select(SceneVersionRemoval.scene_version_id)))
         )
         if not version_count:
             raise JobRequestError("scene_not_configured")
@@ -162,6 +175,8 @@ def create_job_for_session(
         )
         if version is None:
             raise JobRequestError("scene_version_other_camera")
+        if database_session.get(SceneVersionRemoval, scene_version_id) is not None:
+            raise JobRequestError("scene_version_removed")
         # FR-028 compares the session's video against the version's reference frame.
         video = database_session.get(VideoSource, flow_session.id)
         if video is None:

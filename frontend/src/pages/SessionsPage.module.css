@@ -43,3 +43,4 @@
 .empty p { color: var(--fs-muted); margin-bottom: 20px; }
 @media (max-width: 1000px) { .tableScroll td, .tableScroll th { padding: 12px; } .tableScroll .actionCell { width: 132px; } .tableScroll .deleteCell { width: 52px; } .steps li + li { padding-left: 16px; } .legend { align-items: flex-start; gap: 14px; } .legendStates > div { align-items: flex-start; flex-direction: column; gap: 6px; } }
 @media (max-width: 650px) { .heading { align-items: flex-start; flex-direction: column; } .steps { gap: 14px; padding: 16px; grid-template-columns: 1fr; } .steps li + li { border: 0; padding: 0; } .legend { flex-direction: column; } .legendStates { grid-template-columns: 1fr; } .legendStates > div { flex-direction: row; align-items: center; } }
+.headingActions { display: flex; gap: 8px; flex-shrink: 0; }

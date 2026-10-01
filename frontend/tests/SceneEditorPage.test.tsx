@@ -155,7 +155,7 @@ describe("SceneEditorPage", () => {
   }
 
   async function save() {
-    await click(byButton(container, "Guardar versión"));
+    await click(byButton(container, "Guardar configuración"));
     await act(async () => {
       await vi.waitFor(() =>
         expect(
@@ -164,7 +164,7 @@ describe("SceneEditorPage", () => {
       );
     });
     await act(async () => {
-      await vi.waitFor(() => expect(byButton(container, "Guardar versión").disabled).toBe(false));
+      await vi.waitFor(() => expect(byButton(container, "Guardar configuración").disabled).toBe(false));
     });
   }
 
@@ -179,7 +179,7 @@ describe("SceneEditorPage", () => {
     );
     expect(vertices()).toHaveLength(6);
     expect(container.querySelector('[aria-label="Vértice 1 de zona frontal de Local A"]')).not.toBeNull();
-    expect(container.textContent).toContain("Editando a partir de la versión 2.");
+    expect(container.textContent).toContain("Editando la configuración 2.");
     expect(container.querySelector('[role="alert"]')).toBeNull();
     expect(Array.from(container.querySelectorAll('a[href="/sessions/s-1"]')).some((link) => link.textContent === "Volver a la sesión")).toBe(true);
   });
@@ -189,7 +189,7 @@ describe("SceneEditorPage", () => {
 
     expect(container.querySelector("svg")).not.toBeNull();
     expect(vertices()).toHaveLength(0);
-    expect(container.textContent).toContain("La cámara Cam 01 todavía no tiene versiones");
+    expect(container.textContent).toContain("Agregá un local para empezar");
     expect(byButton(container, "Agregar local")).toBeDefined();
   });
 
@@ -256,7 +256,7 @@ describe("SceneEditorPage", () => {
         entry_line: fullVersion(2).shops[0].entry_line,
       },
     ]);
-    expect(container.querySelector('[role="status"]')?.textContent).toBe("Se guardó la versión 3.");
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("Se guardó la configuración 3.");
     expect(container.textContent).toContain(warning.message);
     expect(unloadPrevented()).toBe(false);
   });
@@ -293,7 +293,7 @@ describe("SceneEditorPage", () => {
     expect(zone?.textContent).toContain(error.message);
     expect(vertices()).toHaveLength(6);
     expect(byLabel<HTMLInputElement>(container, "Nombre del local").value).toBe("Local A2");
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain("No se guardó la versión");
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("No se guardó la configuración");
     expect(unloadPrevented()).toBe(true);
   });
 

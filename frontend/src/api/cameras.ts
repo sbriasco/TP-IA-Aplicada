@@ -11,6 +11,16 @@ export function listCameras(apiBaseUrl: string): Promise<Camera[]> {
   return requestJson<Camera[]>(`${apiBaseUrl}/cameras`);
 }
 
+export function renameCamera(apiBaseUrl: string, cameraId: string, name: string): Promise<Camera> {
+  return requestJson<Camera>(`${apiBaseUrl}/cameras/${encodeURIComponent(cameraId)}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }),
+  });
+}
+
+export async function deleteCamera(apiBaseUrl: string, cameraId: string): Promise<void> {
+  await requestJson<unknown>(`${apiBaseUrl}/cameras/${encodeURIComponent(cameraId)}`, { method: "DELETE" });
+}
+
 export async function createCamera(apiBaseUrl: string, name: string): Promise<CreateCameraResult> {
   try {
     const camera = await requestJson<Camera>(`${apiBaseUrl}/cameras`, {

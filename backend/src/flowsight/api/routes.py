@@ -65,9 +65,14 @@ from flowsight.preview.image import load_preview_base64
 from flowsight.preview.snapshot import read_preview_snapshot, snapshot_path
 from flowsight.services.cameras import (
     CameraExists,
+    CameraHasActiveJobs,
+    CameraNotFound,
+    CameraRemoved,
     create_camera,
     get_or_create_camera,
     list_cameras,
+    remove_camera,
+    rename_camera,
 )
 from flowsight.services.chat import ChatAnswer, SessionMissing, ask
 from flowsight.services.jobs import (
@@ -91,6 +96,7 @@ from flowsight.services.scenes import (
     create_scene_version,
     get_scene_version,
     list_scene_versions,
+    remove_scene_version,
 )
 from flowsight.services.sessions import (
     SessionHasActiveJobs,
@@ -138,6 +144,11 @@ def get_cameras(database: Database) -> list[Camera]:
 def post_camera(payload: CameraCreate, database: Database) -> Camera:
     try:
         camera = create_camera(database, payload.name)
+    except CameraRemoved:
+        database.rollback()
+        raise api_error(
+            409, "camera_removed", "Ese nombre pertenece a una cámara eliminada. Usá otro nombre."
+        ) from None
     except CameraExists as error:
         database.rollback()
         existing = CameraResponse.model_validate(database.get(Camera, error.existing_id))
@@ -150,6 +161,42 @@ def post_camera(payload: CameraCreate, database: Database) -> Camera:
     database.commit()
     database.refresh(camera)
     return camera
+
+
+@router.patch("/cameras/{camera_id}", response_model=CameraResponse)
+def patch_camera(camera_id: uuid.UUID, payload: CameraCreate, database: Database) -> Camera:
+    try:
+        camera = rename_camera(database, camera_id, payload.name)
+    except CameraNotFound:
+        raise not_found("Cámara inexistente o eliminada.") from None
+    except CameraRemoved:
+        raise api_error(
+            409, "camera_removed", "Ese nombre pertenece a una cámara eliminada. Usá otro nombre."
+        ) from None
+    except CameraExists:
+        raise api_error(
+            409, "camera_exists", "Ya existe una cámara con ese nombre. Usá otro nombre."
+        ) from None
+    database.commit()
+    database.refresh(camera)
+    return camera
+
+
+@router.delete("/cameras/{camera_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_camera(camera_id: uuid.UUID, database: Database) -> Response:
+    try:
+        remove_camera(database, camera_id)
+    except CameraNotFound:
+        raise not_found("Cámara inexistente.") from None
+    except CameraHasActiveJobs:
+        raise api_error(
+            409,
+            "camera_has_active_jobs",
+            "Esta cámara tiene un análisis en curso. "
+            "Esperá a que termine o cancelalo antes de eliminarla.",
+        ) from None
+    database.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/sessions", response_model=list[SessionSummary])
@@ -173,10 +220,16 @@ def get_processed_sessions(request: Request, database: Database) -> list[Process
 @router.post("/sessions", response_model=SessionDetail, status_code=status.HTTP_201_CREATED)
 def create_session(payload: SessionCreate, request: Request, database: Database) -> SessionDetail:
     camera_id = payload.camera_id.strip()
+    try:
+        camera = get_or_create_camera(database, camera_id)
+    except CameraRemoved:
+        raise api_error(
+            409, "camera_removed", "Esa cámara fue eliminada. Usá otro nombre de cámara."
+        ) from None
     flow_session = Session(
         name=payload.name.strip(),
         camera_id=camera_id,
-        registered_camera_id=get_or_create_camera(database, camera_id).id,
+        registered_camera_id=camera.id,
         source_kind=SourceKind.SYNTHETIC,
     )
     database.add(flow_session)
@@ -497,6 +550,13 @@ def video_error(error: StorageError | VideoRejected | VideoSessionError) -> HTTP
 
 # Status and message for every scene error code.
 _SCENE_ERRORS: dict[str, tuple[int, str, str]] = {
+    "scene_version_not_found": (404, "not_found", "Configuración inexistente."),
+    "scene_version_has_active_jobs": (
+        409,
+        "scene_version_has_active_jobs",
+        "Esta configuración está en uso por un análisis en curso. "
+        "Esperá a que termine o cancelalo antes de eliminarla.",
+    ),
     "camera_not_found": (404, "not_found", "Cámara inexistente."),
 }
 
@@ -508,6 +568,16 @@ def scene_error(error: SceneError) -> HTTPException:
 
 # Status and message for every job request error code (FR-025 to FR-028).
 _JOB_ERRORS: dict[str, tuple[int, str]] = {
+    "scene_version_removed": (
+        409,
+        "La configuración elegida fue eliminada. "
+        "Elegí otra configuración para iniciar el análisis.",
+    ),
+    "camera_removed": (
+        409,
+        "Esta cámara fue eliminada. Sus resultados siguen disponibles, "
+        "pero no se pueden iniciar nuevos análisis con ella.",
+    ),
     "session_not_found": (404, "Sesión inexistente."),
     "job_kind_mismatch": (
         422,
@@ -596,6 +666,16 @@ def get_scene_version_detail(
     if version is None:
         raise not_found("Versión de escena inexistente.")
     return SceneVersionResponse.model_validate(version)
+
+
+@router.delete("/scene-versions/{scene_version_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_scene_version(scene_version_id: uuid.UUID, database: Database) -> Response:
+    try:
+        remove_scene_version(database, scene_version_id)
+    except SceneError as error:
+        raise scene_error(error) from None
+    database.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(

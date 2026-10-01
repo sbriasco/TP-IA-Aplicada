@@ -64,6 +64,7 @@ class Camera(Base):
     name: Mapped[str] = mapped_column(String(120))
     name_key: Mapped[str] = mapped_column(String(120))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Session(Base):
@@ -349,6 +350,17 @@ class SceneVersion(Base):
     frame_height: Mapped[int] = mapped_column(Integer)
     created_by_machine_id: Mapped[str | None] = mapped_column(String(40))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SceneVersionRemoval(Base):
+    """Removal metadata kept outside immutable scene contents."""
+
+    __tablename__ = "scene_version_removals"
+
+    scene_version_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("scene_versions.id"), primary_key=True
+    )
+    deleted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class SceneVersionShop(Base):

@@ -4,5 +4,17 @@
 .canvasHeading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.85rem; }
 .canvasHeading h2 { margin: 0; }
 .canvasHeading span { font-size: 0.65rem; color: var(--fs-muted); }
-.save { border-top: 1px solid var(--fs-line); padding-top: 1rem; font-size: 0.75rem; color: var(--fs-muted); }
-.save button { width: 100%; margin-bottom: 0.5rem; }
+.save { flex-shrink: 0; border-top: 1px solid var(--fs-line); padding-top: 10px; margin-top: 10px; font-size: 11px; color: var(--fs-muted); }
+.save button { width: 100%; margin: 0; }
+.save span { display: block; margin-top: 5px; }
+.canvasViewport { --scene-canvas-height: 100%; --scene-canvas-max-height: 100%; flex: 1; min-height: 0; overflow: hidden; border-radius: 6px; }
+.sidebarBody { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; padding-right: 4px; }
+.guide { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 18px; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--fs-line); border-radius: 6px; background: #f8fafb; color: var(--fs-muted); font-size: 11px; }
+.guide strong { color: var(--fs-ink); font-weight: 600; }
+.guide details { margin-left: auto; }
+.guide summary, .entryOptions summary { cursor: pointer; color: var(--fs-accent); font-size: 12px; }
+.guide details[open] { flex-basis: 100%; }
+.guide details[open] summary { margin-bottom: 8px; }
+.guide kbd { font: inherit; padding: 2px 4px; border: 1px solid var(--fs-line); border-radius: 4px; background: white; color: var(--fs-ink); }
+.entryOptions { border-top: 1px solid var(--fs-line); padding-top: 10px; margin-top: 10px; }
+@media (max-width: 760px) { .canvasViewport { flex: none; height: clamp(250px, 50vw, 420px); } .sidebarBody { max-height: 480px; } .guide details { margin-left: 0; } }

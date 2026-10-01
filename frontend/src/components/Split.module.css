@@ -5,5 +5,16 @@
 .side input:not([type="radio"]), .side select { display: block; width: 100%; margin: 0.35rem 0 0.65rem; }
 .side button { margin-bottom: 0.35rem; }
 .side section + section { border-top: 1px solid var(--fs-line); padding-top: 1rem; margin-top: 1rem; }
+.split.editor { grid-template-columns: minmax(0, 1fr) clamp(360px, 32vw, 540px); }
+.editor { height: max(360px, calc(100dvh - 245px)); }
+.editor .frame { height: 100%; min-height: 0; display: flex; flex-direction: column; padding: 14px; position: static; }
+.editor .side { height: 100%; max-height: none; overflow: hidden; display: flex; flex-direction: column; font-size: 12px; }
+.editor .side h2 { margin-bottom: 10px; }
+.editor .side h3 { margin: 10px 0 6px; }
+.editor .side p { margin: 8px 0; }
+.editor .side button { min-height: 32px; padding: 6px 10px; font-size: 12px; }
+.editor .side input:not([type="radio"]), .editor .side select { min-height: 34px; padding: 6px 8px; margin: 4px 0 8px; }
+.editor .side section + section { padding-top: 10px; margin-top: 10px; }
+.editor .side fieldset { padding: 10px; margin: 8px 0; }
 @media (max-width: 1000px) { .split { grid-template-columns: minmax(0, 1fr) 280px; gap: 12px; } }
-@media (max-width: 760px) { .split { grid-template-columns: 1fr; } .frame { position: static; } .side { max-height: none; overflow: visible; } }
+@media (max-width: 760px) { .split, .split.editor { grid-template-columns: 1fr; } .frame { position: static; } .side { max-height: none; overflow: visible; } .editor { height: auto; } .editor .frame { height: auto; } .editor .side { max-height: 620px; } }

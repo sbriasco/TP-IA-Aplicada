@@ -142,17 +142,12 @@ El comando comprueba versiones, variables obligatorias y conexión. Devuelve có
 Para aplicar el esquema de forma repetible:
 
 ```powershell
-$env:FLOWSIGHT_DATABASE_URL = (Get-Content .env | Where-Object {
-    $_ -like "FLOWSIGHT_DATABASE_URL=*"
-}).Substring("FLOWSIGHT_DATABASE_URL=".Length)
-
-Push-Location backend
-& ".venv\Scripts\alembic.exe" upgrade head
-Pop-Location
-Remove-Item Env:FLOWSIGHT_DATABASE_URL
+./scripts/update-database.ps1
 ```
 
 Si una migración falla, no borres la base ni ejecutes `downgrade`. Corregí la causa, consultá `alembic current` y volvé a ejecutar `upgrade head`.
+
+Al actualizar el repositorio, ejecutá este script antes de reiniciar la API y el worker. Usa la base configurada en `.env` y aplica solo las migraciones que falten. `0007` permite retirar cámaras conservando sus análisis; `0008` permite retirar configuraciones sin modificar las escenas guardadas ni los resultados históricos.
 
 La migración `0002` (specs/004) crea una cámara por cada `camera_id` de texto distinto usado en sesiones sintéticas previas. Si dos `camera_id` solo difieren en mayúsculas/espacios (por ejemplo `"Cam01"` y `"cam01 "`), no se fusionan: la cámara con la sesión más antigua conserva el nombre y las siguientes reciben un sufijo (`"cam01 (2)"`, `"cam01 (3)"`, …) para no violar la unicidad de nombre. Cada conflicto queda registrado con `logger.warning` en el log de Alembic, con los nombres involucrados. No se fusionan sesiones ni se modifica `sessions.camera_id`.
 

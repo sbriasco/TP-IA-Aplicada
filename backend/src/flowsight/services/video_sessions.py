@@ -64,7 +64,7 @@ async def register_video_session(
     # 1. Cheap checks first: a bad extension never reads the body.
     extension = extension_for(original_filename)
     camera = database_session.get(Camera, registered_camera_id)
-    if camera is None:
+    if camera is None or camera.deleted_at is not None:
         raise VideoSessionError("camera_not_found")
     camera_name = camera.name
     # Do not hold a transaction open while the upload streams in.
@@ -85,6 +85,15 @@ async def register_video_session(
         probe = await asyncio.to_thread(probe_video, partial.path)
 
         # 5. Insert, move to the final name, then commit.
+        camera = database_session.scalar(
+            select(Camera)
+            .where(Camera.id == registered_camera_id, Camera.deleted_at.is_(None))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if camera is None:
+            raise VideoSessionError("camera_not_found")
+        camera_name = camera.name
         database_session.add(
             Session(
                 id=session_id,

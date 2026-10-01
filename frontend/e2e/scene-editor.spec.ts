@@ -108,7 +108,8 @@ test("configura la escena de una sesión de video desde el editor", async ({ pag
   await test.step("muestra el frame de referencia y abre el editor", async () => {
     const frame = page.getByRole("img", { name: `Frame de referencia de ${sessionName}` });
     await expect(frame).toBeVisible();
-    await expect.poll(() => frame.evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBe(WIDTH);
+    await expect(frame.locator("image")).toHaveAttribute("href", `${API}/sessions/${sessionId}/reference-frame`);
+    expect((await request.get(`${API}/sessions/${sessionId}/reference-frame`)).ok()).toBeTruthy();
     await page.getByRole("link", { name: "Editar escena" }).click();
     await page.waitForURL(/\/editor$/);
     await expect(frameCanvas(page)).toBeVisible();
@@ -129,6 +130,7 @@ test("configura la escena de una sesión de video desde el editor", async ({ pag
     // Con la línea horizontal la flecha es vertical: su caja mide 0 de ancho y Playwright la
     // considera oculta aunque se ve; alcanza con que exista con el sentido correcto.
     await expect(page.getByRole("img", { name: "Flecha de entrada de Local A: de A a B" })).toBeAttached();
+    await page.getByText("Sentido de entrada", { exact: true }).click();
     await page.getByLabel("B → A es entrada").check();
     await expect(page.getByRole("img", { name: "Flecha de entrada de Local A: de B a A" })).toBeAttached();
     await page.getByLabel("A → B es entrada").check();
@@ -165,8 +167,8 @@ test("configura la escena de una sesión de video desde el editor", async ({ pag
   });
 
   await test.step("guarda la versión igual a lo dibujado", async () => {
-    await page.getByRole("button", { name: "Guardar versión" }).click();
-    await expect(page.getByRole("status").filter({ hasText: /Se guardó la versión \d+\./ })).toBeVisible();
+    await page.getByRole("button", { name: "Guardar configuración" }).click();
+    await expect(page.getByRole("status").filter({ hasText: /Se guardó la configuración \d+\./ })).toBeVisible();
 
     const listResponse = await request.get(`${API}/cameras/${cameraId}/scene-versions`);
     expect(listResponse.ok()).toBeTruthy();
@@ -198,9 +200,9 @@ test("configura la escena de una sesión de video desde el editor", async ({ pag
     await page.getByRole("button", { name: "Crear línea de entrada" }).click();
     await clickFrame(page, [800, 600]);
     await clickFrame(page, [1000, 600]);
-    await page.getByRole("button", { name: "Guardar versión" }).click();
+    await page.getByRole("button", { name: "Guardar configuración" }).click();
 
-    await expect(page.getByRole("alert").filter({ hasText: /No se guardó la versión/ })).toBeVisible();
+    await expect(page.getByRole("alert").filter({ hasText: /No se guardó la configuración/ })).toBeVisible();
     await expect(page.getByRole("group", { name: "Zona frontal de Local B" })).toHaveAttribute(
       "aria-invalid",
       "true",
@@ -221,6 +223,35 @@ test("configura la escena de una sesión de video desde el editor", async ({ pag
     await back.click();
     await accepted;
     await page.waitForURL(new RegExp(`/sessions/${sessionId}$`));
+  });
+
+  await test.step("muestra la configuración guardada sobre el frame y permite retirarla", async () => {
+    const preview = page.getByRole("img", { name: `Frame de referencia de ${sessionName}` });
+    await expect(preview.locator("polygon")).toHaveCount(3);
+    await expect(preview).toContainText("Frontal · Local A");
+    const versions = (await (await request.get(`${API}/cameras/${cameraId}/scene-versions`)).json()) as SceneVersionSummary[];
+    await page.getByRole("button", { name: "Eliminar configuración 1", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Eliminar configuración" });
+    await dialog.getByRole("button", { name: "Eliminar configuración", exact: true }).click();
+    await expect(page.getByText("Primero, marcá qué querés medir", { exact: true })).toBeVisible();
+    await expect(preview.locator("polygon")).toHaveCount(0);
+    expect((await request.get(`${API}/scene-versions/${versions[0].id}`)).ok()).toBeTruthy();
+  });
+
+  await test.step("administra la cámara conservando el análisis registrado", async () => {
+    await page.getByRole("link", { name: "Volver a las sesiones", exact: true }).click();
+    await page.getByRole("button", { name: "Cámaras", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Administrar cámaras" });
+    await dialog.getByRole("button", { name: `Editar ${cameraName}`, exact: true }).click();
+    const renamed = `${cameraName}-actualizada`;
+    await dialog.getByLabel("Nombre de la cámara", { exact: true }).fill(renamed);
+    await dialog.getByRole("button", { name: "Guardar nombre", exact: true }).click();
+    await expect(dialog.getByText(renamed, { exact: true })).toBeVisible();
+    await dialog.getByRole("button", { name: `Eliminar ${renamed}`, exact: true }).click();
+    await dialog.getByRole("button", { name: "Eliminar cámara", exact: true }).click();
+    await expect(dialog.getByRole("button", { name: `Editar ${renamed}`, exact: true })).toHaveCount(0);
+    expect((await request.get(`${API}/sessions/${sessionId}`)).ok()).toBeTruthy();
+    await dialog.getByRole("button", { name: "Cerrar", exact: true }).click();
   });
 
   expect(errors).toEqual([]);

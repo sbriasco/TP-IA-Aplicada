@@ -4,6 +4,7 @@ import { ApiRequestError } from "../api/http";
 import { listProcessedSessions, type ProcessedSession } from "../api/processedSessions";
 import { deleteSession, listSessions } from "../api/sessions";
 import { AppShell } from "../components/AppShell";
+import { CameraManager } from "../components/CameraManager";
 import { Link } from "../components/Link";
 import { Modal } from "../components/Modal";
 import { VideoUploadForm } from "../components/VideoUploadForm";
@@ -27,6 +28,8 @@ export function SessionsPage({ apiBaseUrl = API_BASE_URL }: SessionsPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [jobsError, setJobsError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [managingCameras, setManagingCameras] = useState(false);
+  const [cameraBusy, setCameraBusy] = useState(false);
   const [selected, setSelected] = useState<SessionSummary | null>(null);
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
@@ -64,7 +67,7 @@ export function SessionsPage({ apiBaseUrl = API_BASE_URL }: SessionsPageProps) {
     <AppShell title="Tus análisis">
       <div className={styles.heading}>
         <p>Cargá un video, configurá la escena y consultá lo que sucede en tu espacio.</p>
-        <button type="button" data-primary onClick={() => setUploading(true)}>Nuevo análisis</button>
+        <div className={styles.headingActions}><button type="button" onClick={() => setManagingCameras(true)}>Cámaras</button><button type="button" data-primary onClick={() => setUploading(true)}>Nuevo análisis</button></div>
       </div>
       <ol className={styles.steps} aria-label="Cómo funciona FlowSight">
         <li><span>1</span><div><strong>Cargá un video</strong><small>De una cámara fija</small></div></li>
@@ -114,6 +117,11 @@ export function SessionsPage({ apiBaseUrl = API_BASE_URL }: SessionsPageProps) {
         </section>
       )}
       {uploading && <Modal title="Nuevo análisis" onClose={() => setUploading(false)}><VideoUploadForm apiBaseUrl={apiBaseUrl} onRegistered={(session) => navigate("/sessions/" + encodeURIComponent(session.id))} /></Modal>}
+      {managingCameras && <Modal title="Administrar cámaras" busy={cameraBusy} onClose={() => setManagingCameras(false)}>
+        <CameraManager apiBaseUrl={apiBaseUrl} onBusyChange={setCameraBusy} onRenamed={(camera) => {
+          setSessions((current) => current?.map((session) => session.camera.id === camera.id ? { ...session, camera } : session) ?? null);
+        }} />
+      </Modal>}
       {selected && <Modal title="Eliminar análisis" busy={removing} onClose={() => setSelected(null)}>
         <p>¿Eliminar <strong>{selected.name}</strong> del historial?</p>
         <p className={styles.help}>No volverá a aparecer en la lista. Se conservan los archivos y las referencias de escena que puedan usar otros análisis.</p>

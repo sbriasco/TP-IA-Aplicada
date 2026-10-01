@@ -170,12 +170,12 @@ function SceneEditor({ apiBaseUrl, session, frame, initialVersion, backLink }: S
 
   return (
     <AppShell title={session.name} context="Editor" sessionId={session.id}>
-      <div className={styles.toolbar}>{backLink}<span className={styles.version}>{state.isDirty ? "Cambios sin guardar" : baseNumber === null ? "Nueva escena" : `Versión ${baseNumber}`}</span></div>
+      <div className={styles.toolbar}>{backLink}<span className={styles.version}>{state.isDirty ? "Cambios sin guardar" : baseNumber === null ? "Nueva configuración" : `Configuración ${baseNumber}`}</span></div>
       <p className={styles.description}>
         Cámara {session.camera.name} · frame {frame.width} × {frame.height}.{" "}
         {baseNumber === null
-          ? `La cámara ${session.camera.name} todavía no tiene versiones de escena: agregá un local para empezar.`
-          : `Editando a partir de la versión ${baseNumber}.`}
+          ? "Agregá un local para empezar a marcar sus zonas y accesos."
+          : `Editando la configuración ${baseNumber}. Al guardar, se crea una nueva.`}
       </p>
       {state.aspectMismatch && initialVersion !== null && (
         <p role="alert">
@@ -186,38 +186,39 @@ function SceneEditor({ apiBaseUrl, session, frame, initialVersion, backLink }: S
       )}
 
       <Split
+        editor
         main={
           <>
             <div className={styles.canvasHeading}><h2>Definí tu escena</h2><span>{frame.width} × {frame.height} px</span></div>
-            <SceneCanvas state={state} dispatch={dispatch} frameUrl={referenceFrameUrl(apiBaseUrl, frame)} />
-            <p>
-              <small>
-                Para dibujar, elegí un local y usá "Crear zona" o "Crear línea de entrada"; después hacé
-                clic sobre el frame. Los vértices se mueven arrastrándolos o con las flechas (Shift: 10
-                px) y se eliminan con Supr.
-              </small>
-            </p>
+            <div className={styles.canvasViewport}><SceneCanvas state={state} dispatch={dispatch} frameUrl={referenceFrameUrl(apiBaseUrl, frame)} /></div>
+            <aside className={styles.guide} aria-label="Guía del editor">
+              <span><strong>1. Elegí un local</strong> en el panel.</span>
+              <span><strong>2. Creá una zona o línea</strong> y marcá sus puntos en la imagen.</span>
+              <details><summary>Atajos de edición</summary><span>Arrastrá los puntos para ajustar. <kbd>← ↑ ↓ →</kbd> mover · <kbd>Shift</kbd> mover 10 px · <kbd>Supr</kbd> eliminar · <kbd>Enter</kbd> cerrar zona · <kbd>Esc</kbd> cancelar.</span></details>
+            </aside>
           </>
         }
         side={
           <>
+            <div className={styles.sidebarBody}>
             <ShopPanel state={state} dispatch={dispatch} />
-            <EntryLineControls state={state} dispatch={dispatch} />
-            <p className={styles.save}>
-              <button type="button" data-primary disabled={saving} onClick={handleSave}>
-                Guardar versión
-              </button>
-              {state.isDirty && " Hay cambios sin guardar."}
-            </p>
-            {outcome?.kind === "saved" && <p role="status">Se guardó la versión {outcome.versionNumber}.</p>}
+            {state.selection !== null && <details className={styles.entryOptions}><summary>Sentido de entrada</summary><EntryLineControls state={state} dispatch={dispatch} /></details>}
+            {outcome?.kind === "saved" && <p role="status">Se guardó la configuración {outcome.versionNumber}.</p>}
             {outcome?.kind === "invalid" && (
               <p role="alert">
-                No se guardó la versión: {outcome.count === 1 ? "hay 1 error" : `hay ${outcome.count} errores`}.
+                No se guardó la configuración: {outcome.count === 1 ? "hay 1 error" : `hay ${outcome.count} errores`}.
                 Los elementos afectados están marcados en rojo; el dibujo se conserva.
               </p>
             )}
             {outcome?.kind === "error" && <p role="alert">{outcome.message}</p>}
             <SceneIssues state={state} dispatch={dispatch} />
+            </div>
+            <div className={styles.save}>
+              <button type="button" data-primary disabled={saving} onClick={handleSave}>
+                {saving ? "Guardando…" : "Guardar configuración"}
+              </button>
+              {state.isDirty && <span>Hay cambios sin guardar.</span>}
+            </div>
           </>
         }
       />

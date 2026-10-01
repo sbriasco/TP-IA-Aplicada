@@ -264,6 +264,7 @@ export function ShopPanel({ state, dispatch }: ShopPanelProps) {
               disabled={roles.length === 0}
               onChange={(event) => setNewRole(event.target.value as ZoneRole)}
             >
+              {roles.length === 0 && <option value="">Todas las zonas ya están dibujadas</option>}
               {roles.map((option) => (
                 <option key={option} value={option}>
                   {ZONE_ROLE_OPTION[option]}
