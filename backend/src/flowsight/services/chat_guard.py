@@ -57,7 +57,9 @@ def question_refusal(question: str) -> str | None:
     )
 
 
-def draft_refusal(text: str, figures: Sequence[ChatFigure]) -> str | None:
+def draft_refusal(
+    text: str, figures: Sequence[ChatFigure], *, context_names: Sequence[str] = ()
+) -> str | None:
     """Return a refusal when the draft must not be shown."""
 
     plain = _plain(text)
@@ -67,9 +69,26 @@ def draft_refusal(text: str, figures: Sequence[ChatFigure]) -> str | None:
         return "No puedo mostrar esa respuesta."
     if any(phrase in plain for phrase in _ESTIMATE_AS_FACT):
         return "No puedo mostrar una estimación como si fuera una observación."
-    if not _numbers_are_backed(text, figures):
+    if not _numbers_are_backed(_without_context_names(text, context_names), figures):
         return "No puedo mostrar esa respuesta porque incluye un número que no está en las cifras."
     return None
+
+
+def _without_context_names(text: str, names: Sequence[str]) -> str:
+    """Ignore explicitly quoted identifiers, never names used as measurements."""
+
+    for name in sorted(set(names), key=len, reverse=True):
+        if any(character in name for character in '«»"“”') or not name.isprintable():
+            continue
+        quoted = "|".join(
+            re.escape(opening + name + closing)
+            for opening, closing in (("«", "»"), ('"', '"'), ("“", "”"))
+        )
+        text = re.sub(
+            r"(?<!\w)(?:local|sesi[oó]n|para)\s+(?:" + quoted + r")(?!\w)",
+            "", text, flags=re.IGNORECASE,
+        )
+    return text
 
 
 def _numbers_are_backed(text: str, figures: Sequence[ChatFigure]) -> bool:

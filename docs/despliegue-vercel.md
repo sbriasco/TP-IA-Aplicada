@@ -79,7 +79,7 @@ El servidor actual no implementa login ni autorización por usuario: cualquiera 
 Antes de ofrecer un enlace funcional fuera del equipo:
 
 1. Implementar autenticación y permisos en API y WebSocket, o una protección de acceso equivalente que cubra ambos. Validar el flujo entre dominios: el frontend actual no implementa una sesión de login ni credenciales de cookies entre orígenes. No incrustar un token compartido en `VITE_*`.
-2. Elegir el entorno de datos, hacer backup y aplicar Alembic hasta `0006_session_removal`. Coordinar la migración si se usa la base compartida; luego reiniciar la API con el código actualizado. Esta evaluación no aplica esa migración en Azure.
+2. Elegir el entorno de datos, hacer backup y aplicar Alembic hasta `0006_session_removal`. Coordinar la migración si se usa la base compartida; luego reiniciar la API con el código actualizado. La instancia Azure configurada se migró el 2026-10-01 por autorización del usuario; verificar la revisión antes de desplegar en otro entorno.
 3. Configurar HTTPS/WSS y CORS, y limitar tamaño de carga, concurrencia de análisis y uso del chat. Medir el tamaño y tiempo de los clips reales.
 4. Mantener un solo worker inicialmente. La recuperación actual de trabajos interrumpidos es global; escalar workers requiere revisar esa coordinación. Seleccionar detector `ultralytics` y pesos validados para video real; `fake` corresponde a pruebas.
 5. Preparar inicio supervisado, logs, backups y retención de archivos. Eliminar del historial no libera almacenamiento.

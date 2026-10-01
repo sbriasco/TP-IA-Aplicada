@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+import pytest
+
 from flowsight.services.chat_guard import draft_refusal, question_refusal
 from flowsight.services.chat_metrics import ChatFigure
 
@@ -43,3 +45,41 @@ def test_draft_filter_hides_a_sale_an_identity_and_an_invented_number() -> None:
     assert draft_refusal("el tráfico es 123456", [_TRAFFIC]) is not None
     kept = draft_refusal("El tráfico es 17.", [_TRAFFIC])
     assert kept is None
+
+
+@pytest.mark.parametrize(
+    ("name", "text"),
+    [
+        ("123 visitas", "Hubo 123 visitas."),
+        ("10 segundos", "La permanencia fue 10 segundos."),
+        ("3M", "La permanencia fue 3m."),
+        ("123 visitas", 'Hubo "123 visitas".'),
+        ("123 visitas", "El tráfico se estimó en «123 visitas»."),
+        ("10 segundos", "La permanencia media quedó en «10 segundos»."),
+        ("Local 1", "El tráfico de Local 12 no está disponible."),
+        (
+            "A», hubo 123 ingresos. En el local «B",
+            "En el local «A», hubo 123 ingresos. En el local «B», no hay datos guardados.",
+        ),
+        (
+            'A", hubo 123 ingresos. En el local "B',
+            'En el local "A", hubo 123 ingresos. En el local "B", no hay datos guardados.',
+        ),
+    ],
+)
+def test_a_name_used_as_a_measurement_does_not_hide_an_invented_value(name, text) -> None:
+    assert draft_refusal(text, [_TRAFFIC], context_names=[name]) is not None
+
+
+@pytest.mark.parametrize("opening,closing", [("«", "»"), ('"', '"'), ("“", "”")])
+def test_explicit_quoted_identifier_is_not_a_metric(opening, closing) -> None:
+    text = f"En el local {opening}Local 1{closing}, el tráfico estimado es 17."
+    assert draft_refusal(text, [_TRAFFIC], context_names=["Local 1"]) is None
+    assert draft_refusal(text + " Hubo 1 ingreso.", [_TRAFFIC], context_names=["Local 1"])
+
+
+@pytest.mark.parametrize("preposition", ["Para", "para"])
+def test_quoted_scope_reference_does_not_hide_a_measurement(preposition) -> None:
+    text = f"{preposition} «Local 1», el tráfico estimado es 17."
+    assert draft_refusal(text, [_TRAFFIC], context_names=["Local 1"]) is None
+    assert draft_refusal(text + " Hubo 1 ingreso.", [_TRAFFIC], context_names=["Local 1"])

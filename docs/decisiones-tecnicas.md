@@ -101,6 +101,8 @@ Las credenciales permanecen en el backend. El modelo consulta herramientas acota
 
 Validación de chat real (2026-10-01): el presupuesto de 256 tokens agotaba la segunda llamada en razonamiento sin producir texto. Se usa `max_completion_tokens=2048` y `reasoning_effort=low`, conservando el deployment y el máximo de dos llamadas por pregunta. Prueba sintética contra Azure y petición a una API local completadas; cuotas y disponibilidad sostenida siguen sin medir. Ver [flujo compacto y evidencia](frontend-compacto-2026-10-01.md).
 
+Revisión posterior del chat (2026-10-01): se exige consultar la herramienta acotada en la primera llamada y finalizar sin herramientas en la segunda. Nombres, unidades y motivos de no disponibilidad se entregan al modelo en lenguaje cotidiano. El filtro distingue referencias explícitas a identificadores de las cifras, conserva el conteo real de llamadas después de un rechazo y no cita un pico si faltan intervalos guardados. La interfaz mantiene el contexto del local; cada pregunta sigue siendo independiente y sobre toda la sesión. Ver [validación del agente y sus límites](chat-validacion-2026-10-01.md).
+
 ## Entorno y calidad
 
 - Python se gestiona con `venv` y `pip`; el frontend utiliza Node.js y `npm`.

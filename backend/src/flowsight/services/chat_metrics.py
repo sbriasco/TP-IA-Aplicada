@@ -57,7 +57,7 @@ def read_figures(
 
     del from_seconds, to_seconds
     try:
-        rows, _flow, peak = load_shop_metrics(database_session, session_id, shop_id)
+        rows, flow, peak = load_shop_metrics(database_session, session_id, shop_id)
     except ResultIncomplete as error:
         raise AnalysisNotFinal from error
     by_code = {row.code: row for row in rows}
@@ -68,12 +68,12 @@ def read_figures(
         ChatFigure(
             code="peak",
             label="none",
-            availability="available",
+            availability="available" if flow else "unavailable",
             value=None,
-            unavailable_reason=None,
-            start_seconds=peak.start_seconds,
-            track_count=peak.track_count,
-            bucket_index=peak.bucket_index,
+            unavailable_reason=None if flow else "metrics_not_generated",
+            start_seconds=peak.start_seconds if flow else None,
+            track_count=peak.track_count if flow else None,
+            bucket_index=peak.bucket_index if flow else None,
         )
     )
     return figures

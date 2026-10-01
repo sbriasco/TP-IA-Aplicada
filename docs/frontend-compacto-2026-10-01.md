@@ -19,6 +19,8 @@ La migración `0006_session_removal` agrega `deleted_at`, nullable, a `sessions`
 
 Antes de ejecutar la API actualizada, aplicar Alembic `upgrade head` con la URL del entorno elegido y reiniciar la API. La validación solo migró bases locales aisladas. No se modificó la base compartida de Azure ni se reiniciaron los servicios del usuario.
 
+Actualización posterior, autorizada por el usuario: se aplicó `0006_session_removal` en la instancia Azure configurada y se reinició la API local. Se respaldaron los datos de sesiones y se verificó que las filas y los conteos se conservaran. El diagnóstico posterior del chat se registra en [validación del agente](chat-validacion-2026-10-01.md).
+
 ## Chat real de Azure
 
 Se reprodujo el error en la API existente: respuesta vacía luego de dos llamadas. Prueba con datos sintéticos contra el deployment configurado:

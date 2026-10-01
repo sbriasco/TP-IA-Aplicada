@@ -4,7 +4,12 @@ import styles from "./SessionChatPanel.module.css";
 
 export function AgentAnswer({ answer }: { answer: ChatResponse }) {
   function figureText(figure: ChatFigure): string {
-    if (figure.code === "peak") return String(figure.start_seconds) + " s · " + String(figure.track_count) + " tracks";
+    if (figure.code === "peak") {
+      const peak = figure.availability === "available" && figure.start_seconds != null && figure.track_count != null
+        ? `${figure.start_seconds} s · ${figure.track_count} tracks`
+        : "no disponible";
+      return `Horario pico: ${peak}`;
+    }
     const value = figure.availability === "available" && figure.value !== null ? formatMetric(figure.code, figure.value) : "no disponible";
     const label = LABEL_TEXT[figure.label];
     return (METRIC_NAME[figure.code] ?? figure.code) + ": " + value + (label ? " · " + label : "");
