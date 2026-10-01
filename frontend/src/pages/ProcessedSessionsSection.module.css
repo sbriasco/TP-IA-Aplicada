@@ -1,7 +1,9 @@
-.section {
-  margin-top: 0;
-}
-
-.reason {
-  margin: 0;
-}
+.section { background: var(--fs-surface); border: 1px solid var(--fs-line); border-radius: var(--fs-radius); padding: 1.5rem 0 0; overflow: hidden; }
+.section > h2, .section > p { margin-inline: 1.5rem; }
+.section > h2 { margin-bottom: 0.3rem; }
+.description { margin-bottom: 1.25rem; color: var(--fs-muted); font-size: 0.8rem; }
+.reason { margin: 0.4rem 0 0; font-size: 0.72rem; max-width: 25ch; color: var(--fs-muted); }
+.status { font-size: 0.7rem; padding: 0.3rem 0.6rem; border-radius: 20px; display: inline-block; background: #f0f2f4; color: #52616c; white-space: nowrap; }
+.status[data-state="completed"] { background: #eaf5ef; color: #246247; }
+.status[data-state="processing"], .status[data-state="pending"] { background: var(--fs-tint); color: var(--fs-accent); }
+.status[data-state="failed"], .status[data-state="cancelled"] { background: #fff1ed; color: #8d4435; }

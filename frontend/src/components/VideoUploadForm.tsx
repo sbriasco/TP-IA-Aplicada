@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { registerVideoSession } from "../api/sessions";
 import type { SessionDetail } from "../types/session";
 import { CameraPicker } from "./CameraPicker";
+import styles from "./VideoUploadForm.module.css";
 import {
   VIDEO_ACCEPT,
   canReadFile,
@@ -60,9 +61,11 @@ export function VideoUploadForm({ apiBaseUrl, onRegistered }: VideoUploadFormPro
   }
 
   return (
-    <form onSubmit={(event) => void handleSubmit(event)} aria-labelledby={`${id}-title`}>
+    <form className={styles.form} onSubmit={(event) => void handleSubmit(event)} aria-labelledby={`${id}-title`}>
       <h2 id={`${id}-title`}>Registrar video</h2>
-      <fieldset disabled={busy}>
+      <p className={styles.description}>Empezá con un video de cámara fija. Podrás dibujar los locales y las zonas en el siguiente paso.</p>
+      <fieldset className={styles.fields} disabled={busy}>
+        <div className={styles.file}>
         <label htmlFor={`${id}-file`}>Archivo de video</label>
         <input
           id={`${id}-file`}
@@ -74,16 +77,21 @@ export function VideoUploadForm({ apiBaseUrl, onRegistered }: VideoUploadFormPro
             setError(null);
           }}
         />
+        <small>MP4, MPEG, AVI, MOV o MKV · Cámara fija</small>
+        </div>
+        <div className={styles.name}>
         <label htmlFor={`${id}-name`}>Nombre de la sesión</label>
         <input
           id={`${id}-name`}
           value={name}
           maxLength={120}
           required
+          placeholder="Por ejemplo, Pasillo central · Mañana"
           onChange={(event) => setName(event.target.value)}
         />
+        </div>
         <CameraPicker apiBaseUrl={apiBaseUrl} value={cameraId} onChange={setCameraId} />
-        <button type="submit">Registrar video</button>
+        <div className={styles.submit}><button type="submit">Registrar video</button><small>El video se guarda en el equipo de procesamiento.</small></div>
       </fieldset>
 
       <UploadProgress phase={phase} analyzingText="Analizando video…" />

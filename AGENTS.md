@@ -31,6 +31,7 @@ Exposición, detención y atención estimada hacia vidrieras; funnel comercial y
 - Un `track_id` es temporal y pertenece a una sesión/cámara: no representa una identidad real ni garantiza una persona única.
 - Medir tiempos con timestamps del video, no con el tiempo de procesamiento.
 - Debe existir persistencia y aislamiento por sesión; versionar migraciones, configuración de ejemplo e instrucciones.
+- Eliminar una sesión del historial es una baja lógica (`deleted_at`): se conservan archivos y referencias de escenas inmutables; los trabajos activos bloquean la baja. Los endpoints públicos omiten las sesiones retiradas, excepto el frame que sigue siendo referencia de una escena guardada.
 
 ## Stack acordado
 

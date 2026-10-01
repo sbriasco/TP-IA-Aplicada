@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session as DatabaseSession
 from sqlalchemy.orm import sessionmaker
 
 from flowsight.core.config import Settings
-from flowsight.db.models import JobKind, JobStatus, ProcessingJob
+from flowsight.db.models import JobKind, JobStatus, ProcessingJob, Session
 from flowsight.services.jobs import transition_job
 from flowsight.services.trace import persist_synthetic_trace
 from flowsight.synthetic.trace import generate_synthetic_trace
@@ -27,12 +27,14 @@ def claim_next_job(
 ) -> ProcessingJob | None:
     job = database_session.scalar(
         select(ProcessingJob)
+        .join(Session, Session.id == ProcessingJob.session_id)
         .where(
+            Session.deleted_at.is_(None),
             ProcessingJob.status == JobStatus.PENDING,
             ProcessingJob.kind.in_(SUPPORTED_JOB_KINDS),
         )
         .order_by(ProcessingJob.created_at, ProcessingJob.id)
-        .with_for_update(skip_locked=True)
+        .with_for_update(skip_locked=True, of=ProcessingJob)
         .limit(1)
     )
     if job is None:

@@ -39,6 +39,18 @@ describe("AppShell", () => {
       root.render(<AppShell title="Resultados">{null}</AppShell>);
     });
 
-    expect(container.querySelector("header")?.textContent).toBe("Resultados");
+    expect(container.querySelector("[data-context]")).toBeNull();
+  });
+
+  it("ofrece un acceso al contenido y navegación entre las etapas de la sesión", async () => {
+    await act(async () => {
+      root.render(<AppShell title="Mañana" context="Editor" sessionId="s 1">Contenido</AppShell>);
+    });
+    const skip = container.querySelector<HTMLAnchorElement>('a[href="#main-content"]');
+    expect(skip).not.toBeNull();
+    expect(container.querySelector("main")?.id).toBe("main-content");
+    const nav = container.querySelector('nav[aria-label="Sesión"]');
+    expect(nav?.querySelector('a[aria-current="page"]')?.getAttribute("href")).toBe("/sessions/s%201/editor");
+    expect(nav?.querySelector('a[href="/sessions/s%201/results"]')).not.toBeNull();
   });
 });

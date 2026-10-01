@@ -7,7 +7,7 @@ import { startWorker, stopWorker } from "./support";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(currentDirectory, "../..");
-const API = "http://127.0.0.1:8000";
+const API = process.env.FLOWSIGHT_E2E_API_URL ?? "http://127.0.0.1:8000";
 
 test("la vista de un video muestra el fotograma y el instante del mensaje", async ({
   page,

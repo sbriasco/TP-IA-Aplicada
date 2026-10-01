@@ -5,16 +5,27 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { assertSafeDatabase, loadLocalEnvironment } from "./environment.mjs";
+import { assertPortAvailable } from "./ports.mjs";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const frontend = path.resolve(currentDirectory, "..");
 const root = path.resolve(frontend, "..");
 const backend = path.join(root, "backend");
 const environment = loadLocalEnvironment(root, process.env);
+const apiPort = Number(environment.FLOWSIGHT_E2E_API_PORT ?? 8000);
+const frontendPort = Number(environment.FLOWSIGHT_E2E_FRONTEND_PORT ?? 5173);
+for (const port of [apiPort, frontendPort]) {
+  if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("Puerto e2e inválido: usar un entero entre 1024 y 65535.");
+}
+environment.FLOWSIGHT_E2E_API_URL = `http://127.0.0.1:${apiPort}`;
+environment.FLOWSIGHT_E2E_BASE_URL = `http://127.0.0.1:${frontendPort}`;
+environment.VITE_API_BASE_URL = environment.FLOWSIGHT_E2E_API_URL;
+environment.FLOWSIGHT_CORS_ORIGINS = JSON.stringify([environment.FLOWSIGHT_E2E_BASE_URL]);
 
 // Antes de migrar o arrancar procesos: nunca contra la base compartida de Azure.
 try {
   const host = assertSafeDatabase(environment);
+  await Promise.all([assertPortAvailable(apiPort), assertPortAvailable(frontendPort)]);
   console.log(`e2e: usando PostgreSQL en ${host}`);
 } catch (error) {
   console.error(`e2e abortado: ${error instanceof Error ? error.message : String(error)}`);
@@ -75,6 +86,7 @@ function removeTemporaryDirectories() {
 environment.FLOWSIGHT_VIDEOS_DIR = videosDirectory;
 environment.FLOWSIGHT_MACHINE_ID = "e2e-ci";
 environment.FLOWSIGHT_CHAT_FAKE_DRAFTER = "1";
+environment.FLOWSIGHT_DETECTOR = "fake";
 
 const clip = spawnSync(python, ["-m", "flowsight.video.fixtures", clipDirectory, "--size", "1280x720"], {
   cwd: backend,
@@ -103,14 +115,14 @@ let vite;
 try {
   api = run(
     python,
-    ["-m", "uvicorn", "flowsight.api.main:create_app", "--factory", "--host", "127.0.0.1", "--port", "8000"],
+    ["-m", "uvicorn", "flowsight.api.main:create_app", "--factory", "--host", "127.0.0.1", "--port", String(apiPort)],
     backend,
   );
   const viteCli = path.join(frontend, "node_modules", "vite", "bin", "vite.js");
-  vite = run(process.execPath, [viteCli, "--host", "127.0.0.1"], frontend);
+  vite = run(process.execPath, [viteCli, "--host", "127.0.0.1", "--port", String(frontendPort), "--strictPort"], frontend);
   await Promise.all([
-    waitFor("http://127.0.0.1:8000/health"),
-    waitFor("http://127.0.0.1:5173"),
+    waitFor(`${environment.FLOWSIGHT_E2E_API_URL}/health`),
+    waitFor(environment.FLOWSIGHT_E2E_BASE_URL),
   ]);
   const playwrightCli = path.join(frontend, "node_modules", "@playwright", "test", "cli.js");
   result = spawnSync(process.execPath, [playwrightCli, "test"], {

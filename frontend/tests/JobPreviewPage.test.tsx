@@ -180,6 +180,7 @@ describe("JobPreviewPage", () => {
 
     expect(container.textContent).toContain("Trabajo finalizado");
     expect(container.textContent).toContain("completed");
+    expect(Array.from(container.querySelectorAll('a[href="/sessions/session-1/results"]')).some((link) => link.textContent === "Ver resultados")).toBe(true);
     expect(socket).not.toHaveBeenCalled();
   });
 });

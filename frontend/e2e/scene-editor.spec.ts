@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-const API = "http://127.0.0.1:8000";
+const API = process.env.FLOWSIGHT_E2E_API_URL ?? "http://127.0.0.1:8000";
 const WIDTH = 1280;
 const HEIGHT = 720;
 
@@ -90,6 +90,7 @@ test("configura la escena de una sesión de video desde el editor", async ({ pag
 
   await test.step("registra el clip desde la pantalla de sesiones", async () => {
     await page.goto("/");
+    await page.getByRole("button", { name: "Nuevo análisis", exact: true }).click();
     await page.getByLabel("Archivo de video").setInputFiles(clipPath);
     await page.getByLabel("Nombre de la sesión").fill(sessionName);
     await page.getByLabel("Nombre de la cámara").fill(cameraName);

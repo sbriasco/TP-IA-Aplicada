@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     database_url: SecretStr = Field(validation_alias="FLOWSIGHT_DATABASE_URL", min_length=1)
     api_host: str = Field(default="127.0.0.1", validation_alias="FLOWSIGHT_API_HOST", min_length=1)
     api_port: int = Field(default=8000, validation_alias="FLOWSIGHT_API_PORT", ge=1, le=65535)
+    cors_origins: list[str] = Field(
+        default=["http://127.0.0.1:5173", "http://localhost:5173"],
+        validation_alias="FLOWSIGHT_CORS_ORIGINS",
+    )
     worker_id: str = Field(validation_alias="FLOWSIGHT_WORKER_ID", min_length=1)
     preview_max_fps: int = Field(
         default=5, validation_alias="FLOWSIGHT_PREVIEW_MAX_FPS", gt=0, le=5

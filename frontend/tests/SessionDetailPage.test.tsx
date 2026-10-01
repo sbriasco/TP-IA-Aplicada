@@ -189,9 +189,7 @@ describe("SessionDetailPage", () => {
     const image = container.querySelector("img") as HTMLImageElement;
     expect(image.src).toBe(`${API}/sessions/s-1/reference-frame`);
     expect(image.alt).toBe("Frame de referencia de Mañana");
-    expect(container.querySelector('a[href="/sessions/s-1/editor"]')?.textContent).toBe(
-      "Editar escena",
-    );
+    expect(Array.from(container.querySelectorAll('a[href="/sessions/s-1/editor"]')).some((link) => link.textContent === "Editar escena")).toBe(true);
     expect(container.textContent).toContain("Video disponible en este equipo");
     expect(container.textContent).not.toContain("Volver a cargar el video");
   });

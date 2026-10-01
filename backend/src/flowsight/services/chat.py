@@ -18,16 +18,17 @@ from sqlalchemy.orm import Session as DatabaseSession
 
 from flowsight.core.config import Settings
 from flowsight.db.models import ProcessingJob, SceneVersionShop
-from flowsight.db.models import Session as FlowSession
 from flowsight.llm.client import build_client
 from flowsight.llm.settings import AzureLlmConfigurationError, load_azure_llm_settings
 from flowsight.services.chat_guard import draft_refusal, question_refusal
 from flowsight.services.chat_metrics import AnalysisNotFinal, ChatFigure, read_figures
 from flowsight.services.processed_sessions import ProcessedSessionRow, list_processed_sessions
 from flowsight.services.scene_metrics import ShopNotInSession
+from flowsight.services.sessions import get_active_session
 
 logger = logging.getLogger(__name__)
 MAX_MODEL_CALLS = 2
+MAX_COMPLETION_TOKENS = 2048
 
 
 class SessionMissing(Exception):
@@ -67,7 +68,7 @@ def ask(
 ) -> ChatAnswer:
     """Cite the open session and shop. A stretch in the question does not change figures."""
 
-    if database_session.get(FlowSession, session_id) is None:
+    if get_active_session(database_session, session_id) is None:
         raise SessionMissing
     refusal = question_refusal(question)
     if refusal is not None:
@@ -296,7 +297,9 @@ def azure_draft(
             messages=messages,
             tools=tools,
             tool_choice="auto",
-            max_completion_tokens=256,
+            # Includes hidden reasoning as well as visible answer tokens.
+            max_completion_tokens=MAX_COMPLETION_TOKENS,
+            reasoning_effort="low",
             timeout=remaining,
         )
         message = completion.choices[0].message

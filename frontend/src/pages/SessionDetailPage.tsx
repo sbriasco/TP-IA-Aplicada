@@ -192,7 +192,8 @@ function StartAnalysisSection({ apiBaseUrl, session }: StartAnalysisSectionProps
           <p role="status">
             Se creó el trabajo {outcome.job.id} en estado {outcome.job.status}
             {outcome.version !== undefined && ` con la versión ${outcome.version.version_number}`}.
-            Queda pendiente hasta que se agregue el procesamiento de video.
+            El worker lo procesará cuando esté disponible.{" "}
+            <Link href={`/?job=${encodeURIComponent(outcome.job.id)}`}>Ver avance del análisis</Link>
           </p>
         )}
         {outcome?.kind === "scene_not_configured" && (
@@ -269,8 +270,12 @@ export function SessionDetailPage({ sessionId, apiBaseUrl = API_BASE_URL }: Sess
   const { video, reference_frame: frame } = session;
 
   return (
-    <AppShell title={session.name}>
+    <AppShell title={session.name} context="Detalle" sessionId={session.id} canEdit={session.reference_frame !== null}>
       {backLink}
+      <p className={styles.description}>Revisá el video, configurá la escena y elegí la versión que usará el análisis.</p>
+      <div className={styles.layout}>
+      <div className={styles.information}>
+      <section className={styles.panel} aria-label="Información de la sesión"><h2>Información de la sesión</h2>
       <dl className={styles.rows}>
         <dt>Cámara</dt>
         <dd>{session.camera.name}</dd>
@@ -281,12 +286,13 @@ export function SessionDetailPage({ sessionId, apiBaseUrl = API_BASE_URL }: Sess
           <time dateTime={session.created_at}>{new Date(session.created_at).toLocaleString()}</time>
         </dd>
       </dl>
+      </section>
 
       {video === null ? (
         <p>Esta sesión es sintética: no tiene video ni frame de referencia.</p>
       ) : (
         <>
-          <section aria-labelledby="video-title">
+          <section className={styles.panel} aria-labelledby="video-title">
             <h2 id="video-title">Video</h2>
             <p data-availability={video.availability}>{AVAILABILITY_TEXT[video.availability]}</p>
             {notice !== null && <p role="status">{notice}</p>}
@@ -305,11 +311,11 @@ export function SessionDetailPage({ sessionId, apiBaseUrl = API_BASE_URL }: Sess
                 {`El archivo parece incompleto: se leyeron ${video.frame_count} de ${video.declared_frame_count} frames declarados.`}
               </p>
             )}
-            <VideoMetadata video={video} />
+            <details><summary>Detalles del archivo</summary><VideoMetadata video={video} /></details>
           </section>
 
           {session.duplicate_session_ids.length > 0 && (
-            <section aria-labelledby="duplicates-title">
+            <section className={styles.panel} aria-labelledby="duplicates-title">
               <h2 id="duplicates-title">Video repetido</h2>
               <p>El mismo video también está registrado en estas sesiones:</p>
               <ul>
@@ -323,9 +329,11 @@ export function SessionDetailPage({ sessionId, apiBaseUrl = API_BASE_URL }: Sess
           )}
         </>
       )}
+      </div>
+      <div className={styles.workspace}>
 
       {frame !== null && (
-        <section aria-labelledby="frame-title">
+        <section className={styles.panel} aria-labelledby="frame-title">
           <h2 id="frame-title">Frame de referencia</h2>
           <p>
             Frame {frame.frame_index} ({formatSeconds(frame.video_timestamp_seconds)} del video)
@@ -343,9 +351,11 @@ export function SessionDetailPage({ sessionId, apiBaseUrl = API_BASE_URL }: Sess
         </section>
       )}
 
-      {session.source_kind === "video_file" && (
+      {session.source_kind === "video_file" && <div className={styles.panel}>
         <StartAnalysisSection apiBaseUrl={apiBaseUrl} session={session} />
-      )}
+      </div>}
+      </div>
+      </div>
     </AppShell>
   );
 }

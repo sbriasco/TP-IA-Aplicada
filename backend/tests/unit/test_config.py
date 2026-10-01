@@ -28,6 +28,13 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.api_port, 8000)
         self.assertEqual(settings.preview_max_fps, 5)
 
+    def test_loads_explicit_frontend_origins(self) -> None:
+        environment = self.valid_environment()
+        environment["FLOWSIGHT_CORS_ORIGINS"] = '["https://demo.example.test"]'
+        with patch.dict(os.environ, environment, clear=True):
+            settings = load_settings()
+        self.assertEqual(settings.cors_origins, ["https://demo.example.test"])
+
     def test_reports_missing_database_url_without_exposing_values(self) -> None:
         environment = self.valid_environment()
         del environment["FLOWSIGHT_DATABASE_URL"]

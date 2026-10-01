@@ -20,6 +20,7 @@ from flowsight.db.models import (
 )
 from flowsight.db.models import Session as FlowSession
 from flowsight.scene.geometry import NORMALIZED_DECIMALS, aspect_ratio_matches
+from flowsight.services.sessions import get_active_session
 
 
 class InvalidJobTransition(ValueError):
@@ -88,6 +89,7 @@ def transition_job(
 
 
 JobRequestErrorCode = Literal[
+    "session_not_found",
     "job_kind_mismatch",
     "scene_version_not_allowed",
     "scene_not_configured",
@@ -129,6 +131,10 @@ def create_job_for_session(
     `registered_camera_id`). The caller commits.
     """
 
+    current_session = get_active_session(database_session, flow_session.id, lock=True)
+    if current_session is None:
+        raise JobRequestError("session_not_found")
+    flow_session = current_session
     job_kind = JobKind(kind)
     if _KIND_FOR_SOURCE[flow_session.source_kind] is not job_kind:
         raise JobRequestError("job_kind_mismatch")

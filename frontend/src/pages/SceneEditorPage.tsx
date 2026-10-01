@@ -15,6 +15,7 @@ import { createEditorState, editorReducer, toSceneVersionCreate } from "../edito
 import { addNavigationGuard } from "../navigation";
 import type { SceneVersion, SceneVersionSummary } from "../types/scene";
 import type { ReferenceFrame, SessionDetail } from "../types/session";
+import styles from "./SceneEditorPage.module.css";
 
 const LEAVE_MESSAGE = "Hay cambios sin guardar en la escena. ¿Salir del editor y descartarlos?";
 
@@ -85,7 +86,7 @@ export function SceneEditorPage({ sessionId, apiBaseUrl = API_BASE_URL }: SceneE
   }
 
   return (
-    <AppShell title="Editor de escena">
+    <AppShell title="Editor de escena" context="Editor" sessionId={sessionId}>
       {backLink}
       {state.kind === "loading" && (
         <p role="status" data-loading="true">
@@ -168,9 +169,9 @@ function SceneEditor({ apiBaseUrl, session, frame, initialVersion, backLink }: S
   }
 
   return (
-    <AppShell title={session.name} context="Editor">
-      {backLink}
-      <p>
+    <AppShell title={session.name} context="Editor" sessionId={session.id}>
+      <div className={styles.toolbar}>{backLink}<span className={styles.version}>{state.isDirty ? "Cambios sin guardar" : baseNumber === null ? "Nueva escena" : `Versión ${baseNumber}`}</span></div>
+      <p className={styles.description}>
         Cámara {session.camera.name} · frame {frame.width} × {frame.height}.{" "}
         {baseNumber === null
           ? `La cámara ${session.camera.name} todavía no tiene versiones de escena: agregá un local para empezar.`
@@ -187,6 +188,7 @@ function SceneEditor({ apiBaseUrl, session, frame, initialVersion, backLink }: S
       <Split
         main={
           <>
+            <div className={styles.canvasHeading}><h2>Definí tu escena</h2><span>{frame.width} × {frame.height} px</span></div>
             <SceneCanvas state={state} dispatch={dispatch} frameUrl={referenceFrameUrl(apiBaseUrl, frame)} />
             <p>
               <small>
@@ -201,8 +203,8 @@ function SceneEditor({ apiBaseUrl, session, frame, initialVersion, backLink }: S
           <>
             <ShopPanel state={state} dispatch={dispatch} />
             <EntryLineControls state={state} dispatch={dispatch} />
-            <p>
-              <button type="button" disabled={saving} onClick={handleSave}>
+            <p className={styles.save}>
+              <button type="button" data-primary disabled={saving} onClick={handleSave}>
                 Guardar versión
               </button>
               {state.isDirty && " Hay cambios sin guardar."}

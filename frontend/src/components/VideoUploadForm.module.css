@@ -1,0 +1,9 @@
+.description { color: var(--fs-muted); font-size: 0.8rem; margin: -0.5rem 0 1.3rem; max-width: 65ch; }
+.fields { border: 0; padding: 0; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem 1.5rem; }
+.file { grid-column: 1 / -1; background: #f8fafb; border: 1px dashed #b7cdd5; border-radius: 9px; padding: 1.1rem; }
+.file label, .name label { display: block; margin-bottom: 0.4rem; }
+.file input { background: transparent !important; border: 0 !important; padding: 0 !important; }
+.file small { display: block; margin-top: 0.4rem; }
+.name input { width: 100%; }
+.submit { grid-column: 1 / -1; border-top: 1px solid var(--fs-line); padding-top: 1rem; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+@media (max-width: 850px) { .fields { grid-template-columns: 1fr; } }

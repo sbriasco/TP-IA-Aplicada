@@ -181,7 +181,7 @@ describe("SceneEditorPage", () => {
     expect(container.querySelector('[aria-label="Vértice 1 de zona frontal de Local A"]')).not.toBeNull();
     expect(container.textContent).toContain("Editando a partir de la versión 2.");
     expect(container.querySelector('[role="alert"]')).toBeNull();
-    expect(container.querySelector('a[href="/sessions/s-1"]')?.textContent).toBe("Volver a la sesión");
+    expect(Array.from(container.querySelectorAll('a[href="/sessions/s-1"]')).some((link) => link.textContent === "Volver a la sesión")).toBe(true);
   });
 
   it("sin versiones abre un editor vacío", async () => {
@@ -197,7 +197,7 @@ describe("SceneEditorPage", () => {
     await render({ detail: session({ reference_frame: null }) });
 
     expect(container.textContent).toContain("Esta sesión no tiene frame de referencia");
-    expect(container.querySelector("svg")).toBeNull();
+    expect(container.querySelector('svg[aria-label="Frame de referencia con la escena"]')).toBeNull();
     expect(fetchMock.mock.calls.map(([url]) => url)).not.toContain(`${API}/cameras/cam-1/scene-versions`);
     expect(container.querySelector('a[href="/sessions/s-1"]')).not.toBeNull();
   });

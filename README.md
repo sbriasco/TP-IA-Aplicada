@@ -6,11 +6,11 @@ Proyecto del Grupo 6, integrado por seis estudiantes de Ingeniería en Informát
 
 FlowSight busca transformar videos en información sobre circulación, entradas y salidas, permanencia y ocupación observable. El usuario podrá cargar un video, identificar locales y dibujar zonas y líneas sobre un frame; luego consultar los resultados en un dashboard y mediante un chat analítico.
 
-El procesamiento de video y la persistencia se ejecutan localmente. El chat previsto consultará un modelo disponible en Azure desde el backend.
+El procesamiento de video se ejecuta localmente. PostgreSQL puede ser local o compartido en Azure según configuración. El chat consulta un modelo disponible en Azure desde el backend.
 
 ## Estado del proyecto
 
-El proyecto está en desarrollo. Actualmente existen tres incrementos:
+El proyecto está en desarrollo. Los incrementos implementados y sus límites son:
 
 | Incremento | Estado y alcance |
 | --- | --- |
@@ -18,8 +18,13 @@ El proyecto está en desarrollo. Actualmente existen tres incrementos:
 | [Entorno y arquitectura base](specs/002-entorno-arquitectura-base/spec.md) | API, worker, PostgreSQL, sesiones y trabajos persistidos, trazabilidad y previsualización sintética en React mediante WebSocket. Validado localmente en Windows/CPU y mediante CI en Ubuntu. *(Persistencia compartida Azure Flexible Server: decisión posterior; ver [decisiones técnicas](docs/decisiones-tecnicas.md).)* |
 | [Configuración de escenas](specs/004-configuracion-escenas/spec.md) | Registro de video (cámaras, subida, sondeo de frames/fps/SHA-256 con OpenCV, frame de referencia, disponibilidad del video por equipo), configuración de escena versionada e inmutable (locales con zonas frontal/interior/vidriera y línea de entrada con sentido A→B) y editor visual en `/sessions/{id}/editor`. Desde ahí se crea el trabajo `video_analysis`. Validado con la suite automática de backend, frontend y Playwright (ver "Pruebas") y con las mediciones manuales de [quickstart.md](specs/004-configuracion-escenas/quickstart.md): SC-004 en la suite, SC-003 en aproximadamente 3 min y SC-001 en 0,77 s sobre el video real más largo disponible (94 s; no había uno de ~5 min). El escenario de un segundo equipo con la base compartida sigue pendiente. |
 | [Procesamiento y tracking](specs/005-procesamiento-tracking/spec.md) | El worker procesa `video_analysis` con YOLO y ByteTrack. Tests y CI usan el detector `fake` y no cargan el peso. El lock fija PyTorch de CPU (`torch==2.7.1+cpu`); el wheel de GPU no entra al repositorio. Entradas, salidas y ocupación visible se guardan en `analysis_measures`. La vista en vivo muestra el seguimiento y el avance. El peso del worker es `yolo11m.pt`. En la RTX, un video de 2360 frames se procesó en CUDA a 29,8 frames por segundo con `yolov8n` ([reference-run.json](specs/005-procesamiento-tracking/validation/reference-run.json)); esa cifra no se volvió a medir con `yolo11m`. |
+| [Eventos y métricas](specs/006-eventos-metricas/spec.md) | Eventos por track, ocho métricas por local, flujo temporal y horario pico persistidos. Los tiempos corresponden al video; los valores incompletos y las divisiones sin denominador se muestran como no disponibles. |
+| [Dashboard e historial](specs/007-dashboard-historial/spec.md) | Historial por sesión, resultados, filtro temporal de hechos/flujo y muestra de posiciones sobre el frame. El tramo no recalcula los indicadores de toda la sesión. |
+| [Chat analítico mínimo](specs/008-chat-analitico-minimo/spec.md) | Consulta acotada a cifras registradas del local y sesión, con credenciales en backend y pruebas de respuestas/rechazos. La suite usa un redactor de prueba; no valida disponibilidad ni cuotas reales de Azure. |
 
-El worker procesa los trabajos `video_analysis`. Las métricas comerciales ampliadas, el dashboard y el chat siguen planificados.
+El frontend incluye una interfaz común adaptable a escritorio y móvil, navegación entre las etapas de una sesión, tarjetas de indicadores y gráficos cargados por separado. Ver [auditoría del MVP](docs/auditoria-mvp-2026-10-01.md) y [validación del rediseño](docs/frontend-redesign-2026-10-01.md). La entrega pública requiere preparar acceso y operación del backend/worker; generar el build del frontend no completa ese despliegue.
+
+Para alojarlo: [propuesta de despliegue con frontend en Vercel](docs/despliegue-vercel.md), configuración del proyecto y pendientes de API/worker.
 
 La [evidencia de validación de la base](specs/002-entorno-arquitectura-base/validation/base-verification.md) detalla pruebas ejecutadas y limitaciones.
 
@@ -32,6 +37,7 @@ La [evidencia de validación de la base](specs/002-entorno-arquitectura-base/val
 - Tráfico, flujo temporal, paso frente a locales, entradas/salidas, permanencia y ocupación observable, tasa de ingreso y horarios pico.
 - Historial de sesiones, configuración, eventos y métricas en PostgreSQL (local y/o Azure Flexible Server según configuración).
 - Dashboard y chat mínimo para consultar métricas mediante herramientas del backend.
+- Historial único con estados y eliminación lógica de sesiones. Interfaz compacta y agente de IA: ver [validación del flujo](docs/frontend-compacto-2026-10-01.md).
 - Heatmap, sujeto al avance del proyecto.
 
 ### Versión final — 13 de noviembre de 2026
@@ -50,11 +56,11 @@ El repositorio reúne una interfaz web, una API y un worker Python separado. La 
 
 | Capa | Stack acordado |
 | --- | --- |
-| Interfaz | React, TypeScript estricto y Vite; CSS Modules. SVG para el futuro editor y Recharts para gráficos. |
+| Interfaz | React, TypeScript estricto y Vite; CSS Modules, editor SVG y Recharts para gráficos. |
 | API y validación | Python, FastAPI y Pydantic. |
 | Persistencia | PostgreSQL (SQLAlchemy + Alembic). Local para tests/CI; Azure Flexible Server opcional para integración/demo. Videos en disco local. |
 | Visión | Ultralytics YOLO, PyTorch, OpenCV y ByteTrack inicial, evaluados en el experimento. |
-| Chat previsto | API de modelo en Azure; servicio y modelo pendientes de validar. Credenciales y herramientas de analytics en el backend. |
+| Chat | Azure AI Foundry con el deployment validado `gpt-5-mini`. Credenciales y herramientas acotadas de analytics en el backend. |
 | Calidad | pytest, Vitest, Playwright y workflow de GitHub Actions. |
 
 El stack acordado incluye componentes futuros; los archivos de dependencias de cada módulo indican qué está instalado actualmente. Los motivos y validaciones pendientes se documentan en [Decisiones técnicas](docs/decisiones-tecnicas.md).

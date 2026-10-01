@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session as DatabaseSession
 
 from flowsight.core.config import Settings
 from flowsight.db.models import Camera, ReferenceFrame, Session, SourceKind, VideoSource
+from flowsight.services.sessions import get_active_session
 from flowsight.video.probe import probe_video
 from flowsight.video.storage import (
     discard,
@@ -145,7 +146,7 @@ async def relink_video(
 ) -> uuid.UUID:
     """Store the same video again on this machine; metadata is never touched."""
 
-    flow_session = database_session.get(Session, session_id)
+    flow_session = get_active_session(database_session, session_id)
     if flow_session is None:
         raise VideoSessionError("session_not_found")
     source = database_session.get(VideoSource, session_id)
@@ -160,8 +161,13 @@ async def relink_video(
     try:
         if (partial.sha256, partial.size_bytes) != expected:
             raise VideoSessionError("hash_mismatch")
+        # Recheck after the upload under the removal lock before touching disk.
+        if get_active_session(database_session, session_id, lock=True) is None:
+            raise VideoSessionError("session_not_found")
         os.replace(partial.path, video_path(videos_dir, relative_path))
+        database_session.commit()
     except BaseException:
+        database_session.rollback()
         discard(partial, videos_dir)
         raise
     return session_id
@@ -176,7 +182,11 @@ def find_duplicate_session_ids(
         database_session.scalars(
             select(VideoSource.session_id)
             .join(Session, Session.id == VideoSource.session_id)
-            .where(VideoSource.sha256 == sha256, VideoSource.session_id != exclude)
+            .where(
+                VideoSource.sha256 == sha256,
+                VideoSource.session_id != exclude,
+                Session.deleted_at.is_(None),
+            )
             .order_by(Session.created_at, Session.id)
         )
     )

@@ -6,10 +6,11 @@ import json
 import uuid
 from dataclasses import dataclass
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session as DatabaseSession
 
 from flowsight.core.config import Settings
-from flowsight.db.models import ProcessingJob
+from flowsight.db.models import ProcessingJob, Session
 from flowsight.video.storage import video_path
 
 
@@ -33,7 +34,11 @@ class JobNotFound(LookupError):
 def list_position_samples(
     database_session: DatabaseSession, settings: Settings, job_id: uuid.UUID
 ) -> PositionSampleSet:
-    job = database_session.get(ProcessingJob, job_id)
+    job = database_session.scalar(
+        select(ProcessingJob)
+        .join(Session, Session.id == ProcessingJob.session_id)
+        .where(ProcessingJob.id == job_id, Session.deleted_at.is_(None))
+    )
     if job is None:
         raise JobNotFound
     relative = job.trajectory_relative_path
