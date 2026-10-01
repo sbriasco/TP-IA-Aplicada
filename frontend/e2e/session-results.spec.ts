@@ -56,7 +56,7 @@ test("el historial abre los indicadores de esa sesión y conserva el frame sin e
   await expect(history.getByRole("link", { name: firstName })).toBeVisible();
   await expect(history.getByRole("link", { name: secondName })).toBeVisible();
   await history.getByRole("link", { name: firstName }).click();
-  await expect(page.getByRole("heading", { name: "Resultados" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: firstName })).toBeVisible();
   await expect(page.getByText(secondName)).toHaveCount(0);
   await expect(page.getByText(`Tráfico: ${traffic?.value ?? ""}`, { exact: false })).toBeVisible();
 

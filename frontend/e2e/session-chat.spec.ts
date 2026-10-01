@@ -48,7 +48,7 @@ test("en resultados se pregunta, se ve la espera y otra sesión deja el panel va
   await page.goto("/");
   const history = page.getByRole("region", { name: "Sesiones procesadas" });
   await history.getByRole("link", { name: firstName }).click();
-  await expect(page.getByRole("heading", { name: "Resultados" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: firstName })).toBeVisible();
   await page.getByLabel("Pregunta").fill("¿cuál es el tráfico?");
   await page.getByRole("button", { name: "Enviar" }).click();
   await expect(page.getByText("Consultando")).toBeVisible();
@@ -59,7 +59,7 @@ test("en resultados se pregunta, se ve la espera y otra sesión deja el panel va
 
   await page.goto("/");
   await history.getByRole("link", { name: secondName }).click();
-  await expect(page.getByRole("heading", { name: "Resultados" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: secondName })).toBeVisible();
   await expect(page.getByRole("region", { name: "Respuesta" })).toHaveCount(0);
   await expect(page.getByLabel("Pregunta")).toHaveValue("");
 });
