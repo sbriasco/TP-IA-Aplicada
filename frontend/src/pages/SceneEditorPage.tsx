@@ -5,10 +5,12 @@ import { ApiRequestError } from "../api/http";
 import { createSceneVersion, getSceneVersion, listSceneVersions } from "../api/scenes";
 import { getSession, referenceFrameUrl } from "../api/sessions";
 import { EntryLineControls } from "../components/EntryLineControls";
+import { AppShell } from "../components/AppShell";
 import { Link } from "../components/Link";
 import { SceneCanvas } from "../components/SceneCanvas";
 import { SceneIssues } from "../components/SceneIssues";
 import { ShopPanel } from "../components/ShopPanel";
+import { Split } from "../components/Split";
 import { createEditorState, editorReducer, toSceneVersionCreate } from "../editor/editorState";
 import { addNavigationGuard } from "../navigation";
 import type { SceneVersion, SceneVersionSummary } from "../types/scene";
@@ -83,9 +85,8 @@ export function SceneEditorPage({ sessionId, apiBaseUrl = API_BASE_URL }: SceneE
   }
 
   return (
-    <main>
+    <AppShell title="Editor de escena">
       {backLink}
-      <h1>Editor de escena</h1>
       {state.kind === "loading" && (
         <p role="status" data-loading="true">
           Cargando el editor…
@@ -98,7 +99,7 @@ export function SceneEditorPage({ sessionId, apiBaseUrl = API_BASE_URL }: SceneE
           editor necesita el frame de un video registrado.
         </p>
       )}
-    </main>
+    </AppShell>
   );
 }
 
@@ -167,9 +168,8 @@ function SceneEditor({ apiBaseUrl, session, frame, initialVersion, backLink }: S
   }
 
   return (
-    <main>
+    <AppShell title={session.name} context="Editor">
       {backLink}
-      <h1>Editor de escena: {session.name}</h1>
       <p>
         Cámara {session.camera.name} · frame {frame.width} × {frame.height}.{" "}
         {baseNumber === null
@@ -184,37 +184,41 @@ function SceneEditor({ apiBaseUrl, session, frame, initialVersion, backLink }: S
         </p>
       )}
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem", alignItems: "flex-start" }}>
-        <div style={{ flex: "2 1 640px", minWidth: 0 }}>
-          <SceneCanvas state={state} dispatch={dispatch} frameUrl={referenceFrameUrl(apiBaseUrl, frame)} />
-          <p>
-            <small>
-              Para dibujar, elegí un local y usá "Crear zona" o "Crear línea de entrada"; después hacé
-              clic sobre el frame. Los vértices se mueven arrastrándolos o con las flechas (Shift: 10
-              px) y se eliminan con Supr.
-            </small>
-          </p>
-        </div>
-        <div style={{ flex: "1 1 320px" }}>
-          <ShopPanel state={state} dispatch={dispatch} />
-          <EntryLineControls state={state} dispatch={dispatch} />
-          <p>
-            <button type="button" disabled={saving} onClick={handleSave}>
-              Guardar versión
-            </button>
-            {state.isDirty && " Hay cambios sin guardar."}
-          </p>
-          {outcome?.kind === "saved" && <p role="status">Se guardó la versión {outcome.versionNumber}.</p>}
-          {outcome?.kind === "invalid" && (
-            <p role="alert">
-              No se guardó la versión: {outcome.count === 1 ? "hay 1 error" : `hay ${outcome.count} errores`}.
-              Los elementos afectados están marcados en rojo; el dibujo se conserva.
+      <Split
+        main={
+          <>
+            <SceneCanvas state={state} dispatch={dispatch} frameUrl={referenceFrameUrl(apiBaseUrl, frame)} />
+            <p>
+              <small>
+                Para dibujar, elegí un local y usá "Crear zona" o "Crear línea de entrada"; después hacé
+                clic sobre el frame. Los vértices se mueven arrastrándolos o con las flechas (Shift: 10
+                px) y se eliminan con Supr.
+              </small>
             </p>
-          )}
-          {outcome?.kind === "error" && <p role="alert">{outcome.message}</p>}
-          <SceneIssues state={state} dispatch={dispatch} />
-        </div>
-      </div>
-    </main>
+          </>
+        }
+        side={
+          <>
+            <ShopPanel state={state} dispatch={dispatch} />
+            <EntryLineControls state={state} dispatch={dispatch} />
+            <p>
+              <button type="button" disabled={saving} onClick={handleSave}>
+                Guardar versión
+              </button>
+              {state.isDirty && " Hay cambios sin guardar."}
+            </p>
+            {outcome?.kind === "saved" && <p role="status">Se guardó la versión {outcome.versionNumber}.</p>}
+            {outcome?.kind === "invalid" && (
+              <p role="alert">
+                No se guardó la versión: {outcome.count === 1 ? "hay 1 error" : `hay ${outcome.count} errores`}.
+                Los elementos afectados están marcados en rojo; el dibujo se conserva.
+              </p>
+            )}
+            {outcome?.kind === "error" && <p role="alert">{outcome.message}</p>}
+            <SceneIssues state={state} dispatch={dispatch} />
+          </>
+        }
+      />
+    </AppShell>
   );
 }

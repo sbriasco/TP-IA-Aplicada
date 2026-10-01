@@ -172,7 +172,8 @@ describe("SceneEditorPage", () => {
     await render({ versions: [summary(1), summary(2)], version: fullVersion(2) });
 
     expect(fetchMock.mock.calls.map(([url]) => url)).toContain(`${API}/scene-versions/v-2`);
-    expect(container.querySelector("h1")?.textContent).toBe("Editor de escena: Mañana");
+    expect(container.querySelector("h1")?.textContent).toBe("Mañana");
+    expect(container.querySelector("header")?.textContent).toContain("Editor");
     expect(container.querySelector("image")?.getAttribute("href")).toBe(
       `${API}/sessions/s-1/reference-frame`,
     );
