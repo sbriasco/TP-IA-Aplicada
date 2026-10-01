@@ -30,6 +30,10 @@ export function getSession(apiBaseUrl: string, sessionId: string): Promise<Sessi
   return requestJson<SessionDetail>(`${apiBaseUrl}/sessions/${encodeURIComponent(sessionId)}`);
 }
 
+export function deleteSession(apiBaseUrl: string, sessionId: string): Promise<void> {
+  return requestJson<void>(`${apiBaseUrl}/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
+}
+
 export function referenceFrameUrl(apiBaseUrl: string, frame: ReferenceFrame): string {
   return new URL(frame.url, apiBaseUrl).toString();
 }

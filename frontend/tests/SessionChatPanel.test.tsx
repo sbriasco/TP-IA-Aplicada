@@ -99,8 +99,8 @@ describe("SessionChatPanel", () => {
 
     const label = container.querySelector("label");
     expect(label?.textContent).toContain("Pregunta");
-    expect(label?.querySelector("input")).not.toBeNull();
-    expect(container.querySelector("button")?.textContent).toBe("Enviar");
+    expect(label?.getAttribute("for")).toBe(container.querySelector("input")?.id);
+    expect(container.querySelector('button[type="submit"]')?.textContent).toBe("Enviar");
 
     await ask(container);
     expect(container.textContent).toContain("Consultando");
@@ -160,5 +160,31 @@ describe("SessionChatPanel", () => {
     );
     await ask(container);
     expect(container.textContent).toContain("La pregunta tardó demasiado. Podés volver a intentar.");
+  });
+
+  it("se identifica como agente de IA y conserva los turnos de la conversación", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => json(reply("answered", "El tráfico es 17."))));
+    await act(async () => root.render(<SessionChatPanel apiBaseUrl={API} sessionId="s-1" shopId="shop-1" />));
+    expect(container.textContent).toContain("Agente FlowSight");
+    expect(container.textContent).toContain("Asistente de IA");
+    await ask(container, "¿cuál es el tráfico?");
+    await ask(container, "¿cuál fue el horario pico?");
+    const log = container.querySelector('[role="log"]');
+    expect(log?.textContent).toContain("¿cuál es el tráfico?");
+    expect(log?.textContent).toContain("¿cuál fue el horario pico?");
+    expect(log?.querySelectorAll('[aria-label="Respuesta"]')).toHaveLength(2);
+  });
+
+  it("descarta una respuesta pendiente al cambiar el local", async () => {
+    let finish: (value: unknown) => void = () => undefined;
+    const pending = new Promise((resolve) => { finish = resolve; });
+    vi.stubGlobal("fetch", vi.fn(() => pending.then(() => json(reply("answered", "Respuesta del local anterior")))));
+    await act(async () => root.render(<SessionChatPanel apiBaseUrl={API} sessionId="s-1" shopId="shop-1" />));
+    await ask(container);
+    await act(async () => root.render(<SessionChatPanel apiBaseUrl={API} sessionId="s-1" shopId="shop-2" />));
+    await act(async () => finish(undefined));
+    expect(container.textContent).not.toContain("Respuesta del local anterior");
+    expect(container.textContent).not.toContain("¿cuál es el tráfico?");
+    expect(container.querySelector('button[type="submit"]')?.hasAttribute("disabled")).toBe(true);
   });
 });

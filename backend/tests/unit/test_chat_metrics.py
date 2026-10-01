@@ -181,7 +181,22 @@ def test_unknown_shop_is_not_in_the_session(database) -> None:
             read_figures(db, flow.id, uuid.uuid4())
 
 
-def _completed_session(db, camera, name: str, *, traffic: Decimal, version_number: int = 1):
+def test_analysis_without_metrics_does_not_report_a_zero_peak(database) -> None:
+    with database.state.session_factory.begin() as db:
+        camera = get_or_create_camera(db, "cam-chat-empty")
+        flow, _job, shop_id = _completed_session(db, camera, "Histórico", traffic=None)
+        figures = read_figures(db, flow.id, shop_id)
+    assert all(figure.availability == "unavailable" for figure in figures)
+    peak = next(figure for figure in figures if figure.code == "peak")
+    assert peak.start_seconds is None
+    assert peak.track_count is None
+    assert peak.unavailable_reason == "metrics_not_generated"
+
+
+def _completed_session(
+    db, camera, name: str, *, traffic: Decimal | None,
+    version_number: int = 1, shop_name: str = "Local",
+):
     flow = Session(
         name=name,
         camera_id=camera.name,
@@ -206,8 +221,8 @@ def _completed_session(db, camera, name: str, *, traffic: Decimal, version_numbe
             shop_id=shop.id,
             camera_id=camera.id,
             position=0,
-            name="Local",
-            name_key="local",
+            name=shop_name,
+            name_key=shop_name.casefold(),
         )
     )
     job = ProcessingJob(
@@ -222,7 +237,10 @@ def _completed_session(db, camera, name: str, *, traffic: Decimal, version_numbe
     )
     db.add(job)
     db.flush()
-    _stored(db, job, shop.id, ShopMetricCode.TRAFFIC_TOTAL, traffic, ShopMetricLabel.VISIT_ESTIMATE)
+    if traffic is not None:
+        _stored(
+            db, job, shop.id, ShopMetricCode.TRAFFIC_TOTAL, traffic, ShopMetricLabel.VISIT_ESTIMATE
+        )
     return flow, job, shop.id
 
 

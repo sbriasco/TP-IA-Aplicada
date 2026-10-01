@@ -121,6 +121,9 @@ describe("SessionResultsPage", () => {
     expect(container.textContent).toContain("El archivo no está en este equipo.");
     expect(container.querySelector("img")?.getAttribute("src")).toBe(`${API}/sessions/s-1/reference-frame`);
     expect(container.textContent).toContain("Tráfico");
+    expect(container.querySelector("h1")?.textContent).toBe("Mañana");
+    expect(container.querySelector("header")?.textContent).toContain("Resultados");
+    expect(Array.from(container.querySelectorAll("p")).some((node) => node.textContent === "s-1")).toBe(false);
   });
 
   it("no vuelve a pedir las métricas al mover el tramo y marca la tasa no disponible", async () => {
@@ -160,6 +163,18 @@ describe("SessionResultsPage", () => {
 
     expect(calls.filter((url) => url.includes("/metrics")).length).toBe(metricsBefore);
     expect(calls.some((url) => url.includes("/events") && url.includes("from_seconds=50"))).toBe(true);
+  });
+
+  it("un resultado sintético sin escena informa indisponibilidad sin quedarse cargando", async () => {
+    vi.stubGlobal("fetch", vi.fn((url: string) => {
+      if (url.endsWith("/processed-sessions")) return Promise.resolve(json([completedRow({ scene_version_id: null, version_number: null })]));
+      if (url.endsWith("/sessions/s-1")) return Promise.resolve(json({ ...detail("available"), source_kind: "synthetic", reference_frame: null, video: null }));
+      if (url.includes("/position-samples")) return Promise.resolve(json({ job_id: "j-1", availability: "unavailable", samples: [] }));
+      return Promise.resolve(json({}));
+    }));
+    await act(async () => root.render(<SessionResultsPage sessionId="s-1" apiBaseUrl={API} />));
+    expect(container.textContent).not.toContain("Cargando indicadores");
+    expect(container.textContent).toContain("Esta sesión no tiene indicadores comerciales");
   });
 
   it("en curso muestra solo las tres cifras parciales", async () => {

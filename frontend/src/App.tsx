@@ -1,3 +1,4 @@
+import { AppShell } from "./components/AppShell";
 import { navigate, useRoute } from "./navigation";
 import { JobPreviewPage } from "./pages/JobPreviewPage";
 import { SceneEditorPage } from "./pages/SceneEditorPage";
@@ -21,12 +22,11 @@ export function App() {
       return <SceneEditorPage key={route.sessionId} sessionId={route.sessionId} />;
     case "not_found":
       return (
-        <main>
-          <h1>Página no encontrada</h1>
+        <AppShell title="Página no encontrada">
           <button type="button" onClick={() => navigate("/")}>
             Volver a las sesiones
           </button>
-        </main>
+        </AppShell>
       );
   }
 }

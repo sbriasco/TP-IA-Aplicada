@@ -417,7 +417,7 @@ export function SceneCanvas({ state, dispatch, frameUrl }: SceneCanvasProps) {
         display: "block",
         width: "100%",
         height: "auto",
-        maxHeight: "75vh",
+        maxHeight: "max(240px, calc(100dvh - 250px))",
         background: "#1f1f1f",
         cursor: drawing !== null ? "crosshair" : "default",
         touchAction: "none",

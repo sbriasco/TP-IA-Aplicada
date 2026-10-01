@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bar, BarChart, XAxis, YAxis } from "recharts";
+import { lazy, Suspense } from "react";
 
 import { API_BASE_URL } from "../api/config";
 import { ApiRequestError } from "../api/http";
@@ -10,7 +10,6 @@ import {
   getSessionEvents,
   getShopMetrics,
   type AnalysisMeasure,
-  type MetricValue,
   type PositionSamples,
   type SceneEvent,
   type SceneShop,
@@ -18,31 +17,20 @@ import {
 } from "../api/metrics";
 import { listProcessedSessions, type ProcessedSession } from "../api/processedSessions";
 import { getSession, referenceFrameUrl } from "../api/sessions";
+import { AppShell } from "../components/AppShell";
 import { PositionHeatmap } from "../components/PositionHeatmap";
 import { SessionChatPanel } from "../components/SessionChatPanel";
+import { Link } from "../components/Link";
+import { MetricCard } from "../components/MetricCard";
+import { EVENT_NAME, METRIC_NAME } from "../presentation/metrics";
 import { visibleBuckets } from "../flow/visibleBuckets";
 import type { SessionDetail } from "../types/session";
 
 import styles from "./SessionResultsPage.module.css";
 
-const METRIC_NAME: Record<string, string> = {
-  traffic_total: "Tráfico",
-  store_pass: "Pasos",
-  entries: "Entradas",
-  exits: "Salidas",
-  entry_rate: "Tasa de ingreso",
-  dwell_mean_seconds: "Permanencia media",
-  dwell_median_seconds: "Permanencia mediana",
-  visible_occupancy: "Ocupación visible",
-};
-
 const PARTIAL_CODES = new Set(["entries", "exits", "visible_occupancy"]);
-
-const LABEL_TEXT: Record<string, string> = {
-  visit_estimate: "estimación de visitas",
-  visible: "visible",
-  observable: "observable",
-};
+const PRIMARY_CODES = new Set(["traffic_total", "entries", "entry_rate", "dwell_mean_seconds"]);
+const FlowChart = lazy(() => import("../components/FlowChart").then((module) => ({ default: module.FlowChart })));
 
 interface SessionResultsPageProps {
   sessionId: string;
@@ -101,6 +89,7 @@ export function SessionResultsPage({
   useEffect(() => {
     if (row?.result_complete !== true || shopId === null) return;
     let active = true;
+    setMetrics(null);
     getShopMetrics(apiBaseUrl, sessionId, shopId)
       .then((result) => {
         if (active) setMetrics(result);
@@ -118,6 +107,7 @@ export function SessionResultsPage({
   useEffect(() => {
     if (row?.result_complete !== true || shopId === null) return;
     let active = true;
+    setEvents([]);
     getSessionEvents(apiBaseUrl, sessionId, shopId, fromSeconds, toSeconds)
       .then((result) => {
         if (active) setEvents(result);
@@ -154,128 +144,90 @@ export function SessionResultsPage({
   const minutes =
     metrics === null ? [] : visibleBuckets(metrics.flow, fromSeconds, toSeconds === 0 ? Number.POSITIVE_INFINITY : toSeconds);
 
+  const frame = session?.reference_frame;
   return (
-    <main>
-      <h1>Resultados</h1>
-      <p>{sessionId}</p>
+    <AppShell title={session?.name ?? "Resultados"} context="Resultados" sessionId={sessionId} canEdit={session?.reference_frame != null}>
       {error !== null && <p role="alert">{error}</p>}
-      {videoMissing && (
-        <p>El archivo no está en este equipo.</p>
+      {session === null && error === null && <p role="status">Cargando resultados…</p>}
+      {videoMissing && <p className={styles.notice}>El archivo no está en este equipo.</p>}
+      {session !== null && (
+        <div className={styles.summary}>
+          <p>{session.camera.name} · {session.video?.original_filename ?? "Sesión sintética"}</p>
+          {row?.version_number != null && <span>Escena · versión {row.version_number}</span>}
+        </div>
       )}
-      {session?.reference_frame != null && (
-        <figure className={styles.frame}>
-          <img
-            src={referenceFrameUrl(apiBaseUrl, session.reference_frame)}
-            alt="Frame de referencia"
-          />
-          {positions !== null && (
-            <PositionHeatmap availability={positions.availability} samples={positions.samples} />
-          )}
-        </figure>
-      )}
-      {finishedBadly && <p>{row?.failure_message ?? row?.failure_code}</p>}
+      {session !== null && row === null && error === null && <p className={styles.notice}>Esta sesión todavía no tiene un análisis. Configurá la escena e iniciá el procesamiento desde el detalle.</p>}
+      {finishedBadly && <p role="alert">El resultado quedó incompleto. {row?.failure_message ?? row?.failure_code}</p>}
       {inProgress && (
-        <ul>
-          {measures
-            .filter((measure) => PARTIAL_CODES.has(measure.code))
-            .map((measure) => (
-              <li key={measure.code}>
-                {METRIC_NAME[measure.code] ?? measure.code}: {measure.value ?? "no disponible"}{" "}
-                <span className={styles.partial}>parcial</span>
-              </li>
-            ))}
-        </ul>
+        <section className={styles.panel} aria-label="Resultados parciales">
+          <h2>Análisis en curso</h2>
+          <p>Estos valores son parciales y pueden cambiar hasta que termine el procesamiento.</p>
+          <ul>{measures.filter((measure) => PARTIAL_CODES.has(measure.code)).map((measure) => (
+            <li key={`${measure.shop_id}-${measure.code}`}>
+              {measure.shop_name} · {METRIC_NAME[measure.code] ?? measure.code}: {measure.value ?? "no disponible"} <span className={styles.partial}>parcial</span>
+            </li>
+          ))}</ul>
+          {row !== null && <Link href={`/?job=${encodeURIComponent(row.job_id)}`}>Ver avance del análisis →</Link>}
+        </section>
       )}
-      {row?.result_complete === true && !finishedBadly && (
-        <>
-          {shops.length > 0 && (
-            <label>
-              Local
-              <select
-                aria-label="Local"
-                value={shopId ?? ""}
-                onChange={(event) => setShopId(event.target.value)}
-              >
-                {shops.map((shop) => (
-                  <option key={shop.shop_id} value={shop.shop_id}>
-                    {shop.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          <label>
-            Desde
-            <input
-              aria-label="Desde"
-              type="number"
-              min={0}
-              value={fromSeconds}
-              onChange={(event) => setFromSeconds(Number(event.target.value))}
-            />
-          </label>
-          <label>
-            Hasta
-            <input
-              aria-label="Hasta"
-              type="number"
-              min={0}
-              value={toSeconds}
-              onChange={(event) => setToSeconds(Number(event.target.value))}
-            />
-          </label>
-          <ul>
-            {(metrics?.metrics ?? []).map((metric) => (
-              <li key={metric.code}>
-                <MetricFigure metric={metric} />
-              </li>
-            ))}
-          </ul>
-          {metrics !== null && (
-            <p>
-              Horario pico: {metrics.peak.start_seconds} s, {metrics.peak.track_count}
-            </p>
-          )}
-          <div className={styles.chart}>
-            <BarChart width={480} height={240} data={minutes}>
-              <XAxis dataKey="start_seconds" />
-              <YAxis />
-              <Bar dataKey="track_count" />
-            </BarChart>
+      {row?.result_complete === true && row.scene_version_id === null && <p className={styles.notice}>Esta sesión no tiene indicadores comerciales: el análisis sintético valida el procesamiento y la previsualización. Registrá un video y configurá su escena para consultar métricas por local.</p>}
+      {row?.result_complete === true && row.scene_version_id !== null && !finishedBadly && (
+        <div className={styles.resultsWorkspace}>
+        <div className={styles.analytics}>
+          <section className={styles.overview} aria-label="Indicadores de la sesión">
+            <div className={styles.sectionHeading}>
+              <div><h2>Indicadores del local</h2><p>Valores de toda la sesión. El tramo seleccionado no cambia estas cifras.</p></div>
+              {shops.length > 0 && <label className={styles.shop}>Local
+                <select aria-label="Local" value={shopId ?? ""} onChange={(event) => setShopId(event.target.value)}>
+                  {shops.map((shop) => <option key={shop.shop_id} value={shop.shop_id}>{shop.name}</option>)}
+                </select>
+              </label>}
+            </div>
+            {metrics === null ? <p role="status">Cargando indicadores…</p> : <>
+              <ul className={styles.metrics}>{metrics.metrics.filter((metric) => PRIMARY_CODES.has(metric.code)).map((metric) => <MetricCard key={metric.code} metric={metric} />)}</ul>
+              <details className={styles.moreMetrics}><summary>Ver todos los indicadores</summary><ul className={styles.metrics}>{metrics.metrics.filter((metric) => !PRIMARY_CODES.has(metric.code)).map((metric) => <MetricCard key={metric.code} metric={metric} />)}</ul></details>
+            </>}
+          </section>
+          <div className={styles.analysisGrid}>
+            <section className={styles.panel} aria-labelledby="flow-title">
+              <h2 id="flow-title">Flujo temporal</h2>
+              <p className={styles.description}>Tracks observados por minuto. El tiempo corresponde al video.</p>
+              <div className={styles.filters}>
+                <label>Desde <span>(s)</span><input aria-label="Desde" type="number" min={0} value={fromSeconds} onChange={(event) => setFromSeconds(Number(event.target.value))} /></label>
+                <label>Hasta <span>(s)</span><input aria-label="Hasta" type="number" min={0} value={toSeconds} onChange={(event) => setToSeconds(Number(event.target.value))} /></label>
+              </div>
+              <details className={styles.filterHelp}><summary>Alcance del tramo</summary><p className={styles.filterNote}>El tramo filtra el flujo y los hechos. Los conteos del flujo conservan sus intervalos de origen: un recorte no recalcula las cifras.</p></details>
+              {metrics !== null && <p className={styles.peak}>Horario pico: {metrics.peak.start_seconds} s, {metrics.peak.track_count} tracks observados <span>· Toda la sesión</span></p>}
+              <Suspense fallback={<p role="status">Cargando gráfico…</p>}><FlowChart buckets={minutes} /></Suspense>
+            </section>
+            <section className={styles.panel} aria-labelledby="scene-title">
+              <h2 id="scene-title">Distribución en la escena</h2>
+              <p className={styles.description}>Muestra de posiciones de toda la sesión sobre el frame de referencia.</p>
+              {frame != null ? <figure className={styles.frame}>
+                <div className={styles.frameImage}>
+                  <img src={referenceFrameUrl(apiBaseUrl, frame)} alt="Frame de referencia" />
+                  {positions?.availability === "available" && positions.samples.length > 0 && <PositionHeatmap availability={positions.availability} samples={positions.samples} />}
+                </div>
+                <figcaption>{positions === null ? "Cargando muestra de posiciones…" : positions.availability === "unavailable" || positions.samples.length === 0 ? "No hay muestra de posiciones en este equipo." : "Mapa de calor · posiciones observadas, no personas únicas"}</figcaption>
+              </figure> : <p className={styles.description}>Esta sesión no tiene frame de referencia.</p>}
+            </section>
           </div>
-          <ul aria-label="Hechos">
-            {events.map((event) => (
-              <li key={`${event.track_id}-${event.kind}-${event.video_timestamp_seconds}`}>
-                {event.kind} {event.video_timestamp_seconds}
+          <details className={styles.eventPanel}>
+            <summary id="events-title">Hechos del análisis <span className={styles.count}>{events.length} hechos</span></summary>
+            <p className={styles.description}>Eventos del local dentro del tramo seleccionado.</p>
+            {events.length === 0 && <p className={styles.description}>No hay hechos registrados en este tramo.</p>}
+            <ul className={styles.events} aria-label="Hechos">{events.map((event, index) => (
+              <li key={`${event.track_id}-${event.kind}-${event.video_timestamp_seconds}-${index}`}>
+                <span>{EVENT_NAME[event.kind] ?? "Evento registrado"}</span>
+                <span className={styles.track}>Track {event.track_id}</span>
+                <span>{event.video_timestamp_seconds} s</span>
               </li>
-            ))}
-          </ul>
-        </>
+            ))}</ul>
+          </details>
+        </div>
+          <SessionChatPanel key={sessionId} apiBaseUrl={apiBaseUrl} sessionId={sessionId} shopId={shopId} shopName={shops.find((shop) => shop.shop_id === shopId)?.name} />
+        </div>
       )}
-      <SessionChatPanel
-        key={sessionId}
-        apiBaseUrl={apiBaseUrl}
-        sessionId={sessionId}
-        shopId={shopId}
-      />
-    </main>
-  );
-}
-
-function MetricFigure({ metric }: { metric: MetricValue }) {
-  const label = LABEL_TEXT[metric.label];
-  if (metric.availability !== "available" || metric.value === null) {
-    return (
-      <>
-        {METRIC_NAME[metric.code] ?? metric.code}: <span className={styles.unavailable}>no disponible</span>
-        {metric.unavailable_reason ? ` (${metric.unavailable_reason})` : ""}
-      </>
-    );
-  }
-  return (
-    <>
-      {METRIC_NAME[metric.code] ?? metric.code}: {metric.value}
-      {label !== undefined && <span className={styles.estimate}> {label}</span>}
-    </>
+    </AppShell>
   );
 }

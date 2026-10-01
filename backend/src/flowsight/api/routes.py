@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, WebSocket, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session as DatabaseSession
 from sqlalchemy.orm import selectinload, undefer
 from starlette.concurrency import run_in_threadpool
@@ -55,6 +55,7 @@ from flowsight.db.models import (
     Observation,
     ProcessingJob,
     ReferenceFrame,
+    SceneVersion,
     Session,
     SourceKind,
     SyntheticFrame,
@@ -90,6 +91,12 @@ from flowsight.services.scenes import (
     create_scene_version,
     get_scene_version,
     list_scene_versions,
+)
+from flowsight.services.sessions import (
+    SessionHasActiveJobs,
+    SessionNotFound,
+    get_active_session,
+    remove_session,
 )
 from flowsight.services.video_sessions import (
     VideoSessionError,
@@ -149,7 +156,9 @@ def post_camera(payload: CameraCreate, database: Database) -> Camera:
 def list_sessions(
     database: Database, registered_camera_id: uuid.UUID | None = None
 ) -> list[Session]:
-    query = select(Session).options(selectinload(Session.camera))
+    query = (
+        select(Session).where(Session.deleted_at.is_(None)).options(selectinload(Session.camera))
+    )
     if registered_camera_id is not None:
         query = query.where(Session.registered_camera_id == registered_camera_id)
     return list(database.scalars(query.order_by(Session.created_at.desc(), Session.id.desc())))
@@ -199,6 +208,33 @@ def get_session(session_id: uuid.UUID, request: Request, database: Database) -> 
     return session_detail(database, request.app.state.settings, session_id)
 
 
+@router.delete(
+    "/sessions/{session_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    description=(
+        "Retira la sesión del historial sin borrar archivos ni resultados. Es idempotente y "
+        "rechaza sesiones con trabajos pendientes o en procesamiento. Las versiones de escena "
+        "guardadas y sus frames de referencia se conservan para otras sesiones."
+    ),
+)
+def delete_session(session_id: uuid.UUID, database: Database) -> Response:
+    try:
+        remove_session(database, session_id)
+    except SessionNotFound:
+        database.rollback()
+        raise not_found("Sesión inexistente.") from None
+    except SessionHasActiveJobs:
+        database.rollback()
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "session_has_active_jobs",
+            "La sesión tiene trabajos pendientes o en procesamiento. Esperá a que terminen "
+            "o cancelalos antes de eliminarla.",
+        ) from None
+    database.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get(
     "/sessions/{session_id}/shops/{shop_id}/metrics",
     response_model=ShopMetricsResponse,
@@ -206,7 +242,7 @@ def get_session(session_id: uuid.UUID, request: Request, database: Database) -> 
 def get_shop_metrics(
     session_id: uuid.UUID, shop_id: uuid.UUID, database: Database
 ) -> ShopMetricsResponse:
-    if database.get(Session, session_id) is None:
+    if get_active_session(database, session_id) is None:
         raise not_found("La sesión no existe.")
     try:
         rows, flow, peak = load_shop_metrics(database, session_id, shop_id)
@@ -281,7 +317,7 @@ def get_session_events(
     from_seconds: Annotated[Decimal | None, Query(ge=0)] = None,
     to_seconds: Annotated[Decimal | None, Query(ge=0)] = None,
 ) -> list[SceneEventResponse]:
-    if database.get(Session, session_id) is None:
+    if get_active_session(database, session_id) is None:
         raise not_found("La sesión no existe.")
     try:
         events = load_events(
@@ -324,11 +360,26 @@ async def relink_session_video(
     return await run_in_threadpool(session_detail, database, settings, session_id)
 
 
-@router.get("/sessions/{session_id}/reference-frame")
+@router.get(
+    "/sessions/{session_id}/reference-frame",
+    description=(
+        "Devuelve el frame de una sesión activa o el de una sesión retirada si una versión "
+        "de escena guardada lo referencia. Esta excepción preserva las escenas históricas."
+    ),
+)
 def get_reference_frame(session_id: uuid.UUID, database: Database) -> Response:
     frame = database.scalar(
         select(ReferenceFrame)
-        .where(ReferenceFrame.session_id == session_id)
+        .join(Session, Session.id == ReferenceFrame.session_id)
+        .where(
+            ReferenceFrame.session_id == session_id,
+            or_(
+                Session.deleted_at.is_(None),
+                select(SceneVersion.id)
+                .where(SceneVersion.reference_session_id == session_id)
+                .exists(),
+            ),
+        )
         .options(undefer(ReferenceFrame.image))
     )
     if frame is None:
@@ -344,7 +395,9 @@ def session_detail(
     database: DatabaseSession, settings: Settings, session_id: uuid.UUID
 ) -> SessionDetail:
     flow_session = database.scalar(
-        select(Session).where(Session.id == session_id).options(selectinload(Session.camera))
+        select(Session)
+        .where(Session.id == session_id, Session.deleted_at.is_(None))
+        .options(selectinload(Session.camera))
     )
     if flow_session is None:
         raise not_found("Sesión inexistente.")
@@ -455,6 +508,7 @@ def scene_error(error: SceneError) -> HTTPException:
 
 # Status and message for every job request error code (FR-025 to FR-028).
 _JOB_ERRORS: dict[str, tuple[int, str]] = {
+    "session_not_found": (404, "Sesión inexistente."),
     "job_kind_mismatch": (
         422,
         "El tipo de trabajo no corresponde a la sesión: las sesiones sintéticas usan "
@@ -550,7 +604,7 @@ def get_scene_version_detail(
     status_code=status.HTTP_201_CREATED,
 )
 def create_job(session_id: uuid.UUID, payload: JobCreate, database: Database) -> ProcessingJob:
-    flow_session = database.get(Session, session_id)
+    flow_session = get_active_session(database, session_id)
     if flow_session is None:
         raise not_found("Sesión inexistente.")
 
@@ -574,7 +628,7 @@ def get_job(job_id: uuid.UUID, database: Database) -> ProcessingJob:
 
 @router.post("/jobs/{job_id}/cancel", response_model=JobResponse)
 def cancel_job(job_id: uuid.UUID, database: Database) -> ProcessingJob:
-    if database.get(ProcessingJob, job_id) is None:
+    if get_job_record(database, job_id) is None:
         raise not_found("Trabajo inexistente.")
     try:
         transition_job(
@@ -620,7 +674,7 @@ def get_position_samples(
 
 @router.get("/jobs/{job_id}/measures", response_model=list[AnalysisMeasureResponse])
 def get_job_measures(job_id: uuid.UUID, database: Database) -> list[AnalysisMeasureResponse]:
-    job = database.get(ProcessingJob, job_id)
+    job = get_job_record(database, job_id)
     if job is None:
         raise not_found("Trabajo inexistente.")
     return [AnalysisMeasureResponse.model_validate(row) for row in list_measures(database, job)]
@@ -667,7 +721,8 @@ def get_job_trace(job_id: uuid.UUID, database: Database) -> JobTraceResponse:
 def get_job_record(database: DatabaseSession, job_id: uuid.UUID) -> ProcessingJob | None:
     return database.scalar(
         select(ProcessingJob)
-        .where(ProcessingJob.id == job_id)
+        .join(Session, Session.id == ProcessingJob.session_id)
+        .where(ProcessingJob.id == job_id, Session.deleted_at.is_(None))
         .options(selectinload(ProcessingJob.transitions))
     )
 
@@ -691,7 +746,7 @@ def _terminal_message(
 async def preview_job(websocket: WebSocket, job_id: uuid.UUID) -> None:
     factory = websocket.app.state.session_factory
     with factory() as database:
-        job = database.get(ProcessingJob, job_id)
+        job = get_job_record(database, job_id)
         if job is None:
             await websocket.close(code=4404)
             return

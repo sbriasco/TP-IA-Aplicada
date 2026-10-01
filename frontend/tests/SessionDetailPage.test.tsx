@@ -176,6 +176,8 @@ describe("SessionDetailPage", () => {
     await render(videoSession("available"));
 
     expect(container.querySelector("h1")?.textContent).toBe("Mañana");
+    expect(container.querySelector("header")).not.toBeNull();
+    expect(container.querySelector("img")?.className).not.toBe("");
     expect(definition("Resolución")).toBe("1280 × 720");
     expect(definition("FPS")).toBe("25");
     expect(definition("Duración")).toBe("2.00 s");
@@ -187,9 +189,7 @@ describe("SessionDetailPage", () => {
     const image = container.querySelector("img") as HTMLImageElement;
     expect(image.src).toBe(`${API}/sessions/s-1/reference-frame`);
     expect(image.alt).toBe("Frame de referencia de Mañana");
-    expect(container.querySelector('a[href="/sessions/s-1/editor"]')?.textContent).toBe(
-      "Editar escena",
-    );
+    expect(Array.from(container.querySelectorAll('a[href="/sessions/s-1/editor"]')).some((link) => link.textContent === "Editar escena")).toBe(true);
     expect(container.textContent).toContain("Video disponible en este equipo");
     expect(container.textContent).not.toContain("Volver a cargar el video");
   });

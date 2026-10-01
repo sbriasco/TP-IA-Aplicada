@@ -1,0 +1,9 @@
+.card { position: relative; display: flex; flex-direction: column; align-items: flex-start; min-width: 0; padding: 12px; border: 1px solid var(--fs-line); border-radius: 6px; background: var(--fs-surface); }
+.name { font-size: 12px; font-weight: 400; color: var(--fs-muted); padding-right: 16px; }
+.value { display: block; font-size: 23px; font-weight: 600; line-height: 1.2; margin: 7px 0 0; font-variant-numeric: tabular-nums; }
+.unavailable { font-size: 13px; margin: 10px 0 3px; color: var(--fs-muted); font-weight: 400; }
+.estimate { font-size: 11px; color: var(--fs-muted); margin-top: 4px; }
+.definition { width: 100%; }
+.definition > summary { position: absolute; top: 10px; right: 10px; list-style: none; width: 16px; height: 16px; border: 1px solid var(--fs-line); border-radius: 50%; text-align: center; color: var(--fs-muted); font-size: 11px; line-height: 14px; cursor: pointer; }
+.definition > summary::-webkit-details-marker { display: none; }
+.description { display: block; margin-top: 8px; color: var(--fs-muted); padding-top: 8px; border-top: 1px solid var(--fs-line); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }

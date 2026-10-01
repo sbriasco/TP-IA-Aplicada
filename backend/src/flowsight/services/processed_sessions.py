@@ -38,6 +38,8 @@ def list_processed_sessions(
     jobs = list(
         database_session.scalars(
             select(ProcessingJob)
+            .join(FlowSession, FlowSession.id == ProcessingJob.session_id)
+            .where(FlowSession.deleted_at.is_(None))
             .options(selectinload(ProcessingJob.transitions))
             .order_by(ProcessingJob.created_at.desc(), ProcessingJob.id.desc())
         )

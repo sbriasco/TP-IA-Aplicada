@@ -26,6 +26,8 @@ describe("JobPreviewPage", () => {
     await act(async () => root.render(<JobPreviewPage jobId="job-1" />));
 
     expect(container.textContent).toContain("API no disponible");
+    expect(container.querySelector("h1")?.textContent).toBe("Supervisión del trabajo");
+    expect(container.querySelector("header")).not.toBeNull();
   });
 
   it("muestra un trabajo cancelado sin abrir WebSocket", async () => {
@@ -178,6 +180,7 @@ describe("JobPreviewPage", () => {
 
     expect(container.textContent).toContain("Trabajo finalizado");
     expect(container.textContent).toContain("completed");
+    expect(Array.from(container.querySelectorAll('a[href="/sessions/session-1/results"]')).some((link) => link.textContent === "Ver resultados")).toBe(true);
     expect(socket).not.toHaveBeenCalled();
   });
 });

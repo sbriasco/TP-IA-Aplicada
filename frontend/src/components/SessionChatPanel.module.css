@@ -1,15 +1,29 @@
-.panel {
-  display: grid;
-  gap: 0.75rem;
-  max-width: 40rem;
-  margin-top: 1.5rem;
-}
-
-.panel label {
-  display: grid;
-  gap: 0.25rem;
-}
-
-.waiting {
-  font-weight: 600;
-}
+.panel { display: flex; flex-direction: column; min-width: 0; background: var(--fs-surface); border: 1px solid var(--fs-line); border-radius: 8px; height: clamp(430px, calc(100dvh - 188px), 680px); position: sticky; top: 16px; overflow: hidden; }
+.heading { display: flex; align-items: center; gap: 10px; padding: 16px; border-bottom: 1px solid var(--fs-line); }
+.heading h2 { margin: 0 0 3px; font-size: 15px; font-weight: 600; }
+.heading p { margin: 0; font-size: 12px; color: var(--fs-muted); }
+.avatar { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; background: var(--fs-accent); color: white; flex-shrink: 0; }
+.avatar svg { width: 23px; height: 23px; fill: currentColor; }
+.context { padding: 9px 16px; background: #f8fafb; border-bottom: 1px solid var(--fs-line); font-size: 12px; overflow-wrap: anywhere; }
+.context span { color: var(--fs-muted); }
+.conversation { flex: 1; min-height: 0; padding: 16px; overflow: auto; scrollbar-width: thin; }
+.welcome p, .answer p, .question p { margin: 6px 0; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
+.author { display: block; color: var(--fs-muted); font-size: 11px; font-weight: 600; }
+.hint { color: var(--fs-muted); font-size: 12px !important; }
+.suggestions { display: grid; gap: 6px; margin-top: 16px; }
+.suggestions button { text-align: left; font-size: 12px; font-weight: 400; padding: 8px 10px; min-height: 32px; }
+.turn + .turn { margin-top: 20px; }
+.question { width: fit-content; max-width: 92%; margin: 0 0 14px auto; background: var(--fs-tint); padding: 10px 12px; border-radius: 8px 8px 2px 8px; }
+.answer { padding-right: 4px; }
+.answer small { font-size: 11px; }
+.figures { list-style: none; margin: 8px 0 0; padding: 8px 0 0; border-top: 1px solid var(--fs-line); }
+.figures li { color: var(--fs-muted); font-size: 11px; margin-top: 3px; }
+.waiting { font-size: 12px; color: var(--fs-accent); background: transparent !important; padding: 8px 0 !important; }
+.waiting span { letter-spacing: 3px; }
+.composer { padding: 12px; border-top: 1px solid var(--fs-line); }
+.composer > label { font-size: 11px; display: block; margin-bottom: 6px; color: var(--fs-muted); }
+.composer > div { display: flex; gap: 6px; }
+.composer input { flex: 1; width: 100%; min-width: 0; min-height: 36px; padding: 8px 10px; font-size: 12px; }
+.composer button { min-height: 36px; padding: 8px 10px; font-size: 12px; }
+.composer small { display: block; font-size: 11px; line-height: 1.4; margin-top: 7px; }
+@media (max-width: 800px) { .panel { position: static; height: 480px; } }

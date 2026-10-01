@@ -21,6 +21,7 @@ from flowsight.db.models import (
     SceneEventKind,
     SceneVersionShop,
     SceneZoneRole,
+    Session,
     Shop,
     ShopMetric,
     ShopMetricCode,
@@ -180,7 +181,8 @@ def load_events(
 def _completed_job(database_session: DatabaseSession, session_id: uuid.UUID) -> ProcessingJob:
     job = database_session.scalar(
         select(ProcessingJob)
-        .where(ProcessingJob.session_id == session_id)
+        .join(Session, Session.id == ProcessingJob.session_id)
+        .where(ProcessingJob.session_id == session_id, Session.deleted_at.is_(None))
         .order_by(ProcessingJob.created_at.desc())
     )
     if job is None or job.status.value != "completed" or not job.result_complete:

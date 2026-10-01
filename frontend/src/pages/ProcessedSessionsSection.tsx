@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { ApiRequestError } from "../api/http";
 import { listProcessedSessions, type ProcessedSession } from "../api/processedSessions";
 import { Link } from "../components/Link";
+import ruled from "../styles/ruled.module.css";
 
 import styles from "./ProcessedSessionsSection.module.css";
 
@@ -43,11 +44,12 @@ export function ProcessedSessionsSection({ apiBaseUrl }: ProcessedSessionsSectio
   return (
     <section className={styles.section} aria-labelledby="processed-sessions-title">
       <h2 id="processed-sessions-title">Sesiones procesadas</h2>
+      <p className={styles.description}>Consultá los resultados y el estado del último análisis de cada sesión.</p>
       {error !== null && <p role="alert">{error}</p>}
       {error === null && rows === null && <p role="status">Cargando sesiones procesadas…</p>}
       {rows !== null && rows.length === 0 && <p>Todavía no hay sesiones procesadas.</p>}
       {rows !== null && rows.length > 0 && (
-        <table>
+        <div className={ruled.scroll} role="region" aria-label="Tabla de sesiones procesadas" tabIndex={0}><table className={ruled.table}>
           <thead>
             <tr>
               <th scope="col">Nombre</th>
@@ -65,7 +67,7 @@ export function ProcessedSessionsSection({ apiBaseUrl }: ProcessedSessionsSectio
                 </td>
                 <td>{row.video_filename ?? "Sin video"}</td>
                 <td>
-                  {STATUS_LABEL[row.status]}
+                  <span className={styles.status} data-state={row.status}>{STATUS_LABEL[row.status]}</span>
                   {(row.status === "failed" || row.status === "cancelled") && (
                     <p className={styles.reason}>{row.failure_message ?? row.failure_code}</p>
                   )}
@@ -81,7 +83,7 @@ export function ProcessedSessionsSection({ apiBaseUrl }: ProcessedSessionsSectio
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       )}
     </section>
   );

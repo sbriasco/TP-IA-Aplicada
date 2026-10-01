@@ -110,6 +110,43 @@ def test_invented_number_is_not_answered(client: TestClient) -> None:
     assert "123456" not in body["message"]
 
 
+@pytest.mark.parametrize(
+    ("shop_name", "session_name", "draft", "expected_status"),
+    [
+        (
+            "Local 1", "Chat",
+            "En el local «Local 1» el tráfico observado es 17, una estimación de visitas.",
+            "answered",
+        ),
+        (
+            "Local", "Turno 2026",
+            "En la sesión «Turno 2026» el tráfico observado es 17, una estimación de visitas.",
+            "answered",
+        ),
+        ("Local 1", "Chat", "En el local «Local 1» el tráfico es 18.", "refused"),
+        ("Local 1", "Chat", "En el local «Local 1» hubo 1 ingreso.", "refused"),
+        ("Local 1", "Chat", "En el local «Local 12» no hay datos disponibles.", "refused"),
+        ("123456", "Chat", "El tráfico es 123456.", "refused"),
+        ("123456", "Chat", "En el local «123456» el tráfico estimado es 17.", "answered"),
+    ],
+)
+def test_context_names_do_not_become_metric_values(
+    client: TestClient, shop_name: str, session_name: str, draft: str, expected_status: str
+) -> None:
+    session_id, shop_id = _seed(client, shop_name=shop_name, session_name=session_name)
+    client.app.state.chat_drafter = lambda **_kwargs: Draft(text=draft, model_calls=2)
+    response = client.post(
+        "/chat",
+        json={"question": "¿Cuál fue el tráfico?", "session_id": session_id, "shop_id": shop_id},
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == expected_status
+    assert response.json()["model_calls"] == 2
+    if expected_status == "answered":
+        assert response.json()["message"] == draft
+        assert response.json()["model_calls"] == 2
+
+
 def test_prohibited_questions_do_not_call_the_drafter(client: TestClient) -> None:
     session_id, shop_id = _seed(client)
 
@@ -154,7 +191,7 @@ def test_a_bad_draft_is_not_shown(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "refused"
-    assert body["model_calls"] == 0
+    assert body["model_calls"] == 1
     assert "Confirmó" not in body["message"]
     assert "compra" not in body["message"].casefold()
 
@@ -519,11 +556,13 @@ def _processed(
         return str(flow.id), str(shop.id)
 
 
-def _seed(client: TestClient) -> tuple[str, str]:
+def _seed(
+    client: TestClient, *, shop_name: str = "Local", session_name: str = "Chat"
+) -> tuple[str, str]:
     with client.app.state.session_factory.begin() as db:
         camera = get_or_create_camera(db, "cam-chat-api")
         flow = Session(
-            name="Chat",
+            name=session_name,
             camera_id=camera.name,
             registered_camera_id=camera.id,
             source_kind=SourceKind.SYNTHETIC,
@@ -546,8 +585,8 @@ def _seed(client: TestClient) -> tuple[str, str]:
                 shop_id=shop.id,
                 camera_id=camera.id,
                 position=0,
-                name="Local",
-                name_key="local",
+                name=shop_name,
+                name_key=shop_name.casefold(),
             )
         )
         job = ProcessingJob(

@@ -1,0 +1,8 @@
+.toolbar { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; align-items: center; font-size: 0.75rem; }
+.version { color: var(--fs-accent); background: var(--fs-tint); border: 1px solid #d8e8e9; border-radius: 5px; padding: 0.3rem 0.6rem; }
+.description { color: var(--fs-muted); font-size: 0.78rem; margin: 0.9rem 0 1.25rem; }
+.canvasHeading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.85rem; }
+.canvasHeading h2 { margin: 0; }
+.canvasHeading span { font-size: 0.65rem; color: var(--fs-muted); }
+.save { border-top: 1px solid var(--fs-line); padding-top: 1rem; font-size: 0.75rem; color: var(--fs-muted); }
+.save button { width: 100%; margin-bottom: 0.5rem; }

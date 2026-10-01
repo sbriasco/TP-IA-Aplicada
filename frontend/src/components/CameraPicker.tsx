@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from "react";
+import styles from "./CameraPicker.module.css";
 
 import { createCamera, listCameras } from "../api/cameras";
 import { ApiRequestError } from "../api/http";
@@ -71,7 +72,7 @@ export function CameraPicker({ apiBaseUrl, value, onChange }: CameraPickerProps)
   }
 
   return (
-    <div>
+    <div className={styles.picker}>
       <label htmlFor={`${id}-camera`}>Cámara</label>
       <select
         id={`${id}-camera`}
@@ -89,7 +90,7 @@ export function CameraPicker({ apiBaseUrl, value, onChange }: CameraPickerProps)
       </select>
       {loadError !== null && <p role="alert">{loadError}</p>}
 
-      <fieldset>
+      <fieldset className={styles.create}>
         <legend>Nueva cámara</legend>
         <label htmlFor={`${id}-new-camera`}>Nombre de la cámara</label>
         <input

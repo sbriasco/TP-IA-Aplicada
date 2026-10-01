@@ -1,0 +1,5 @@
+.dialog { width: min(660px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow: auto; border: 1px solid var(--fs-line); border-radius: 10px; padding: 20px; background: var(--fs-surface); color: var(--fs-ink); box-shadow: 0 16px 64px #162b3526; }
+.dialog::backdrop { background: #162b3566; }
+.heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 16px; }
+.heading h2 { margin: 0; font-size: 18px; }
+.heading button { min-height: 32px; width: 32px; padding: 0; font-size: 22px; font-weight: 400; }

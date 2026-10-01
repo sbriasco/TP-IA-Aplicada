@@ -1,0 +1,14 @@
+.description { color: var(--fs-muted); font-size: 0.8rem; margin-bottom: 1.5rem; }
+.layout { display: grid; grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr); gap: 16px; align-items: start; }
+.information, .workspace { display: grid; min-width: 0; gap: 12px; }
+.panel { min-width: 0; padding: 16px; background: var(--fs-surface); border: 1px solid var(--fs-line); border-radius: var(--fs-radius); }
+.frame { display: block; width: 100%; max-width: 100%; max-height: 240px; object-fit: contain; margin: 10px 0; border-radius: 6px; }
+.rows { display: grid; grid-template-columns: minmax(100px, 0.6fr) minmax(0, 1fr); margin: 0; font-size: 0.78rem; }
+.rows dt { margin: 0; padding: 0.65rem 0.75rem 0.65rem 0; color: var(--fs-muted); border-bottom: 1px solid var(--fs-line); }
+.rows dd { margin: 0; padding: 0.65rem 0; border-bottom: 1px solid var(--fs-line); overflow-wrap: anywhere; }
+.rows dt:last-of-type, .rows dd:last-of-type { border-bottom: 0; }
+.panel form label { display: block; margin: 0.7rem 0 0.35rem; }
+.panel form input:not([type="file"]), .panel form select { width: 100%; }
+.panel form button { margin-top: 0.8rem; }
+@media (max-width: 760px) { .layout { grid-template-columns: 1fr; } .workspace { grid-row: 1; } }
+@media (max-width: 500px) { .panel { padding: 1rem; } }

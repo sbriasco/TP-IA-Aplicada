@@ -8,7 +8,7 @@ import { startWorker, stopWorker } from "./support";
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(currentDirectory, "../..");
 
-const API = "http://127.0.0.1:8000";
+const API = process.env.FLOWSIGHT_E2E_API_URL ?? "http://127.0.0.1:8000";
 
 test("el historial abre los indicadores de esa sesión y conserva el frame sin el video", async ({
   page,
@@ -52,13 +52,32 @@ test("el historial abre los indicadores de esa sesión y conserva el frame sin e
   const traffic = metrics.metrics.find((metric) => metric.code === "traffic_total");
 
   await page.goto("/");
-  const history = page.getByRole("region", { name: "Sesiones procesadas" });
+  const history = page.getByRole("region", { name: "Historial de análisis" });
   await expect(history.getByRole("link", { name: firstName })).toBeVisible();
   await expect(history.getByRole("link", { name: secondName })).toBeVisible();
-  await history.getByRole("link", { name: firstName }).click();
-  await expect(page.getByRole("heading", { name: "Resultados" })).toBeVisible();
+  await history.getByRole("row").filter({ has: page.getByRole("link", { name: firstName, exact: true }) }).getByRole("link", { name: "Ver resultados" }).click();
+  await expect(page.getByRole("heading", { name: firstName })).toBeVisible();
   await expect(page.getByText(secondName)).toHaveCount(0);
   await expect(page.getByText(`Tráfico: ${traffic?.value ?? ""}`, { exact: false })).toBeVisible();
+  await expect(page.getByText("Cargando gráfico…", { exact: true })).toHaveCount(0);
+
+  for (const viewport of [{ width: 1280, height: 720 }, { width: 1024, height: 768 }]) {
+    await page.setViewportSize(viewport);
+    await expect(page.getByRole("heading", { name: "Agente FlowSight" })).toBeVisible();
+    const composer = await page.getByLabel("Pregunta al agente", { exact: true }).boundingBox();
+    expect(composer).not.toBeNull();
+    expect(composer!.y + composer!.height).toBeLessThanOrEqual(viewport.height);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+  }
+  await page.getByRole("button", { name: "¿Cuál fue el horario pico?", exact: true }).click();
+  await expect(page.getByLabel("Pregunta al agente", { exact: true })).toHaveValue("¿Cuál fue el horario pico?");
+  await page.getByLabel("Cómo se mide Tráfico", { exact: true }).click();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+  await page.screenshot({ path: "../.verification/frontend-redesign/resultados-compactos-1024.png" });
+  await page.getByLabel("Cómo se mide Tráfico", { exact: true }).click();
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await expect(page.getByText("Cargando gráfico…", { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: "../.verification/frontend-redesign/resultados-compactos-1280.png" });
 
   const detail = await request.get(`${API}/sessions/${first.sessionId}`);
   const relative = ((await detail.json()) as { video: { relative_path: string } }).video.relative_path;

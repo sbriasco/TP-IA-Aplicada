@@ -26,13 +26,13 @@ from flowsight.db.models import (
     SceneVersion,
     SceneVersionShop,
     SceneZone,
-    Session,
     Shop,
     ZoneRole,
 )
 from flowsight.scene.geometry import NORMALIZED_DECIMALS
 from flowsight.scene.validation import ELEMENT_SHOP, ELEMENT_VERSION, SceneIssue, validate_scene
 from flowsight.services.cameras import normalize_name_key
+from flowsight.services.sessions import get_active_session
 
 SceneErrorCode = Literal["camera_not_found"]
 
@@ -132,12 +132,8 @@ def _reference_frame(
     database_session: DatabaseSession, camera_id: uuid.UUID, session_id: uuid.UUID
 ) -> tuple[ReferenceFrame | None, SceneIssue | None]:
     # Looked up by id and camera: an unknown session reads as "of another camera".
-    reference = database_session.scalar(
-        select(Session.id).where(
-            Session.id == session_id, Session.registered_camera_id == camera_id
-        )
-    )
-    if reference is None:
+    reference = get_active_session(database_session, session_id, lock=True)
+    if reference is None or reference.registered_camera_id != camera_id:
         return None, _version_issue(
             "reference_session_other_camera",
             "La sesión de referencia no existe o no pertenece a esta cámara",
@@ -195,8 +191,9 @@ def create_scene_version(
 
     _require_camera(database_session, camera_id)
 
-    # Validation runs before the camera lock: it can take a while with many
-    # shops, and neither sessions nor shops change owner once created.
+    # The reference session lock prevents removal until this save commits.
+    # Validation still runs before the camera lock to avoid blocking other
+    # scene saves during geometry validation.
     frame, reference_issue = _reference_frame(database_session, camera_id, reference_session_id)
     errors: list[SceneIssue] = [] if reference_issue is None else [reference_issue]
     errors.extend(_foreign_shop_issues(database_session, camera_id, shops))

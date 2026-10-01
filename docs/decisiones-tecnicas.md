@@ -12,6 +12,8 @@ El frontend utiliza React, TypeScript con `strict` y Vite. React permite separar
 
 Los estilos se organizan con CSS Modules. El editor utiliza SVG sobre el frame de referencia para representar polígonos, líneas y puntos editables. Las coordenadas deben conservar su correspondencia con las dimensiones originales del video al redimensionar la vista. Recharts se utiliza para los gráficos del dashboard.
 
+Actualización de presentación (2026-10-01): se mantiene el stack y se carga Recharts al abrir el gráfico de resultados. `FLOWSIGHT_CORS_ORIGINS` permite configurar una lista JSON de orígenes exactos del frontend; conserva los orígenes locales por defecto. Esta configuración habilita pruebas en puertos aislados y prepara la conexión con un frontend alojado, pero no proporciona autenticación ni reemplaza HTTPS o controles de acceso. El procesamiento de visión sigue local.
+
 El backend utiliza Python, FastAPI y Pydantic para exponer la API y validar datos. Python también se utiliza en el worker de visión, lo que permite compartir contratos y reglas sin incorporar otro lenguaje de backend. Se mantiene una API modular y un proceso separado para el trabajo pesado, dentro de un único repositorio.
 
 ## Persistencia
@@ -46,6 +48,8 @@ Los videos originales nunca se guardan en la base (FR-007 de specs/004): permane
 El procesamiento de visión (YOLO, ByteTrack, worker) sigue siendo **local**. Azure PostgreSQL solo aloja la persistencia compartida; no mueve el pipeline de video a la nube.
 
 ### Migraciones y secretos
+
+**Eliminación del historial (2026-10-01):** `DELETE /sessions/{id}` realiza una baja lógica con `sessions.deleted_at` (migración `0006_session_removal`). Se conservan archivos, resultados y escenas inmutables para no romper su uso desde otras sesiones. Los trabajos pendientes o en proceso bloquean la baja; crear trabajos y retirar la sesión comparten un bloqueo de fila. La sesión retirada deja de estar disponible en endpoints públicos, con la excepción del frame que siga referenciado por una escena guardada. No implica liberación de espacio en disco.
 
 Las mismas migraciones Alembic aplican a local y a Azure. Credenciales de Azure PostgreSQL y Foundry solo en `.env` local / canal seguro del equipo; nunca en Git. Instrucciones para compañeros: [acceso-compartido-azure.md](acceso-compartido-azure.md). CI y pytest usan PostgreSQL local (o efímero) sin depender de la instancia compartida.
 
@@ -94,6 +98,10 @@ La codificación de imágenes, frecuencia de actualización y manejo de clientes
 El backend consume por API un modelo disponible mediante **Azure AI Foundry**, usando la suscripción de estudiantes del equipo (crédito ~100 USD). La Feature #5 validó acceso con API key, cliente **`openai==1.109.1`** (OpenAI-compatible), deployment **`gpt-5-mini`** y región **`brazilsouth`**. La llamada simple y el tool calling con `get_session_traffic` ficticia quedaron demostrados; cuotas/costos del crédito: `not_measured`. Evidencia: `specs/003-validacion-modelo-azure/validation/summary.json`.
 
 Las credenciales permanecen en el backend. El modelo consulta herramientas acotadas de analytics y redacta respuestas basadas en sus resultados; no procesa el video, no calcula las métricas y no ejecuta SQL arbitrario. El MVP utiliza integración directa con la API del modelo, sin incorporar un framework de agentes inicialmente.
+
+Validación de chat real (2026-10-01): el presupuesto de 256 tokens agotaba la segunda llamada en razonamiento sin producir texto. Se usa `max_completion_tokens=2048` y `reasoning_effort=low`, conservando el deployment y el máximo de dos llamadas por pregunta. Prueba sintética contra Azure y petición a una API local completadas; cuotas y disponibilidad sostenida siguen sin medir. Ver [flujo compacto y evidencia](frontend-compacto-2026-10-01.md).
+
+Revisión posterior del chat (2026-10-01): se exige consultar la herramienta acotada en la primera llamada y finalizar sin herramientas en la segunda. Nombres, unidades y motivos de no disponibilidad se entregan al modelo en lenguaje cotidiano. El filtro distingue referencias explícitas a identificadores de las cifras, conserva el conteo real de llamadas después de un rechazo y no cita un pico si faltan intervalos guardados. La interfaz mantiene el contexto del local; cada pregunta sigue siendo independiente y sobre toda la sesión. Ver [validación del agente y sus límites](chat-validacion-2026-10-01.md).
 
 ## Entorno y calidad
 

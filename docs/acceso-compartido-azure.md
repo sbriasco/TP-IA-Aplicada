@@ -61,9 +61,9 @@ Las mismas migraciones sirven para local y Azure. El esquema base ya se aplicó 
 
 ---
 
-## 2. Azure AI Foundry (Feature #5 — validación / futuro chat)
+## 2. Azure AI Foundry (chat analítico)
 
-**No es el chat del producto todavía** (eso es Feature #16). Es el modelo que el backend llama con tools acotadas.
+La Feature #5 validó este modelo y el chat del producto (Feature #16, specs/008) ya lo consume desde el backend con herramientas acotadas de métricas.
 
 **Datos no secretos (ya validados):**
 
@@ -94,7 +94,7 @@ FLOWSIGHT_AZURE_OPENAI_ENDPOINT=https://ia-aplicada-flowsight-resource.openai.az
 .\scripts\validate-azure-model.ps1 -Step all
 ```
 
-La API y el worker **arrancan sin** estas variables. Solo las necesita el script de validación (y más adelante el chat).
+La API y el worker **arrancan sin** estas variables. Las necesitan el script de validación y el chat real; sin una clave configurada, el chat informa que el servicio no está configurado y el resto de la app sigue disponible. Para presentar en otra PC, seguir la [guía de demo](demo-companero.md).
 
 Evidencia del equipo: [`specs/003-validacion-modelo-azure/validation/`](../specs/003-validacion-modelo-azure/validation/).
 

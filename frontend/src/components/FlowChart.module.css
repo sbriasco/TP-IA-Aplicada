@@ -1,0 +1,2 @@
+.chart { height: 160px; width: 100%; min-width: 0; }
+.empty { color: var(--fs-muted); padding: 20px 0; font-size: 12px; }

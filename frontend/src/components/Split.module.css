@@ -1,0 +1,9 @@
+.split { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 16px; align-items: start; }
+.frame { min-width: 0; padding: 1.1rem; background: var(--fs-surface); border: 1px solid var(--fs-line); border-radius: var(--fs-radius); position: sticky; top: 1rem; }
+.frame > img { display: block; width: 100%; border-radius: 7px; }
+.side { min-width: 0; background: var(--fs-surface); border: 1px solid var(--fs-line); border-radius: var(--fs-radius); padding: 14px; max-height: calc(100dvh - 190px); overflow: auto; scrollbar-width: thin; }
+.side input:not([type="radio"]), .side select { display: block; width: 100%; margin: 0.35rem 0 0.65rem; }
+.side button { margin-bottom: 0.35rem; }
+.side section + section { border-top: 1px solid var(--fs-line); padding-top: 1rem; margin-top: 1rem; }
+@media (max-width: 1000px) { .split { grid-template-columns: minmax(0, 1fr) 280px; gap: 12px; } }
+@media (max-width: 760px) { .split { grid-template-columns: 1fr; } .frame { position: static; } .side { max-height: none; overflow: visible; } }

@@ -4,6 +4,9 @@ import { fileURLToPath } from "node:url";
 
 import { startWorker, stopWorker } from "./support";
 
+const API = process.env.FLOWSIGHT_E2E_API_URL ?? "http://127.0.0.1:8000";
+const WS = API.replace(/^http/, "ws");
+
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(currentDirectory, "../..");
 
@@ -14,13 +17,13 @@ type PreviewMessage = {
 };
 
 async function createJob(request: APIRequestContext): Promise<string> {
-  const sessionResponse = await request.post("http://127.0.0.1:8000/sessions", {
+  const sessionResponse = await request.post(`${API}/sessions`, {
     data: { name: "E2E", camera_id: "camera-e2e" },
   });
   expect(sessionResponse.ok()).toBeTruthy();
   const session = (await sessionResponse.json()) as { id: string };
   const jobResponse = await request.post(
-    `http://127.0.0.1:8000/sessions/${session.id}/jobs`,
+    `${API}/sessions/${session.id}/jobs`,
     { data: { kind: "synthetic_base_flow" } },
   );
   expect(jobResponse.ok()).toBeTruthy();
@@ -30,12 +33,12 @@ async function createJob(request: APIRequestContext): Promise<string> {
 
 async function connectSlowClient(page: Page, jobId: string): Promise<void> {
   await page.evaluate(
-    (id) =>
+    (wsUrl) =>
       new Promise<void>((resolve, reject) => {
         const state = globalThis as typeof globalThis & {
           previewDone?: Promise<PreviewMessage[]>;
         };
-        const socket = new WebSocket(`ws://127.0.0.1:8000/ws/jobs/${id}/preview`);
+        const socket = new WebSocket(wsUrl);
         socket.addEventListener("open", () => {
           state.previewDone = new Promise<PreviewMessage[]>((done) => {
             const delivered: PreviewMessage[] = [];
@@ -70,7 +73,7 @@ async function connectSlowClient(page: Page, jobId: string): Promise<void> {
         });
         socket.addEventListener("error", () => reject(new Error("WebSocket no disponible.")));
       }),
-    jobId,
+    `${WS}/ws/jobs/${jobId}/preview`,
   );
 }
 
@@ -124,23 +127,23 @@ test("desconectarse no bloquea el trabajo y una reconexión tardía obtiene el t
   const jobId = await createJob(request);
   await page.goto("/");
   await page.evaluate(
-    (id) =>
+    (wsUrl) =>
       new Promise<void>((resolve, reject) => {
-        const socket = new WebSocket(`ws://127.0.0.1:8000/ws/jobs/${id}/preview`);
+        const socket = new WebSocket(wsUrl);
         socket.addEventListener("open", () => {
           socket.close();
           resolve();
         });
         socket.addEventListener("error", () => reject(new Error("WebSocket no disponible.")));
       }),
-    jobId,
+    `${WS}/ws/jobs/${jobId}/preview`,
   );
 
   const worker = startWorker(root);
   try {
     await expect
       .poll(async () => {
-        const response = await request.get(`http://127.0.0.1:8000/jobs/${jobId}`);
+        const response = await request.get(`${API}/jobs/${jobId}`);
         return ((await response.json()) as { status: string }).status;
       })
       .toBe("completed");
@@ -149,16 +152,16 @@ test("desconectarse no bloquea el trabajo y una reconexión tardía obtiene el t
   }
 
   const message = await page.evaluate(
-    (id) =>
+    (wsUrl) =>
       new Promise<PreviewMessage>((resolve, reject) => {
-        const socket = new WebSocket(`ws://127.0.0.1:8000/ws/jobs/${id}/preview`);
+        const socket = new WebSocket(wsUrl);
         socket.addEventListener("message", (event) => {
           resolve(JSON.parse(String(event.data)) as PreviewMessage);
           socket.close();
         });
         socket.addEventListener("error", () => reject(new Error("WebSocket no disponible.")));
       }),
-    jobId,
+    `${WS}/ws/jobs/${jobId}/preview`,
   );
   expect(message).toEqual(expect.objectContaining({ type: "job.terminal", status: "completed" }));
 });
