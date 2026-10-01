@@ -121,6 +121,9 @@ describe("SessionResultsPage", () => {
     expect(container.textContent).toContain("El archivo no está en este equipo.");
     expect(container.querySelector("img")?.getAttribute("src")).toBe(`${API}/sessions/s-1/reference-frame`);
     expect(container.textContent).toContain("Tráfico");
+    expect(container.querySelector("h1")?.textContent).toBe("Mañana");
+    expect(container.querySelector("header")?.textContent).toContain("Resultados");
+    expect(Array.from(container.querySelectorAll("p")).some((node) => node.textContent === "s-1")).toBe(false);
   });
 
   it("no vuelve a pedir las métricas al mover el tramo y marca la tasa no disponible", async () => {

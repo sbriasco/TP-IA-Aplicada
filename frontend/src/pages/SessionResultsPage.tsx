@@ -18,8 +18,10 @@ import {
 } from "../api/metrics";
 import { listProcessedSessions, type ProcessedSession } from "../api/processedSessions";
 import { getSession, referenceFrameUrl } from "../api/sessions";
+import { AppShell } from "../components/AppShell";
 import { PositionHeatmap } from "../components/PositionHeatmap";
 import { SessionChatPanel } from "../components/SessionChatPanel";
+import { Split } from "../components/Split";
 import { visibleBuckets } from "../flow/visibleBuckets";
 import type { SessionDetail } from "../types/session";
 
@@ -154,25 +156,21 @@ export function SessionResultsPage({
   const minutes =
     metrics === null ? [] : visibleBuckets(metrics.flow, fromSeconds, toSeconds === 0 ? Number.POSITIVE_INFINITY : toSeconds);
 
-  return (
-    <main>
-      <h1>Resultados</h1>
-      <p>{sessionId}</p>
-      {error !== null && <p role="alert">{error}</p>}
-      {videoMissing && (
-        <p>El archivo no está en este equipo.</p>
-      )}
-      {session?.reference_frame != null && (
-        <figure className={styles.frame}>
-          <img
-            src={referenceFrameUrl(apiBaseUrl, session.reference_frame)}
-            alt="Frame de referencia"
-          />
-          {positions !== null && (
-            <PositionHeatmap availability={positions.availability} samples={positions.samples} />
-          )}
-        </figure>
-      )}
+  const frame =
+    session?.reference_frame != null ? (
+      <figure className={styles.frame}>
+        <img
+          src={referenceFrameUrl(apiBaseUrl, session.reference_frame)}
+          alt="Frame de referencia"
+        />
+        {positions !== null && (
+          <PositionHeatmap availability={positions.availability} samples={positions.samples} />
+        )}
+      </figure>
+    ) : undefined;
+
+  const notes = (
+    <>
       {finishedBadly && <p>{row?.failure_message ?? row?.failure_code}</p>}
       {inProgress && (
         <ul>
@@ -258,7 +256,15 @@ export function SessionResultsPage({
         sessionId={sessionId}
         shopId={shopId}
       />
-    </main>
+    </>
+  );
+
+  return (
+    <AppShell title={session?.name ?? "Resultados"} context={session !== null ? "Resultados" : undefined}>
+      {error !== null && <p role="alert">{error}</p>}
+      {videoMissing && <p>El archivo no está en este equipo.</p>}
+      <Split main={frame} side={notes} />
+    </AppShell>
   );
 }
 
