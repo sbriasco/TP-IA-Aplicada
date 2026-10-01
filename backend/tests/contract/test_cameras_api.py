@@ -9,9 +9,12 @@ import pytest
 from alembic.config import Config
 from conftest import destructive_database_url
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from alembic import command
 from flowsight.api.main import create_app
+from flowsight.db.models import Camera
+from flowsight.services import cameras
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -117,3 +120,75 @@ def test_lists_created_and_synthetic_session_cameras_ordered_by_name(
     assert [camera["name"] for camera in cameras] == ["camera-01", "Pasillo"]
     assert cameras[1] == created
     _assert_camera(cameras[0], "camera-01")
+
+
+def test_rename_keeps_session_reference_and_checks_duplicate_names(client: TestClient) -> None:
+    session = client.post("/sessions", json={"name": "Local", "camera_id": "Entrada"}).json()
+    camera_id = session["camera"]["id"]
+    other = client.post("/cameras", json={"name": "Otra"}).json()
+    renamed = client.patch(f"/cameras/{camera_id}", json={"name": " Norte "})
+    assert renamed.status_code == 200
+    assert renamed.json()["id"] == camera_id
+    assert renamed.json()["name"] == "Norte"
+    assert client.get(f"/sessions/{session['id']}").json()["camera"]["name"] == "Norte"
+    duplicate = client.patch(f"/cameras/{camera_id}", json={"name": "otra"})
+    assert duplicate.status_code == 409
+    assert duplicate.json()["detail"]["code"] == "camera_exists"
+    assert client.get(f"/sessions/{session['id']}").json()["camera"]["name"] == "Norte"
+    assert any(item["id"] == other["id"] for item in client.get("/cameras").json())
+
+
+def test_remove_camera_keeps_history_and_reserves_name(client: TestClient) -> None:
+    session = client.post("/sessions", json={"name": "Local", "camera_id": "Entrada"}).json()
+    camera_id = session["camera"]["id"]
+    assert client.delete(f"/cameras/{camera_id}").status_code == 204
+    assert client.delete(f"/cameras/{camera_id}").status_code == 204
+    assert client.get("/cameras").json() == []
+    assert client.get(f"/sessions/{session['id']}").status_code == 200
+    assert client.post("/cameras", json={"name": " entrada "}).status_code == 409
+    assert (
+        client.post("/sessions", json={"name": "Nuevo", "camera_id": "Entrada"}).status_code == 409
+    )
+    job = client.post(f"/sessions/{session['id']}/jobs", json={"kind": "synthetic_base_flow"})
+    assert job.status_code == 409
+    assert job.json()["detail"]["code"] == "camera_removed"
+    assert client.patch(f"/cameras/{camera_id}", json={"name": "Nueva"}).status_code == 404
+
+
+def test_active_job_blocks_camera_removal(client: TestClient) -> None:
+    session = client.post("/sessions", json={"name": "Local", "camera_id": "Entrada"}).json()
+    job = client.post(f"/sessions/{session['id']}/jobs", json={"kind": "synthetic_base_flow"})
+    assert job.status_code == 201
+    response = client.delete(f"/cameras/{session['camera']['id']}")
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "camera_has_active_jobs"
+    assert len(client.get("/cameras").json()) == 1
+
+
+@pytest.mark.parametrize("endpoint", ["/cameras", "/sessions"])
+def test_resolves_name_after_rename_between_insert_and_lookup(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, endpoint: str
+) -> None:
+    existing = client.post("/cameras", json={"name": "Entrada"}).json()
+    original = cameras._get_by_name
+    renamed = False
+
+    def lookup(database, name):
+        nonlocal renamed
+        if not renamed:
+            renamed = True
+            camera = database.scalar(select(Camera).where(Camera.id == uuid.UUID(existing["id"])))
+            camera.name = "Renombrada"
+            camera.name_key = "renombrada"
+            database.flush()
+        return original(database, name)
+
+    monkeypatch.setattr(cameras, "_get_by_name", lookup)
+    payload = (
+        {"name": "Entrada"} if endpoint == "/cameras" else {"name": "Local", "camera_id": "Entrada"}
+    )
+    response = client.post(endpoint, json=payload)
+    assert response.status_code == 201
+    resolved = response.json() if endpoint == "/cameras" else response.json()["camera"]
+    assert resolved["id"] != existing["id"]
+    assert resolved["name"] == "Entrada"

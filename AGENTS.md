@@ -32,6 +32,8 @@ Exposición, detención y atención estimada hacia vidrieras; funnel comercial y
 - Medir tiempos con timestamps del video, no con el tiempo de procesamiento.
 - Debe existir persistencia y aislamiento por sesión; versionar migraciones, configuración de ejemplo e instrucciones.
 - Eliminar una sesión del historial es una baja lógica (`deleted_at`): se conservan archivos y referencias de escenas inmutables; los trabajos activos bloquean la baja. Los endpoints públicos omiten las sesiones retiradas, excepto el frame que sigue siendo referencia de una escena guardada.
+- Eliminar una cámara es una baja lógica (`cameras.deleted_at`): sale del selector para videos nuevos, conserva sus sesiones y escenas, y no admite nuevos trabajos. Los trabajos activos bloquean su baja. Se conserva la unicidad de sus nombres, incluidos los retirados. Ver la migración `0007_camera_management` y las decisiones técnicas.
+- Eliminar una configuración la retira del selector mediante `scene_version_removals` (migración `0008_scene_configuration_removal`); no modifica ni borra la escena inmutable. Los análisis históricos conservan su acceso, los trabajos activos bloquean la baja y no se admiten nuevos trabajos con ella. No reutilizar números de configuraciones retiradas.
 
 ## Stack acordado
 

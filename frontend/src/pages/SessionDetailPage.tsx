@@ -1,13 +1,13 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 
 import { API_BASE_URL } from "../api/config";
 import { ApiRequestError } from "../api/http";
-import { aspectRatioMismatch, createVideoAnalysisJob, listSceneVersions } from "../api/scenes";
 import { getSession, referenceFrameUrl } from "../api/sessions";
 import { AppShell } from "../components/AppShell";
 import { Link } from "../components/Link";
+import { StartAnalysisSection } from "../components/StartAnalysisSection";
+import { ScenePreview } from "../components/ScenePreview";
 import { VideoRelinkForm } from "../components/VideoRelinkForm";
-import type { AnalysisJob, AspectRatios, SceneVersionSummary } from "../types/scene";
 import type { SessionDetail, VideoAvailability, VideoSource } from "../types/session";
 
 import styles from "./SessionDetailPage.module.css";
@@ -61,170 +61,10 @@ function VideoMetadata({ video }: { video: VideoSource }) {
   );
 }
 
-type VersionsState =
-  | { kind: "loading" }
-  | { kind: "error"; message: string }
-  | { kind: "loaded"; versions: SceneVersionSummary[] };
-
-type AnalysisOutcome =
-  | { kind: "created"; job: AnalysisJob; version: SceneVersionSummary | undefined }
-  | { kind: "scene_not_configured"; message: string }
-  | { kind: "aspect_ratio_mismatch"; message: string; ratios: AspectRatios | null }
-  | { kind: "error"; message: string };
-
-function errorMessage(reason: unknown): string {
-  return reason instanceof ApiRequestError ? reason.error.message : "Ocurrió un error inesperado.";
-}
-
-function formatRatio(ratio: number): string {
-  return ratio.toFixed(3);
-}
-
-function versionLabel(version: SceneVersionSummary): string {
-  const shops = version.shop_count === 1 ? "1 local" : `${version.shop_count} locales`;
-  const created = new Date(version.created_at).toLocaleString();
-  return `Versión ${version.version_number} · ${shops} · frame ${version.frame_width} × ${version.frame_height} · ${created}`;
-}
-
-/** Última versión por número, aunque la API ya las devuelve de la más nueva a la más vieja. */
-function latestVersion(versions: SceneVersionSummary[]): SceneVersionSummary | undefined {
-  return versions.reduce<SceneVersionSummary | undefined>(
-    (latest, version) =>
-      latest === undefined || version.version_number > latest.version_number ? version : latest,
-    undefined,
-  );
-}
-
-interface StartAnalysisSectionProps {
-  apiBaseUrl: string;
-  session: SessionDetail;
-}
-
-/** Compuerta de análisis (FR-025 a FR-028): elige una versión de escena y crea el trabajo. */
-function StartAnalysisSection({ apiBaseUrl, session }: StartAnalysisSectionProps) {
-  const cameraId = session.camera.id;
-  const [versions, setVersions] = useState<VersionsState>({ kind: "loading" });
-  const [selectedId, setSelectedId] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [outcome, setOutcome] = useState<AnalysisOutcome | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    setVersions({ kind: "loading" });
-    listSceneVersions(apiBaseUrl, cameraId)
-      .then((loaded) => {
-        if (!active) return;
-        setVersions({ kind: "loaded", versions: loaded });
-        setSelectedId(latestVersion(loaded)?.id ?? "");
-      })
-      .catch((reason: unknown) => {
-        if (active) setVersions({ kind: "error", message: errorMessage(reason) });
-      });
-    return () => {
-      active = false;
-    };
-  }, [apiBaseUrl, cameraId]);
-
-  const editorHref = `/sessions/${encodeURIComponent(session.id)}/editor`;
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (versions.kind !== "loaded" || selectedId === "") return;
-    setSubmitting(true);
-    setOutcome(null);
-    try {
-      const job = await createVideoAnalysisJob(apiBaseUrl, session.id, selectedId);
-      const version = versions.versions.find((item) => item.id === job.scene_version_id);
-      setOutcome({ kind: "created", job, version });
-    } catch (reason) {
-      if (reason instanceof ApiRequestError && reason.error.code === "scene_not_configured") {
-        setOutcome({ kind: "scene_not_configured", message: reason.error.message });
-      } else if (reason instanceof ApiRequestError && reason.error.code === "aspect_ratio_mismatch") {
-        setOutcome({
-          kind: "aspect_ratio_mismatch",
-          message: reason.error.message,
-          ratios: aspectRatioMismatch(reason.error),
-        });
-      } else {
-        setOutcome({ kind: "error", message: errorMessage(reason) });
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  let body;
-  if (versions.kind === "loading") {
-    body = <p role="status">Cargando versiones de escena…</p>;
-  } else if (versions.kind === "error") {
-    body = <p role="alert">{versions.message}</p>;
-  } else if (versions.versions.length === 0) {
-    body = (
-      <p>
-        La cámara {session.camera.name} no tiene ninguna configuración de escena. Creala antes de
-        iniciar el análisis: <Link href={editorHref}>Abrir el editor de escena</Link>
-      </p>
-    );
-  } else {
-    const selectedVersion = versions.versions.find((item) => item.id === selectedId);
-    body = (
-      <form onSubmit={handleSubmit}>
-        <label htmlFor="analysis-scene-version">Versión de escena</label>
-        <select
-          id="analysis-scene-version"
-          value={selectedId}
-          disabled={submitting}
-          onChange={(event) => {
-            setSelectedId(event.target.value);
-            setOutcome(null);
-          }}
-        >
-          {versions.versions.map((version) => (
-            <option key={version.id} value={version.id}>
-              {versionLabel(version)}
-            </option>
-          ))}
-        </select>
-        <button type="submit" disabled={submitting || selectedId === ""}>
-          Iniciar análisis
-        </button>
-        {outcome?.kind === "created" && (
-          <p role="status">
-            Se creó el trabajo {outcome.job.id} en estado {outcome.job.status}
-            {outcome.version !== undefined && ` con la versión ${outcome.version.version_number}`}.
-            El worker lo procesará cuando esté disponible.{" "}
-            <Link href={`/?job=${encodeURIComponent(outcome.job.id)}`}>Ver avance del análisis</Link>
-          </p>
-        )}
-        {outcome?.kind === "scene_not_configured" && (
-          <p role="alert">
-            {outcome.message} <Link href={editorHref}>Abrir el editor de escena</Link>
-          </p>
-        )}
-        {outcome?.kind === "aspect_ratio_mismatch" && (
-          <p role="alert">
-            {outcome.ratios !== null && selectedVersion !== undefined
-              ? `La relación de aspecto del video (${formatRatio(outcome.ratios.video)}) difiere de la del frame de la versión ${selectedVersion.version_number} (${formatRatio(outcome.ratios.version)}). Creá una versión nueva sobre el frame de esta sesión.`
-              : outcome.message}{" "}
-            <Link href={editorHref}>Abrir el editor de escena</Link>
-          </p>
-        )}
-        {outcome?.kind === "error" && <p role="alert">{outcome.message}</p>}
-      </form>
-    );
-  }
-
-  return (
-    <section aria-labelledby="analysis-title">
-      <h2 id="analysis-title">Iniciar análisis</h2>
-      {body}
-    </section>
-  );
-}
-
 export function SessionDetailPage({ sessionId, apiBaseUrl = API_BASE_URL }: SessionDetailPageProps) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [notice, setNotice] = useState<string | null>(null);
+  const [selectedConfigurationId, setSelectedConfigurationId] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -272,10 +112,37 @@ export function SessionDetailPage({ sessionId, apiBaseUrl = API_BASE_URL }: Sess
   return (
     <AppShell title={session.name} context="Detalle" sessionId={session.id} canEdit={session.reference_frame !== null}>
       {backLink}
-      <p className={styles.description}>Revisá el video, configurá la escena y elegí la versión que usará el análisis.</p>
-      <div className={styles.layout}>
+      <p className={styles.description}>Definí qué espacios querés medir y elegí una configuración para analizar este video.</p>
+      <div className={frame === null ? styles.detailsOnly : styles.layout}>
+      <div className={styles.workspace}>
+
+      {frame !== null && (
+        <section className={styles.panel} aria-labelledby="frame-title">
+          <div className={styles.frameHeading}>
+            <div><h2 id="frame-title">Tu espacio</h2><p>Las zonas y líneas muestran qué medirá la configuración seleccionada.</p></div>
+            <Link className={styles.editAction} href={`/sessions/${encodeURIComponent(session.id)}/editor`}>Editar escena</Link>
+          </div>
+          <div className={styles.frameSurface}>
+          <ScenePreview
+            apiBaseUrl={apiBaseUrl}
+            versionId={selectedConfigurationId}
+            frameUrl={referenceFrameUrl(apiBaseUrl, frame)}
+            label={`Frame de referencia de ${session.name}`}
+            width={frame.width}
+            height={frame.height}
+          />
+          </div>
+          <div className={styles.frameCaption}><span>Imagen de referencia · {formatSeconds(frame.video_timestamp_seconds)} del video</span><span>{session.camera.name} · {frame.width} × {frame.height}</span></div>
+        </section>
+      )}
+
+
+      </div>
       <div className={styles.information}>
-      <section className={styles.panel} aria-label="Información de la sesión"><h2>Información de la sesión</h2>
+      {session.source_kind === "video_file" && <div className={styles.panel}>
+        <StartAnalysisSection apiBaseUrl={apiBaseUrl} session={session} onConfigurationChange={setSelectedConfigurationId} />
+      </div>}
+      <section className={styles.panel} aria-label="Información de la sesión"><details className={styles.sessionInfo}><summary>Información de la sesión</summary>
       <dl className={styles.rows}>
         <dt>Cámara</dt>
         <dd>{session.camera.name}</dd>
@@ -286,13 +153,14 @@ export function SessionDetailPage({ sessionId, apiBaseUrl = API_BASE_URL }: Sess
           <time dateTime={session.created_at}>{new Date(session.created_at).toLocaleString()}</time>
         </dd>
       </dl>
+      </details>
       </section>
 
       {video === null ? (
         <p>Esta sesión es sintética: no tiene video ni frame de referencia.</p>
       ) : (
         <>
-          <section className={styles.panel} aria-labelledby="video-title">
+          <section className={`${styles.panel} ${styles.videoPanel}`} aria-labelledby="video-title">
             <h2 id="video-title">Video</h2>
             <p data-availability={video.availability}>{AVAILABILITY_TEXT[video.availability]}</p>
             {notice !== null && <p role="status">{notice}</p>}
@@ -329,31 +197,6 @@ export function SessionDetailPage({ sessionId, apiBaseUrl = API_BASE_URL }: Sess
           )}
         </>
       )}
-      </div>
-      <div className={styles.workspace}>
-
-      {frame !== null && (
-        <section className={styles.panel} aria-labelledby="frame-title">
-          <h2 id="frame-title">Frame de referencia</h2>
-          <p>
-            Frame {frame.frame_index} ({formatSeconds(frame.video_timestamp_seconds)} del video)
-          </p>
-          <img
-            className={styles.frame}
-            src={referenceFrameUrl(apiBaseUrl, frame)}
-            alt={`Frame de referencia de ${session.name}`}
-            width={frame.width}
-            height={frame.height}
-          />
-          <p>
-            <Link href={`/sessions/${encodeURIComponent(session.id)}/editor`}>Editar escena</Link>
-          </p>
-        </section>
-      )}
-
-      {session.source_kind === "video_file" && <div className={styles.panel}>
-        <StartAnalysisSection apiBaseUrl={apiBaseUrl} session={session} />
-      </div>}
       </div>
       </div>
     </AppShell>

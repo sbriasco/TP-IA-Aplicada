@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionDetailPage } from "../src/pages/SessionDetailPage";
 import type { SceneVersionSummary } from "../src/types/scene";
 import type { SessionDetail, VideoAvailability } from "../src/types/session";
-import { byButton, byLabel, changeValue, chooseFile, click, submit } from "./dom";
+import { byButton, byLabel, chooseFile, click, submit } from "./dom";
 
 const API = "http://api.test";
 const camera = { id: "cam-1", name: "Cam 01", created_at: "2026-09-28T00:00:00Z" };
@@ -132,12 +132,17 @@ describe("SessionDetailPage", () => {
   // Responde según la URL: la sesión, las versiones de escena de su cámara y la creación de trabajos.
   async function render(
     session: SessionDetail | Reply,
-    { versions = [], job }: { versions?: SceneVersionSummary[] | Reply; job?: Reply } = {},
+    { versions = [], job, removal = { status: 204, body: null } }: { versions?: SceneVersionSummary[] | Reply; job?: Reply; removal?: Reply } = {},
   ) {
     const result = "status" in session ? session : { status: 200, body: session };
     const versionsReply = Array.isArray(versions) ? { status: 200, body: versions } : versions;
-    fetchMock = vi.fn(async (url: string) => {
+    fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       if (url.endsWith("/scene-versions")) return response(versionsReply.status, versionsReply.body);
+      if (url.includes("/scene-versions/")) {
+        if (init?.method === "DELETE") return response(removal.status, removal.body);
+        const version = Array.isArray(versions) ? versions.find((item) => url.endsWith(`/${item.id}`)) : undefined;
+        return response(200, { ...version, shops: [{ shop_id: "shop-1", name: `Local de configuración ${version?.version_number}`, zones: { front: [[0.1, 0.5], [0.3, 0.5], [0.3, 0.7], [0.1, 0.7]] }, entry_line: { start: [0.1, 0.6], end: [0.3, 0.6], entry_direction: "a_to_b" } }] });
+      }
       if (url.endsWith("/jobs")) {
         return job === undefined ? response(500, {}) : response(job.status, job.body);
       }
@@ -167,6 +172,14 @@ describe("SessionDetailPage", () => {
     return JSON.parse((call?.[1] as RequestInit).body as string);
   }
 
+  function configurationRadio(number: number): HTMLInputElement {
+    const input = analysisSection().querySelector<HTMLInputElement>(
+      `input[type="radio"][aria-label="Configuración ${number}"]`,
+    );
+    if (input === null) throw new Error(`No se encontró la configuración ${number}.`);
+    return input;
+  }
+
   function definition(term: string): string | null | undefined {
     const dt = Array.from(container.querySelectorAll("dt")).find((item) => item.textContent === term);
     return dt?.nextElementSibling?.textContent;
@@ -177,7 +190,7 @@ describe("SessionDetailPage", () => {
 
     expect(container.querySelector("h1")?.textContent).toBe("Mañana");
     expect(container.querySelector("header")).not.toBeNull();
-    expect(container.querySelector("img")?.className).not.toBe("");
+    expect(container.querySelector('svg[role="img"]')).not.toBeNull();
     expect(definition("Resolución")).toBe("1280 × 720");
     expect(definition("FPS")).toBe("25");
     expect(definition("Duración")).toBe("2.00 s");
@@ -186,9 +199,8 @@ describe("SessionDetailPage", () => {
     expect(definition("SHA-256")).toBe("a".repeat(64));
     expect(definition("Archivo original")).toBe("entrada.mp4");
 
-    const image = container.querySelector("img") as HTMLImageElement;
-    expect(image.src).toBe(`${API}/sessions/s-1/reference-frame`);
-    expect(image.alt).toBe("Frame de referencia de Mañana");
+    expect(container.querySelector("image")?.getAttribute("href")).toBe(`${API}/sessions/s-1/reference-frame`);
+    expect(container.querySelector('svg[role="img"]')?.getAttribute("aria-label")).toBe("Frame de referencia de Mañana");
     expect(Array.from(container.querySelectorAll('a[href="/sessions/s-1/editor"]')).some((link) => link.textContent === "Editar escena")).toBe(true);
     expect(container.textContent).toContain("Video disponible en este equipo");
     expect(container.textContent).not.toContain("Volver a cargar el video");
@@ -241,7 +253,7 @@ describe("SessionDetailPage", () => {
 
     expect(container.querySelector("[data-availability]")?.textContent).toContain(text);
     expect(container.textContent?.includes("Volver a cargar el video")).toBe(canRelink);
-    expect(container.querySelector("img")).not.toBeNull();
+    expect(container.querySelector('svg[role="img"]')).not.toBeNull();
   });
 
   it("avisa los duplicados con enlaces", async () => {
@@ -303,20 +315,50 @@ describe("SessionDetailPage", () => {
   });
 
   describe("Iniciar análisis", () => {
+    it("muestra en el frame las zonas de la configuración elegida", async () => {
+      await render(videoSession("available"), { versions: [sceneVersion(2), sceneVersion(1)] });
+      const canvas = container.querySelector('svg[role="img"]')!;
+      expect(canvas.textContent).toContain("Local de configuración 2");
+      const previous = analysisSection().querySelector("details")!;
+      previous.open = true;
+      await click(configurationRadio(1));
+      expect(canvas.textContent).toContain("Local de configuración 1");
+      expect(canvas.textContent).not.toContain("Local de configuración 2");
+      const firstPoint = canvas.querySelector("polygon")?.getAttribute("points")?.split(" ")[0];
+      expect(firstPoint).toBe("128,360");
+    });
+
+    it("elimina la configuración seleccionada y muestra la siguiente disponible", async () => {
+      await render(videoSession("available"), { versions: [sceneVersion(2), sceneVersion(1)] });
+      await click(analysisSection().querySelector<HTMLButtonElement>('[aria-label="Eliminar configuración 2"]')!);
+      await click(byButton(container.querySelector("dialog")!, "Eliminar configuración"));
+      expect(fetchMock).toHaveBeenCalledWith(`${API}/scene-versions/v-2`, { method: "DELETE" });
+      expect(configurationRadio(1).checked).toBe(true);
+      expect(analysisSection().querySelector('[aria-label="Configuración 2"]')).toBeNull();
+      expect(container.querySelector('svg[role="img"]')?.textContent).toContain("Local de configuración 1");
+    });
+
+    it("conserva la configuración si la API bloquea su eliminación", async () => {
+      await render(videoSession("available"), { versions: [sceneVersion(2)], removal: { status: 409, body: { detail: { code: "scene_version_has_active_jobs", message: "El análisis sigue activo." } } } });
+      await click(analysisSection().querySelector<HTMLButtonElement>('[aria-label="Eliminar configuración 2"]')!);
+      await click(byButton(container.querySelector("dialog")!, "Eliminar configuración"));
+      expect(configurationRadio(2).checked).toBe(true);
+      expect(container.querySelector('dialog [role="alert"]')?.textContent).toBe("El análisis sigue activo.");
+    });
+
     it("pide las versiones de la cámara y preselecciona la última", async () => {
       await render(videoSession("available"), {
-        versions: [sceneVersion(3), sceneVersion(2), sceneVersion(1)],
+        versions: [sceneVersion(2), sceneVersion(3), sceneVersion(1)],
       });
 
       expect(fetchMock).toHaveBeenCalledWith(`${API}/cameras/cam-1/scene-versions`, undefined);
-      const select = byLabel<HTMLSelectElement>(analysisSection(), "Versión de escena");
-      expect(Array.from(select.options).map((option) => option.value)).toEqual(["v-3", "v-2", "v-1"]);
-      expect(select.value).toBe("v-3");
-      expect(select.options[0]?.textContent).toContain("Versión 3");
+      expect(configurationRadio(3).checked).toBe(true);
+      expect(configurationRadio(2).checked).toBe(false);
+      expect(configurationRadio(1).checked).toBe(false);
       expect(byButton(analysisSection(), "Iniciar análisis").disabled).toBe(false);
     });
 
-    it("crea el trabajo con la versión elegida y lo informa en pending", async () => {
+    it("crea el trabajo con la configuración anterior elegida y enlaza a su avance", async () => {
       await render(videoSession("available"), {
         versions: [sceneVersion(2), sceneVersion(1)],
         job: {
@@ -332,14 +374,17 @@ describe("SessionDetailPage", () => {
         },
       });
 
-      await changeValue(byLabel<HTMLSelectElement>(analysisSection(), "Versión de escena"), "v-1");
+      const previous = analysisSection().querySelector("details");
+      if (previous === null) throw new Error("No se encontró el historial de configuraciones.");
+      await click(previous.querySelector("summary")!);
+      await click(configurationRadio(1));
+      await click(previous.querySelector("summary")!);
       await startAnalysis();
 
       expect(jobRequestBody()).toEqual({ kind: "video_analysis", scene_version_id: "v-1" });
       const status = analysisSection().querySelector('[role="status"]');
-      expect(status?.textContent).toContain("job-9");
-      expect(status?.textContent).toContain("pending");
-      expect(status?.textContent).toContain("versión 1");
+      expect(status?.querySelector("a")?.getAttribute("href")).toBe("/?job=job-9");
+      expect(status?.textContent).toContain("configuración 1");
     });
 
     it("sin versiones avisa y enlaza al editor sin ofrecer el botón", async () => {
@@ -373,7 +418,7 @@ describe("SessionDetailPage", () => {
       expect(alert?.querySelector('a[href="/sessions/s-1/editor"]')).not.toBeNull();
     });
 
-    it("informa aspect_ratio_mismatch con los ratios y pide una versión sobre este frame", async () => {
+    it("informa aspect_ratio_mismatch con los ratios y enlaza al editor", async () => {
       await render(videoSession("available"), {
         versions: [sceneVersion(1, { frame_width: 640, frame_height: 480 })],
         job: {
@@ -394,7 +439,6 @@ describe("SessionDetailPage", () => {
       const alert = analysisSection().querySelector('[role="alert"]');
       expect(alert?.textContent).toContain("1.778");
       expect(alert?.textContent).toContain("1.333");
-      expect(alert?.textContent).toContain("Creá una versión nueva sobre el frame de esta sesión");
       expect(alert?.querySelector('a[href="/sessions/s-1/editor"]')).not.toBeNull();
     });
 

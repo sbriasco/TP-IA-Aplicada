@@ -28,6 +28,10 @@ export function getSceneVersion(apiBaseUrl: string, sceneVersionId: string): Pro
   );
 }
 
+export async function deleteSceneVersion(apiBaseUrl: string, sceneVersionId: string): Promise<void> {
+  await requestJson<unknown>(`${apiBaseUrl}/scene-versions/${encodeURIComponent(sceneVersionId)}`, { method: "DELETE" });
+}
+
 /**
  * Guarda una versión nueva. Un 422 `invalid_scene_configuration` no se lanza: devuelve
  * `{ok: false, errors}` con todos los problemas. Cualquier otro error se lanza como `ApiRequestError`.

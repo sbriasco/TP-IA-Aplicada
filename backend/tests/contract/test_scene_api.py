@@ -219,6 +219,56 @@ def _create(client: TestClient, camera_id: str, payload: dict[str, Any]) -> dict
     return response.json()
 
 
+def test_removed_configuration_keeps_content_and_numbering(
+    client: TestClient, camera: dict[str, Any], video_session: dict[str, Any]
+) -> None:
+    first = _create(client, camera["id"], _payload(video_session, [_shop()]))
+    second = _create(client, camera["id"], _payload(video_session, [_shop()]))
+    before = client.get(f"/scene-versions/{second['id']}").json()
+    assert client.delete(f"/scene-versions/{second['id']}").status_code == 204
+    assert client.delete(f"/scene-versions/{second['id']}").status_code == 204
+    assert client.get(f"/scene-versions/{second['id']}").json() == before
+    remaining = client.get(f"/cameras/{camera['id']}/scene-versions").json()
+    assert [item["id"] for item in remaining] == [first["id"]]
+    rejected = client.post(
+        f"/sessions/{video_session['id']}/jobs",
+        json={"kind": "video_analysis", "scene_version_id": second["id"]},
+    )
+    assert rejected.status_code == 409
+    assert rejected.json()["detail"]["code"] == "scene_version_removed"
+    third = _create(client, camera["id"], _payload(video_session, [_shop()], first["id"]))
+    assert third["version_number"] == 3
+    assert not any(warning["rule"] == "newer_version_exists" for warning in third["warnings"])
+
+
+def test_active_job_blocks_configuration_removal_and_cancelled_job_keeps_reference(
+    client: TestClient, camera: dict[str, Any], video_session: dict[str, Any]
+) -> None:
+    version = _create(client, camera["id"], _payload(video_session, [_shop()]))
+    job = client.post(
+        f"/sessions/{video_session['id']}/jobs",
+        json={"kind": "video_analysis", "scene_version_id": version["id"]},
+    )
+    assert job.status_code == 201, job.text
+    blocked = client.delete(f"/scene-versions/{version['id']}")
+    assert blocked.status_code == 409
+    assert blocked.json()["detail"]["code"] == "scene_version_has_active_jobs"
+    assert client.post(f"/jobs/{job.json()['id']}/cancel").status_code == 200
+    assert client.delete(f"/scene-versions/{version['id']}").status_code == 204
+    assert client.get(f"/jobs/{job.json()['id']}").json()["scene_version_id"] == version["id"]
+    assert client.get(f"/scene-versions/{version['id']}").status_code == 200
+    rejected = client.post(
+        f"/sessions/{video_session['id']}/jobs",
+        json={"kind": "video_analysis", "scene_version_id": version["id"]},
+    )
+    assert rejected.status_code == 409
+    assert rejected.json()["detail"]["code"] == "scene_not_configured"
+
+
+def test_configuration_removal_rejects_unknown_id(client: TestClient) -> None:
+    assert client.delete(f"/scene-versions/{UNKNOWN_ID}").status_code == 404
+
+
 def _canonical(body: Any) -> str:
     return json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
@@ -591,8 +641,8 @@ def test_lists_versions_newest_first_with_shop_count(
         assert item["created_by_machine_id"] == MACHINE_ID
 
 
-@pytest.mark.parametrize("method", ["PUT", "PATCH", "DELETE"])
-def test_versions_cannot_be_modified_or_deleted(
+@pytest.mark.parametrize("method", ["PUT", "PATCH"])
+def test_versions_cannot_be_modified(
     client: TestClient, camera: dict[str, Any], video_session: dict[str, Any], method: str
 ) -> None:
     payload = _payload(video_session, [_shop()])

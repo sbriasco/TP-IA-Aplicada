@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from sqlalchemy import func, select
@@ -21,9 +21,12 @@ from flowsight.core.config import Settings
 from flowsight.db.models import (
     Camera,
     EntryDirection,
+    JobStatus,
+    ProcessingJob,
     ReferenceFrame,
     SceneEntryLine,
     SceneVersion,
+    SceneVersionRemoval,
     SceneVersionShop,
     SceneZone,
     Shop,
@@ -34,7 +37,9 @@ from flowsight.scene.validation import ELEMENT_SHOP, ELEMENT_VERSION, SceneIssue
 from flowsight.services.cameras import normalize_name_key
 from flowsight.services.sessions import get_active_session
 
-SceneErrorCode = Literal["camera_not_found"]
+SceneErrorCode = Literal[
+    "camera_not_found", "scene_version_not_found", "scene_version_has_active_jobs"
+]
 
 
 class SceneError(LookupError):
@@ -221,6 +226,15 @@ def create_scene_version(
         .limit(1)
     ).first()
     version_number = 1 if latest is None else latest.version_number + 1
+    latest_available = database_session.scalar(
+        select(SceneVersion.id)
+        .where(
+            SceneVersion.camera_id == camera_id,
+            SceneVersion.id.not_in(select(SceneVersionRemoval.scene_version_id)),
+        )
+        .order_by(SceneVersion.version_number.desc())
+        .limit(1)
+    )
 
     version = SceneVersion(
         id=uuid.uuid4(),
@@ -269,12 +283,16 @@ def create_scene_version(
         )
     database_session.flush()
 
-    if base_version_id is not None and (latest is None or base_version_id != latest.id):
+    if (
+        base_version_id is not None
+        and latest_available is not None
+        and base_version_id != latest_available
+    ):
         warnings.insert(
             0,
             _version_issue(
                 "newer_version_exists",
-                "Existe una versión más nueva que la que se cargó en el editor; "
+                "La configuración cargada no es la más reciente disponible; "
                 f"esta se guardó igual como versión {version_number}",
             ),
         )
@@ -316,10 +334,38 @@ def list_scene_versions(
     rows = database_session.execute(
         select(SceneVersion, func.coalesce(counts.c.shop_count, 0))
         .outerjoin(counts, counts.c.scene_version_id == SceneVersion.id)
-        .where(SceneVersion.camera_id == camera_id)
+        .where(
+            SceneVersion.camera_id == camera_id,
+            SceneVersion.id.not_in(select(SceneVersionRemoval.scene_version_id)),
+        )
         .order_by(SceneVersion.version_number.desc())
     )
     return [_summary(version, shop_count) for version, shop_count in rows]
+
+
+def remove_scene_version(database: DatabaseSession, scene_version_id: uuid.UUID) -> None:
+    """Hide a configuration; keep the original scene and historical job references."""
+    version = database.get(SceneVersion, scene_version_id)
+    if version is None:
+        raise SceneError("scene_version_not_found")
+    # The same camera lock serializes removal with new job creation and scene saves.
+    database.execute(select(Camera.id).where(Camera.id == version.camera_id).with_for_update())
+    if database.get(SceneVersionRemoval, scene_version_id) is not None:
+        return
+    active_job = database.scalar(
+        select(ProcessingJob.id)
+        .where(
+            ProcessingJob.scene_version_id == scene_version_id,
+            ProcessingJob.status.in_((JobStatus.PENDING, JobStatus.PROCESSING)),
+        )
+        .limit(1)
+    )
+    if active_job is not None:
+        raise SceneError("scene_version_has_active_jobs")
+    database.add(
+        SceneVersionRemoval(scene_version_id=scene_version_id, deleted_at=datetime.now(UTC))
+    )
+    database.flush()
 
 
 def get_scene_version(

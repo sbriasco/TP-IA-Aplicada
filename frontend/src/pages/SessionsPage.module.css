@@ -23,13 +23,24 @@
 .ready { color: #266348; background: #eaf5ee; }
 .running { color: #845b17; background: #fff2d9; }
 .synthetic { display: block; font-size: 11px; margin-top: 4px; }
-.actions { display: flex; gap: 20px; align-items: center; white-space: nowrap; }
-.actions a { font-size: 13px; font-weight: 600; text-decoration: none; }
-.actions button { font-size: 12px; padding: 4px 0; min-height: 30px; border: 0; background: transparent; color: var(--fs-muted); font-weight: 400; }
+.tableScroll .actionCell { width: 152px; white-space: nowrap; }
+.tableScroll .deleteCell { width: 66px; padding-left: 6px; text-align: right; }
+.openAction { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; padding: 6px 12px; border: 1px solid var(--fs-line); border-radius: 6px; background: var(--fs-surface); color: var(--fs-accent); font-size: 12px; font-weight: 600; text-decoration: none; transition: background 120ms, border-color 120ms; }
+.openAction:hover { background: var(--fs-tint); border-color: var(--fs-accent); }
+.deleteButton { display: inline-grid; place-items: center; width: 34px; min-height: 34px; padding: 0; border-radius: 6px; border: 1px solid #eedbd8; background: #fff8f7; color: #a43630; }
+.deleteButton:hover:not(:disabled) { background: #ffeae6; border-color: #c36c63; }
+.legend { display: flex; align-items: center; gap: 24px; padding: 14px 20px; border-top: 1px solid var(--fs-line); background: #f8fafb; }
+.legendTitle { display: flex; align-items: center; gap: 8px; color: var(--fs-accent); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.legendTitle svg { flex-shrink: 0; }
+.legendStates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; margin: 0; flex: 1; min-width: 0; }
+.legendStates > div { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.legendStates dt { flex-shrink: 0; }
+.legendStates dd { margin: 0; color: var(--fs-muted); font-size: 12px; }
 .help { color: var(--fs-muted); font-size: 12px; margin: 0; padding: 12px 20px; border-top: 1px solid var(--fs-line); }
 .confirm { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 .danger { background: #a43630; color: white; border-color: #a43630; }
 .empty { text-align: center; padding: 56px 16px; }
 .empty p { color: var(--fs-muted); margin-bottom: 20px; }
-@media (max-width: 1000px) { .tableScroll td, .tableScroll th { padding: 12px; } .actions { gap: 12px; } .steps li + li { padding-left: 16px; } }
-@media (max-width: 650px) { .heading { align-items: flex-start; flex-direction: column; } .steps { gap: 14px; padding: 16px; grid-template-columns: 1fr; } .steps li + li { border: 0; padding: 0; } }
+@media (max-width: 1000px) { .tableScroll td, .tableScroll th { padding: 12px; } .tableScroll .actionCell { width: 132px; } .tableScroll .deleteCell { width: 52px; } .steps li + li { padding-left: 16px; } .legend { align-items: flex-start; gap: 14px; } .legendStates > div { align-items: flex-start; flex-direction: column; gap: 6px; } }
+@media (max-width: 650px) { .heading { align-items: flex-start; flex-direction: column; } .steps { gap: 14px; padding: 16px; grid-template-columns: 1fr; } .steps li + li { border: 0; padding: 0; } .legend { flex-direction: column; } .legendStates { grid-template-columns: 1fr; } .legendStates > div { flex-direction: row; align-items: center; } }
+.headingActions { display: flex; gap: 8px; flex-shrink: 0; }
