@@ -19,6 +19,7 @@ import {
 import { listProcessedSessions, type ProcessedSession } from "../api/processedSessions";
 import { getSession, referenceFrameUrl } from "../api/sessions";
 import { PositionHeatmap } from "../components/PositionHeatmap";
+import { SessionChatPanel } from "../components/SessionChatPanel";
 import { visibleBuckets } from "../flow/visibleBuckets";
 import type { SessionDetail } from "../types/session";
 
@@ -251,6 +252,12 @@ export function SessionResultsPage({
           </ul>
         </>
       )}
+      <SessionChatPanel
+        key={sessionId}
+        apiBaseUrl={apiBaseUrl}
+        sessionId={sessionId}
+        shopId={shopId}
+      />
     </main>
   );
 }

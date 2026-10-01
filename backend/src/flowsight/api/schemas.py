@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import (
     AllowInfNan,
@@ -395,6 +395,40 @@ class PositionSamplesResponse(BaseModel):
     job_id: uuid.UUID
     availability: str
     samples: list[PositionSampleResponse]
+
+
+class ChatFigure(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    label: str
+    availability: str
+    value: float | None = None
+    unavailable_reason: str | None = None
+    start_seconds: float | None = None
+    track_count: int | None = None
+    bucket_index: int | None = None
+
+
+class ChatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    question: str
+    session_id: uuid.UUID
+    shop_id: uuid.UUID | None = None
+
+
+class ChatResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["answered", "refused", "needs_clarification", "unavailable", "error"]
+    message: str
+    session_id: uuid.UUID | None
+    shop_id: uuid.UUID | None
+    shop_name: str | None
+    scope: Literal["whole_session"] | None
+    figures: list[ChatFigure]
+    model_calls: int = Field(ge=0, le=2)
 
 
 class SceneEventResponse(BaseModel):

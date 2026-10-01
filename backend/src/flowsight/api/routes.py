@@ -21,6 +21,9 @@ from flowsight.api.schemas import (
     AnalysisMeasureResponse,
     CameraCreate,
     CameraResponse,
+    ChatFigure,
+    ChatRequest,
+    ChatResponse,
     JobCreate,
     JobResponse,
     JobTraceResponse,
@@ -65,6 +68,7 @@ from flowsight.services.cameras import (
     get_or_create_camera,
     list_cameras,
 )
+from flowsight.services.chat import ChatAnswer, SessionMissing, ask
 from flowsight.services.jobs import (
     InvalidJobTransition,
     JobRequestError,
@@ -220,6 +224,52 @@ def get_shop_metrics(
         metrics=[MetricValueResponse.model_validate(row) for row in rows],
         flow=[TrafficBucketResponse.model_validate(bucket) for bucket in flow],
         peak=TrafficBucketResponse.model_validate(peak),
+    )
+
+
+@router.post("/chat", response_model=ChatResponse)
+def post_chat(payload: ChatRequest, request: Request, database: Database) -> ChatResponse:
+    if not payload.question.strip():
+        raise api_error(status.HTTP_400_BAD_REQUEST, "empty_question", "La pregunta está vacía.")
+    try:
+        answer = ask(
+            database,
+            session_id=payload.session_id,
+            shop_id=payload.shop_id,
+            question=payload.question.strip(),
+            timeout_seconds=request.app.state.settings.chat_timeout_seconds,
+            settings=request.app.state.settings,
+            drafter=getattr(request.app.state, "chat_drafter", None),
+        )
+    except SessionMissing:
+        raise not_found("La sesión no existe.") from None
+    except ShopNotInSession:
+        raise not_found("El local no pertenece a esta sesión.") from None
+    return _chat_response(answer)
+
+
+def _chat_response(answer: ChatAnswer) -> ChatResponse:
+    return ChatResponse(
+        status=answer.status,
+        message=answer.message,
+        session_id=answer.session_id,
+        shop_id=answer.shop_id,
+        shop_name=answer.shop_name,
+        scope=answer.scope,
+        figures=[
+            ChatFigure(
+                code=figure.code,
+                label=figure.label,
+                availability=figure.availability,
+                value=None if figure.value is None else float(figure.value),
+                unavailable_reason=figure.unavailable_reason,
+                start_seconds=None if figure.start_seconds is None else float(figure.start_seconds),
+                track_count=figure.track_count,
+                bucket_index=figure.bucket_index,
+            )
+            for figure in answer.figures
+        ],
+        model_calls=answer.model_calls,
     )
 
 

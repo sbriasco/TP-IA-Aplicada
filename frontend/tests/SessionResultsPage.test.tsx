@@ -219,4 +219,109 @@ describe("SessionResultsPage", () => {
     expect(container.textContent).toContain("no se pudo analizar");
     expect(container.textContent).not.toContain("Tráfico");
   });
+
+  it("el panel viaja con la sesión y el local, y se vacía al cambiar de sesión", async () => {
+    const calls: { url: string; body?: string }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) => {
+        calls.push({ url, body: typeof init?.body === "string" ? init.body : undefined });
+        if (url.endsWith("/chat")) {
+          const payload = JSON.parse(String(init?.body)) as { session_id: string };
+          return Promise.resolve(
+            json({
+              status: "answered",
+              message: `Respuesta de ${payload.session_id}`,
+              session_id: payload.session_id,
+              shop_id: "shop-1",
+              shop_name: "Local",
+              scope: "whole_session",
+              figures: [],
+              model_calls: 1,
+            }),
+          );
+        }
+        if (url.endsWith("/processed-sessions")) {
+          return Promise.resolve(
+            json([completedRow(), completedRow({ session_id: "s-2", name: "Tarde", job_id: "j-2" })]),
+          );
+        }
+        if (url.endsWith("/sessions/s-1") || url.endsWith("/sessions/s-2")) {
+          const sessionId = url.endsWith("/sessions/s-2") ? "s-2" : "s-1";
+          return Promise.resolve(json({ ...detail("available"), id: sessionId }));
+        }
+        if (url.includes("/scene-versions/")) return Promise.resolve(json({ shops: [{ shop_id: "shop-1", name: "Local" }] }));
+        if (url.includes("/metrics")) return Promise.resolve(json(metrics));
+        if (url.includes("/events")) return Promise.resolve(json([]));
+        if (url.includes("/position-samples")) {
+          return Promise.resolve(json({ job_id: "j-1", availability: "unavailable", samples: [] }));
+        }
+        return Promise.resolve(json({}));
+      }),
+    );
+
+    await act(async () => root.render(<SessionResultsPage sessionId="s-1" apiBaseUrl={API} />));
+
+    const field = container.querySelector('input[name="question"]') as HTMLInputElement;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    await act(async () => {
+      setValue?.call(field, "¿cuál es el tráfico?");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    const chat = calls.find((call) => call.url.endsWith("/chat"));
+    expect(JSON.parse(chat?.body ?? "{}")).toEqual({
+      question: "¿cuál es el tráfico?",
+      session_id: "s-1",
+      shop_id: "shop-1",
+    });
+    expect(container.textContent).toContain("Respuesta de s-1");
+
+    await act(async () => root.render(<SessionResultsPage sessionId="s-2" apiBaseUrl={API} />));
+    expect(container.textContent).not.toContain("Respuesta de s-1");
+  });
+
+  it("un error del chat no oculta los indicadores", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        if (url.endsWith("/chat")) {
+          return Promise.resolve(
+            json({
+              status: "error",
+              message: "La pregunta tardó demasiado. Podés volver a intentar.",
+              session_id: "s-1",
+              shop_id: "shop-1",
+              shop_name: null,
+              scope: null,
+              figures: [],
+              model_calls: 0,
+            }),
+          );
+        }
+        if (url.endsWith("/processed-sessions")) return Promise.resolve(json([completedRow()]));
+        if (url.endsWith("/sessions/s-1")) return Promise.resolve(json(detail("available")));
+        if (url.includes("/scene-versions/")) return Promise.resolve(json({ shops: [{ shop_id: "shop-1", name: "Local" }] }));
+        if (url.includes("/metrics")) return Promise.resolve(json(metrics));
+        if (url.includes("/events")) return Promise.resolve(json([]));
+        if (url.includes("/position-samples")) {
+          return Promise.resolve(json({ job_id: "j-1", availability: "unavailable", samples: [] }));
+        }
+        return Promise.resolve(json({}));
+      }),
+    );
+
+    await act(async () => root.render(<SessionResultsPage sessionId="s-1" apiBaseUrl={API} />));
+    const field = container.querySelector('input[name="question"]') as HTMLInputElement;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    await act(async () => {
+      setValue?.call(field, "tráfico");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    expect(container.textContent).toContain("La pregunta tardó demasiado. Podés volver a intentar.");
+    expect(container.textContent).toContain("Tráfico");
+  });
 });

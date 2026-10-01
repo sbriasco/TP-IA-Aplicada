@@ -74,6 +74,7 @@ function removeTemporaryDirectories() {
 }
 environment.FLOWSIGHT_VIDEOS_DIR = videosDirectory;
 environment.FLOWSIGHT_MACHINE_ID = "e2e-ci";
+environment.FLOWSIGHT_CHAT_FAKE_DRAFTER = "1";
 
 const clip = spawnSync(python, ["-m", "flowsight.video.fixtures", clipDirectory, "--size", "1280x720"], {
   cwd: backend,
