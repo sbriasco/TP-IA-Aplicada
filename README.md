@@ -8,6 +8,8 @@ FlowSight busca transformar videos en información sobre circulación, entradas 
 
 El procesamiento de video se ejecuta localmente. PostgreSQL puede ser local o compartido en Azure según configuración. El chat consulta un modelo disponible en Azure desde el backend.
 
+Para preparar la presentación en otra PC, seguir la [guía para el compañero](docs/demo-companero.md), con configuración, migraciones, orden de inicio y ensayo del chat.
+
 ## Estado del proyecto
 
 El proyecto está en desarrollo. Los incrementos implementados y sus límites son:
