@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import json
+import time
 import uuid
 from decimal import Decimal
 from pathlib import Path
 
 from flowsight.preview.broker import PreviewUpdate
+
+_REPLACE_ATTEMPTS = 20
+_REPLACE_DELAY_S = 0.02
 
 
 def snapshot_path(videos_dir: Path, session_id: uuid.UUID, job_id: uuid.UUID) -> Path:
@@ -28,7 +32,14 @@ def write_preview_snapshot(path: Path, update: PreviewUpdate) -> None:
     }
     temporary = path.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(payload), encoding="utf-8")
-    temporary.replace(path)
+    for attempt in range(_REPLACE_ATTEMPTS):
+        try:
+            temporary.replace(path)
+            return
+        except OSError:
+            if attempt + 1 >= _REPLACE_ATTEMPTS:
+                return
+            time.sleep(_REPLACE_DELAY_S)
 
 
 def read_preview_snapshot(path: Path) -> PreviewUpdate | None:

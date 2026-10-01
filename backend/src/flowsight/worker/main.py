@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,6 +19,7 @@ def bootstrap_worker() -> Settings:
 
 
 def run_worker() -> None:
+    logging.basicConfig(level=logging.INFO)
     settings = bootstrap_worker()
     engine = create_database_engine(settings)
     factory = create_session_factory(engine)

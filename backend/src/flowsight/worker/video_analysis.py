@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
@@ -38,6 +39,8 @@ from flowsight.vision.overlay import render_overlay_jpeg
 from flowsight.vision.spatial import ShopGeometry, SpatialCounter, normalized_foot
 from flowsight.vision.trajectory import TrajectoryWriter, trajectory_relative_path
 
+logger = logging.getLogger(__name__)
+
 _FAILURE_MESSAGES = {
     "video_unavailable": "El video de la sesión no está en este equipo.",
     "model_unavailable": "El modelo de detección no está disponible.",
@@ -71,6 +74,7 @@ def process_video_analysis_job(
     except _AnalysisError as error:
         _fail(factory, job_id, error.code, now())
     except Exception:
+        logger.exception("video_analysis failed job_id=%s", job_id)
         _fail(factory, job_id, "analysis_failed", now())
 
 
@@ -317,7 +321,10 @@ def _publish_preview(
         schema_version="2",
         measures=tuple(dict(item) for item in measures),
     )
-    write_preview_snapshot(snapshot_path(settings.videos_dir, session_id, job_id), update)
+    try:
+        write_preview_snapshot(snapshot_path(settings.videos_dir, session_id, job_id), update)
+    except OSError:
+        return
 
 
 def _fail(
