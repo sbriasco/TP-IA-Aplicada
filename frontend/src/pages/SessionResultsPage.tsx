@@ -22,8 +22,9 @@ import { PositionHeatmap } from "../components/PositionHeatmap";
 import { SessionChatPanel } from "../components/SessionChatPanel";
 import { Link } from "../components/Link";
 import { MetricCard } from "../components/MetricCard";
-import { EVENT_NAME, METRIC_NAME } from "../presentation/metrics";
-import { visibleBuckets } from "../flow/visibleBuckets";
+import { VideoTimeRange } from "../components/VideoTimeRange";
+import { presenceSeries } from "../flow/presenceSeries";
+import { EVENT_NAME, METRIC_NAME, peakCaption } from "../presentation/metrics";
 import type { SessionDetail } from "../types/session";
 
 import styles from "./SessionResultsPage.module.css";
@@ -141,8 +142,9 @@ export function SessionResultsPage({
     session?.video?.availability === "missing" || session?.video?.availability === "mismatch";
   const finishedBadly = row?.status === "failed" || row?.status === "cancelled";
   const inProgress = row?.status === "pending" || row?.status === "processing";
-  const minutes =
-    metrics === null ? [] : visibleBuckets(metrics.flow, fromSeconds, toSeconds === 0 ? Number.POSITIVE_INFINITY : toSeconds);
+  const durationSeconds = session?.video?.duration_seconds ?? 0;
+  const rangeEnd = toSeconds === 0 ? durationSeconds : toSeconds;
+  const series = presenceSeries(events, fromSeconds, rangeEnd);
 
   const frame = session?.reference_frame;
   return (
@@ -191,14 +193,17 @@ export function SessionResultsPage({
           <div className={styles.analysisGrid}>
             <section className={styles.panel} aria-labelledby="flow-title">
               <h2 id="flow-title">Flujo temporal</h2>
-              <p className={styles.description}>Tracks observados por minuto. El tiempo corresponde al video.</p>
-              <div className={styles.filters}>
-                <label>Desde <span>(s)</span><input aria-label="Desde" type="number" min={0} value={fromSeconds} onChange={(event) => setFromSeconds(Number(event.target.value))} /></label>
-                <label>Hasta <span>(s)</span><input aria-label="Hasta" type="number" min={0} value={toSeconds} onChange={(event) => setToSeconds(Number(event.target.value))} /></label>
-              </div>
-              <details className={styles.filterHelp}><summary>Alcance del tramo</summary><p className={styles.filterNote}>El tramo filtra el flujo y los hechos. Los conteos del flujo conservan sus intervalos de origen: un recorte no recalcula las cifras.</p></details>
-              {metrics !== null && <p className={styles.peak}>Horario pico: {metrics.peak.start_seconds} s, {metrics.peak.track_count} tracks observados <span>· Toda la sesión</span></p>}
-              <Suspense fallback={<p role="status">Cargando gráfico…</p>}><FlowChart buckets={minutes} /></Suspense>
+              <p className={styles.description}>Tracks en la zona frontal en cada segundo. Sube al entrar y baja al salir.</p>
+              <VideoTimeRange
+                durationSeconds={durationSeconds}
+                fromSeconds={fromSeconds}
+                toSeconds={rangeEnd}
+                onFromChange={setFromSeconds}
+                onToChange={setToSeconds}
+              />
+              <details className={styles.filterHelp}><summary>Alcance del tramo</summary><p className={styles.filterNote}>El tramo recorta este gráfico y los hechos. Si se pierde el seguimiento, esa persona no sigue contando. Los indicadores de arriba no cambian.</p></details>
+              {metrics !== null && <p className={styles.peak}>{peakCaption(metrics.peak.start_seconds, metrics.peak.track_count, durationSeconds)} <span>· Toda la sesión</span></p>}
+              <Suspense fallback={<p role="status">Cargando gráfico…</p>}><FlowChart points={series} fromSeconds={fromSeconds} toSeconds={rangeEnd} /></Suspense>
             </section>
             <section className={styles.panel} aria-labelledby="scene-title">
               <h2 id="scene-title">Distribución en la escena</h2>

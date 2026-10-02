@@ -37,6 +37,13 @@ export function formatVideoTime(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 }
 
+export function peakCaption(startSeconds: number, trackCount: number, durationSeconds: number): string {
+  if (durationSeconds > 0 && durationSeconds < 60) {
+    return `No hay horario pico. El video dura menos de un minuto y en ese tramo se observaron ${trackCount} tracks.`;
+  }
+  return `Horario pico: ${formatVideoTime(startSeconds)}–${formatVideoTime(startSeconds + 60)}, ${trackCount} tracks observados`;
+}
+
 export const EVENT_NAME: Record<string, string> = {
   zone_enter: "Ingreso a zona", zone_exit: "Salida de zona", store_pass: "Paso frente al local",
   store_enter: "Entrada al local", store_exit: "Salida del local", dwell: "Permanencia observable",

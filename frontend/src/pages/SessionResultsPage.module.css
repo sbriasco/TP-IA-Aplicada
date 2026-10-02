@@ -15,7 +15,7 @@
 .moreMetrics { margin-top: 8px; }
 .moreMetrics > summary { color: var(--fs-accent); cursor: pointer; font-size: 12px; padding: 4px 0; }
 .moreMetrics[open] > summary { margin-bottom: 8px; }
-.filterHelp { font-size: 11px; color: var(--fs-muted); margin-top: 8px; }
+.filterHelp { font-size: 11px; color: var(--fs-muted); margin-top: 4px; }
 .filterHelp > summary { cursor: pointer; }
 .analysisGrid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; gap: 12px; }
 .analysisGrid h2 { font-size: 14px; margin: 0 0 5px; }

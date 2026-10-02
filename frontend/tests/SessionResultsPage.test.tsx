@@ -150,10 +150,10 @@ describe("SessionResultsPage", () => {
     expect(container.textContent).toContain("visible");
     expect(container.textContent).toContain("observable");
     expect(container.textContent).toContain("no disponible");
-    expect(container.textContent).toContain("Horario pico: 0 s, 4");
+    expect(container.textContent).toContain("Horario pico: 0:00–1:00, 4");
     const metricsBefore = calls.filter((url) => url.includes("/metrics")).length;
 
-    const from = container.querySelector('input[aria-label="Desde"]') as HTMLInputElement;
+    const from = container.querySelector('input[aria-label="Inicio del tramo"]') as HTMLInputElement;
     const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
     await act(async () => {
       setValue?.call(from, "50");

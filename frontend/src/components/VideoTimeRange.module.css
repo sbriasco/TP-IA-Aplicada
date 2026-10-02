@@ -1,0 +1,45 @@
+.range { display: grid; gap: 10px; margin: 10px 0 28px; }
+.labels { display: flex; justify-content: space-between; gap: 8px; color: var(--fs-muted); font-size: 11px; line-height: 1.2; }
+.labels span:nth-child(2) { color: var(--fs-ink); font-weight: 600; }
+.control { position: relative; height: 16px; margin: 0 8px; }
+.rail, .selection {
+  position: absolute;
+  top: 50%;
+  height: 4px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  pointer-events: none;
+}
+.rail { left: 0; right: 0; background: #e5ecef; }
+.selection { background: var(--fs-accent); }
+.handle {
+  position: absolute;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  max-width: 16px;
+  max-height: 16px;
+  padding: 0;
+  line-height: 0;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: var(--fs-accent);
+  box-shadow: 0 0 0 1px var(--fs-accent);
+  transform: translate(-50%, -50%);
+  cursor: grab;
+  touch-action: none;
+}
+.handle:hover { background: var(--fs-accent); border-color: white; }
+.handle:focus-visible { outline: none; box-shadow: 0 0 0 3px #d8e8e9; }
+.native {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  border: 0;
+}
