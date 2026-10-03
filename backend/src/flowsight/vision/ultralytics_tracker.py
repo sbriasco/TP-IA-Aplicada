@@ -88,14 +88,18 @@ class UltralyticsTracker:
         return model
 
     def _track(self, model: object, frame: object) -> object:
-        return model.track(  # type: ignore[attr-defined]
-            source=frame,
-            persist=True,
-            tracker="bytetrack.yaml",
-            device=self._device,
-            verbose=False,
-            classes=[0],
-        )
+        # Ultralytics 8.4 maps the old `half=True` flag to `quantize=16` and warns on every call.
+        kwargs: dict[str, object] = {
+            "source": frame,
+            "persist": True,
+            "tracker": "bytetrack.yaml",
+            "device": self._device,
+            "verbose": False,
+            "classes": [0],
+        }
+        if self._device == "cuda":
+            kwargs["quantize"] = 16
+        return model.track(**kwargs)  # type: ignore[attr-defined]
 
     def _remember(self, limitation: str) -> None:
         if limitation not in self.limitations:

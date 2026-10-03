@@ -26,6 +26,7 @@ from flowsight.db.models import (
     JobKind,
     JobStatus,
     JobStatusTransition,
+    LineCrossing,
     Observation,
     ProcessingJob,
     SceneEntryLine,
@@ -39,12 +40,14 @@ from flowsight.db.models import (
     VideoSource,
     ZoneRole,
 )
-from flowsight.preview.snapshot import snapshot_path
+from flowsight.preview.snapshot import snapshot_path, write_preview_snapshot
 from flowsight.services.cameras import get_or_create_camera
 from flowsight.services.jobs import transition_job
 from flowsight.video.fixtures import CLIP_FPS, write_clip
 from flowsight.video.probe import probe_video
+from flowsight.vision.detector import Detection
 from flowsight.vision.fake import FakeDetector
+from flowsight.worker import video_analysis as video_analysis_module
 from flowsight.worker.lifecycle import (
     claim_next_job,
     process_next_job,
@@ -274,11 +277,13 @@ def test_halfway_progress_and_official_measures(
         settings=Settings(_env_file=None),
     )
     assert processed is not None
-    assert abs(float(captured["frames_analyzed"]) - float(captured["half"])) <= 1
-    expected_progress = (
-        float(captured["frames_analyzed"]) / float(captured["frames_total"]) * 100
-    )
-    assert captured["progress"] == pytest.approx(expected_progress)
+    # Frame 25 of 50: the last persisted batch is frame 15. The preview still
+    # follows the frame just analyzed (index 24 → 50%).
+    assert captured["frames_analyzed"] == 15
+    assert captured["half"] == 25
+    # The snapshot is the latest image allowed by the 5 fps cap, so it can lag
+    # the frame being analyzed. It still belongs to this video and stays partial.
+    assert 0 < float(captured["progress"]) <= 50
     assert captured["preview_partial"] == [True, True, True]
 
     application = create_app()
@@ -367,6 +372,143 @@ def test_cancel_mid_video_keeps_partial_measures_and_is_not_retried(
         assert stored.status is JobStatus.CANCELLED
         assert stored.failure_code is None
         assert claim_next_job(database_session, "worker-new", datetime.now(UTC)) is None
+
+
+def test_preview_snapshots_follow_five_per_second_while_every_frame_is_analyzed(
+    session_factory, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = _register_video_job(session_factory, tmp_path, "preview-cap", datetime.now(UTC))
+    published: list[int] = []
+    clock = {"t": 0.0}
+
+    def monotonic() -> float:
+        clock["t"] += 0.01
+        return clock["t"]
+
+    def record(path, update) -> None:
+        published.append(update.frame_index)
+        write_preview_snapshot(path, update)
+
+    monkeypatch.setattr(video_analysis_module, "_monotonic", monotonic)
+    monkeypatch.setattr(video_analysis_module, "write_preview_snapshot", record)
+    processed = process_next_job(
+        session_factory,
+        worker_id="worker-video",
+        fixture_path=FIXTURE_PATH,
+        now=lambda: datetime.now(UTC),
+        settings=Settings(_env_file=None),
+    )
+    assert processed == job.id
+    assert published == [0, 20, 40, 49]
+    with session_factory() as database_session:
+        stored = database_session.get(ProcessingJob, job.id)
+        assert stored is not None
+        assert stored.status is JobStatus.COMPLETED
+        assert stored.frames_analyzed == stored.frames_total == 50
+
+
+def test_measures_flush_every_fifteen_frames_and_on_each_crossing(
+    session_factory, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = _register_video_job(session_factory, tmp_path, "batches", datetime.now(UTC))
+    _add_shop(session_factory, job)
+    progress: list[int | None] = []
+    crossings_at_frame_3: list[int] = []
+
+    def detect(self, frame_index, width, height, frame=None):
+        del self, width, height, frame
+        with session_factory() as database_session:
+            stored = database_session.get(ProcessingJob, job.id)
+            progress.append(None if stored is None else stored.frames_analyzed)
+            if frame_index == 3:
+                crossings_at_frame_3.append(
+                    database_session.scalar(
+                        select(func.count())
+                        .select_from(LineCrossing)
+                        .where(LineCrossing.job_id == job.id)
+                    )
+                    or 0
+                )
+        # y=72 is side B of the entry line; y=192 is side A. Frame 1 opens a
+        # pending exit and frame 2 reverses it, which decides two oscillations.
+        y2 = 192 if frame_index == 1 else 72
+        return [Detection(track_id=1, bbox=(10, 10, 40, y2))]
+
+    monkeypatch.setattr(FakeDetector, "detect", detect)
+    processed = process_next_job(
+        session_factory,
+        worker_id="worker-video",
+        fixture_path=FIXTURE_PATH,
+        now=lambda: datetime.now(UTC),
+        settings=Settings(_env_file=None),
+    )
+    assert processed == job.id
+    assert progress[0] == 0
+    assert progress[1] == 0
+    assert progress[2] == 0
+    assert progress[3] == 3
+    assert crossings_at_frame_3 == [2]
+    assert progress[14] == 3
+    assert progress[15] == 15
+    assert progress[29] == 15
+    assert progress[30] == 30
+    assert progress[45] == 45
+    assert progress[49] == 45
+
+    with session_factory() as database_session:
+        stored = database_session.get(ProcessingJob, job.id)
+        assert stored is not None
+        assert stored.status is JobStatus.COMPLETED
+        assert stored.frames_analyzed == stored.frames_total == 50
+        measures = database_session.scalars(
+            select(AnalysisMeasure).where(AnalysisMeasure.job_id == job.id)
+        ).all()
+    assert {(measure.code.value, measure.value, measure.partial) for measure in measures} == {
+        ("entries", 0, False),
+        ("exits", 0, False),
+        ("visible_occupancy", 1, False),
+    }
+
+
+def test_cancel_is_persisted_on_the_next_fifteen_frame_flush(
+    session_factory, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = _register_video_job(session_factory, tmp_path, "cancel-batch", datetime.now(UTC))
+    _add_shop(session_factory, job)
+    original = FakeDetector.detect
+
+    def detect(self, frame_index, width, height, frame=None):
+        if frame_index == 3:
+            with session_factory.begin() as writing:
+                transition_job(
+                    writing,
+                    job_id=job.id,
+                    target=JobStatus.CANCELLED,
+                    occurred_at=datetime.now(UTC),
+                    reason_code="operator_cancelled",
+                )
+        return original(self, frame_index, width, height, frame)
+
+    monkeypatch.setattr(FakeDetector, "detect", detect)
+    processed = process_next_job(
+        session_factory,
+        worker_id="worker-video",
+        fixture_path=FIXTURE_PATH,
+        now=lambda: datetime.now(UTC),
+        settings=Settings(_env_file=None),
+    )
+    assert processed == job.id
+    with session_factory() as database_session:
+        stored = database_session.get(ProcessingJob, job.id)
+        assert stored is not None
+        assert stored.status is JobStatus.CANCELLED
+        assert stored.frames_analyzed == 15
+        assert stored.frames_total == 50
+        measures = database_session.scalars(
+            select(AnalysisMeasure).where(AnalysisMeasure.job_id == job.id)
+        ).all()
+        assert measures
+        assert all(measure.partial is True for measure in measures)
 
 
 def test_orphan_processing_video_job_fails_as_interrupted(session_factory, tmp_path: Path) -> None:

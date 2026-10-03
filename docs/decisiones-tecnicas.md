@@ -89,6 +89,8 @@ Se utiliza Ultralytics YOLO sobre PyTorch, con OpenCV para el manejo de frames. 
 
 En la RTX, un video de 2360 frames terminó con `execution_mode=cuda`, sin limitaciones, a 29,8 frames por segundo de procesamiento. Esa corrida usó `yolov8n` y quedó en `specs/005-procesamiento-tracking/validation/reference-run.json`. No se volvió a medir con `yolo11m`. Esa cifra no promete la misma velocidad para otros videos ni para el peso nuevo. Los equipos sin placa siguen en CPU.
 
+El worker sigue recorriendo todos los frames en orden. Desde el 2026-10-02 la decodificación del frame siguiente se solapa con el análisis del actual, sin descartar frames. Las medidas y el avance se escriben en PostgreSQL cada 15 frames, en cada cruce decidido, al cancelar y al terminar. La previsualización se publica como máximo a `preview_max_fps` (5) imágenes por segundo de reloj, más el primer y el último frame; el análisis sigue recorriendo todos los frames. En CUDA la inferencia pide FP16 con `quantize=16` (Ultralytics 8.4 traduce el antiguo `half=True` a ese valor y avisa en cada llamada). En CPU no se pasa `quantize`. Una comparación de inferencia sola, el 2026-10-02, sobre un clip sintético de 1280×720 repetido hasta 200 frames y sin personas, dio 82,3 fps en FP32 y 95,4 fps en FP16 en esta RTX. No incluye SQL ni preview, y no reemplaza una medición del worker con un video real.
+
 Antes de distribuir el proyecto, registrar las condiciones de licencia aplicables a la versión de Ultralytics y a los pesos seleccionados.
 
 ## Trabajos y previsualización

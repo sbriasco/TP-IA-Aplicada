@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
@@ -31,6 +32,7 @@ from flowsight.preview.snapshot import snapshot_path, write_preview_snapshot
 from flowsight.services.jobs import transition_job
 from flowsight.services.measures import close_measures, sync_measures
 from flowsight.services.scene_metrics import persist_completed_scene
+from flowsight.video.decode import iter_video_frames
 from flowsight.video.storage import video_path
 from flowsight.vision.detector import Detection, Detector, ModelUnavailable, build_detector
 from flowsight.vision.events import SceneEventRecorder
@@ -40,6 +42,30 @@ from flowsight.vision.spatial import ShopGeometry, SpatialCounter, normalized_fo
 from flowsight.vision.trajectory import TrajectoryWriter, trajectory_relative_path
 
 logger = logging.getLogger(__name__)
+
+FLUSH_EVERY_FRAMES = 15
+
+
+def _monotonic() -> float:
+    return time.monotonic()
+
+
+def preview_is_due(
+    *,
+    frame_index: int,
+    frames_total: int,
+    now_s: float,
+    last_publish_s: float | None,
+    max_fps: int,
+) -> bool:
+    """True for the first frame, the last frame, and at most `max_fps` images per second."""
+
+    if frame_index == 0 or frame_index + 1 == frames_total:
+        return True
+    if last_publish_s is None:
+        return True
+    # A gap that lands on the interval must count. Binary fractions of 0.2 s sit just below it.
+    return now_s - last_publish_s + 1e-6 >= 1 / max_fps
 
 _FAILURE_MESSAGES = {
     "video_unavailable": "El video de la sesión no está en este equipo.",
@@ -126,9 +152,10 @@ def _run(
     recorder = SceneEventRecorder(shops, fps=float(fps))
     frame_index = 0
     cancelled = False
+    last_preview_s: float | None = None
     try:
-        while frame_index < frames_total:
-            ok, frame = capture.read()
+        for ok, decoded in iter_video_frames(capture, frames_total):
+            frame = cast(np.ndarray, decoded)
             if not ok:
                 raise _AnalysisError("analysis_failed")
             timestamp = (Decimal(frame_index) / Decimal(str(fps))).quantize(Decimal("0.000001"))
@@ -151,38 +178,48 @@ def _run(
                 finished = counter.finish()
                 facts.extend(finished)
                 recorder.accept_crossings(finished)
-            with factory.begin() as database_session:
-                stored = database_session.get(ProcessingJob, job_id)
-                if stored is None or stored.status not in {
-                    JobStatus.PROCESSING,
-                    JobStatus.CANCELLED,
-                }:
-                    raise _AnalysisError("analysis_failed")
-                cancelled = stored.status is JobStatus.CANCELLED
-                stored.frames_analyzed = frames_analyzed
-                stored.analyzed_video_timestamp_seconds = timestamp
-                sync_measures(
-                    database_session,
-                    job_id=job_id,
-                    session_id=session_id,
-                    video_timestamp_seconds=timestamp,
-                    counts=counter.counts(),
-                    facts=facts,
-                    fps=fps,
-                )
-            _publish_preview(
-                settings,
-                session_id=session_id,
-                job_id=job_id,
+            if _should_flush(frames_analyzed, frames_total, facts):
+                with factory.begin() as database_session:
+                    stored = database_session.get(ProcessingJob, job_id)
+                    if stored is None or stored.status not in {
+                        JobStatus.PROCESSING,
+                        JobStatus.CANCELLED,
+                    }:
+                        raise _AnalysisError("analysis_failed")
+                    cancelled = stored.status is JobStatus.CANCELLED
+                    stored.frames_analyzed = frames_analyzed
+                    stored.analyzed_video_timestamp_seconds = timestamp
+                    sync_measures(
+                        database_session,
+                        job_id=job_id,
+                        session_id=session_id,
+                        video_timestamp_seconds=timestamp,
+                        counts=counter.counts(),
+                        facts=facts,
+                        fps=fps,
+                    )
+            now_s = _monotonic()
+            if preview_is_due(
                 frame_index=frame_index,
-                timestamp=timestamp,
                 frames_total=frames_total,
-                frame=frame,
-                detections=detections,
-                zones=zones,
-                entry_line=entry_line,
-                measures=counter.measure_payloads(partial=True),
-            )
+                now_s=now_s,
+                last_publish_s=last_preview_s,
+                max_fps=settings.preview_max_fps,
+            ):
+                _publish_preview(
+                    settings,
+                    session_id=session_id,
+                    job_id=job_id,
+                    frame_index=frame_index,
+                    timestamp=timestamp,
+                    frames_total=frames_total,
+                    frame=frame,
+                    detections=detections,
+                    zones=zones,
+                    entry_line=entry_line,
+                    measures=counter.measure_payloads(partial=True),
+                )
+                last_preview_s = now_s
             frame_index += 1
             if cancelled:
                 break
@@ -230,6 +267,16 @@ def _run(
     if evidence is not None and settings.videos_dir is not None:
         relative = f"derived/{evidence_session_id}/{job_id}/evidence.json"
         write_reference_summary(settings.videos_dir / relative, evidence)
+
+
+def _should_flush(frames_analyzed: int, frames_total: int, facts: Sequence[object]) -> bool:
+    """Persist on each decided crossing, every 15 frames, and on the last frame."""
+
+    return (
+        frames_analyzed == frames_total
+        or frames_analyzed % FLUSH_EVERY_FRAMES == 0
+        or bool(facts)
+    )
 
 
 def _scene_context(
