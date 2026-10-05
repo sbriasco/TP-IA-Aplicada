@@ -32,7 +32,7 @@ def list_webcams() -> list[dict]:
             stderr=subprocess.DEVNULL,
             encoding="utf-8",
             timeout=3,
-            creationflags=subprocess.CREATE_NO_WINDOW,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             check=False,
         )
         if result.returncode != 0 or len(result.stdout) > 65536:

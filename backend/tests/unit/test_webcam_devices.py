@@ -7,6 +7,22 @@ from flowsight.capture.contracts import CaptureError
 from flowsight.capture.devices import list_webcams
 
 
+@pytest.mark.parametrize("has_windows_flag", [False, True])
+def test_windows_enumeration_handles_host_without_windows_flag(monkeypatch, has_windows_flag):
+    monkeypatch.setattr("flowsight.capture.devices.sys.platform", "win32")
+    if has_windows_flag:
+        monkeypatch.setattr(subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
+    else:
+        monkeypatch.delattr(subprocess, "CREATE_NO_WINDOW", raising=False)
+
+    def enumerate_devices(*args, **kwargs):
+        assert kwargs["creationflags"] == (0x08000000 if has_windows_flag else 0)
+        return SimpleNamespace(returncode=0, stdout='["USB Webcam"]')
+
+    monkeypatch.setattr("flowsight.capture.devices.subprocess.run", enumerate_devices)
+    assert list_webcams() == [{"device_index": 0, "label": "USB Webcam", "verified": False}]
+
+
 def test_named_devices_keep_native_order_and_duplicate_names(monkeypatch):
     monkeypatch.setattr("flowsight.capture.devices.sys.platform", "win32")
     monkeypatch.setattr(
