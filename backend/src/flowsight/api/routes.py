@@ -27,6 +27,8 @@ from flowsight.api.schemas import (
     JobCreate,
     JobResponse,
     JobTraceResponse,
+    LivePositionSamplesResponse,
+    LiveStateResponse,
     MetricValueResponse,
     PositionSampleResponse,
     PositionSamplesResponse,
@@ -52,6 +54,8 @@ from flowsight.db.models import (
     Event,
     JobKind,
     JobStatus,
+    LiveAnalysisState,
+    LiveSource,
     Observation,
     ProcessingJob,
     ReferenceFrame,
@@ -75,6 +79,7 @@ from flowsight.services.cameras import (
     rename_camera,
 )
 from flowsight.services.chat import ChatAnswer, SessionMissing, ask
+from flowsight.services.chat_metrics import LiveChatUnavailable
 from flowsight.services.jobs import (
     InvalidJobTransition,
     JobRequestError,
@@ -82,7 +87,11 @@ from flowsight.services.jobs import (
     transition_job,
 )
 from flowsight.services.measures import list_measures
-from flowsight.services.position_samples import JobNotFound, list_position_samples
+from flowsight.services.position_samples import (
+    JobNotFound,
+    LivePositionSampleSet,
+    list_position_samples,
+)
 from flowsight.services.processed_sessions import list_processed_sessions
 from flowsight.services.scene_metrics import (
     ResultIncomplete,
@@ -332,6 +341,10 @@ def post_chat(payload: ChatRequest, request: Request, database: Database) -> Cha
         )
     except SessionMissing:
         raise not_found("La sesión no existe.") from None
+    except LiveChatUnavailable:
+        raise api_error(
+            409, "live_chat_unavailable", "El chat no está disponible para análisis de webcam."
+        ) from None
     except ShopNotInSession:
         raise not_found("El local no pertenece a esta sesión.") from None
     return _chat_response(answer)
@@ -456,6 +469,7 @@ def session_detail(
         raise not_found("Sesión inexistente.")
     source = database.get(VideoSource, session_id)
     frame = database.get(ReferenceFrame, session_id)
+    live_source = database.get(LiveSource, session_id)
 
     video = None
     duplicates: list[uuid.UUID] = []
@@ -481,6 +495,7 @@ def session_detail(
         video=video,
         reference_frame=None if frame is None else ReferenceFrameResponse.model_validate(frame),
         duplicate_session_ids=duplicates,
+        live_source=live_source,
     )
 
 
@@ -568,6 +583,7 @@ def scene_error(error: SceneError) -> HTTPException:
 
 # Status and message for every job request error code (FR-025 to FR-028).
 _JOB_ERRORS: dict[str, tuple[int, str]] = {
+    "machine_busy": (409, "Este equipo ya tiene un análisis o una preparación en curso."),
     "scene_version_removed": (
         409,
         "La configuración elegida fue eliminada. "
@@ -683,13 +699,21 @@ def delete_scene_version(scene_version_id: uuid.UUID, database: Database) -> Res
     response_model=JobResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def create_job(session_id: uuid.UUID, payload: JobCreate, database: Database) -> ProcessingJob:
+def create_job(
+    session_id: uuid.UUID, payload: JobCreate, database: Database, request: Request
+) -> ProcessingJob:
     flow_session = get_active_session(database, session_id)
     if flow_session is None:
         raise not_found("Sesión inexistente.")
 
     try:
-        job = create_job_for_session(database, flow_session, payload.kind, payload.scene_version_id)
+        job = create_job_for_session(
+            database,
+            flow_session,
+            payload.kind,
+            payload.scene_version_id,
+            target_machine_id=request.app.state.settings.machine_id,
+        )
     except JobRequestError as error:
         database.rollback()
         status_code, message = _JOB_ERRORS[error.code]
@@ -699,17 +723,28 @@ def create_job(session_id: uuid.UUID, payload: JobCreate, database: Database) ->
 
 
 @router.get("/jobs/{job_id}", response_model=JobResponse)
-def get_job(job_id: uuid.UUID, database: Database) -> ProcessingJob:
+def get_job(job_id: uuid.UUID, database: Database) -> JobResponse:
     job = get_job_record(database, job_id)
     if job is None:
         raise not_found("Trabajo inexistente.")
-    return job
+    return job_response(database, job)
+
+
+def job_response(database: DatabaseSession, job: ProcessingJob) -> JobResponse:
+    response = JobResponse.model_validate(job)
+    if job.kind is JobKind.LIVE_ANALYSIS:
+        state = database.get(LiveAnalysisState, job.id)
+        response.live_state = None if state is None else LiveStateResponse.model_validate(state)
+    return response
 
 
 @router.post("/jobs/{job_id}/cancel", response_model=JobResponse)
 def cancel_job(job_id: uuid.UUID, database: Database) -> ProcessingJob:
-    if get_job_record(database, job_id) is None:
+    job = get_job_record(database, job_id)
+    if job is None:
         raise not_found("Trabajo inexistente.")
+    if job.kind is JobKind.LIVE_ANALYSIS:
+        raise api_error(409, "use_live_stop", "Para finalizar una webcam, usá Detener en vivo.")
     try:
         transition_job(
             database,
@@ -732,14 +767,27 @@ def cancel_job(job_id: uuid.UUID, database: Database) -> ProcessingJob:
     return stored
 
 
-@router.get("/jobs/{job_id}/position-samples", response_model=PositionSamplesResponse)
+@router.get(
+    "/jobs/{job_id}/position-samples",
+    response_model=PositionSamplesResponse | LivePositionSamplesResponse,
+)
 def get_position_samples(
     job_id: uuid.UUID, request: Request, database: Database
-) -> PositionSamplesResponse:
+) -> PositionSamplesResponse | LivePositionSamplesResponse:
     try:
         sample_set = list_position_samples(database, request.app.state.settings, job_id)
     except JobNotFound:
         raise not_found("El análisis no existe.") from None
+    if isinstance(sample_set, LivePositionSampleSet):
+        return LivePositionSamplesResponse(
+            job_id=sample_set.job_id,
+            availability=sample_set.availability,
+            sample_count=sample_set.sample_count,
+            candidate_count=sample_set.candidate_count,
+            capacity=sample_set.capacity,
+            returned_count=len(sample_set.samples),
+            samples=sample_set.samples,
+        )
     return PositionSamplesResponse(
         job_id=sample_set.job_id,
         availability=sample_set.availability,
@@ -837,6 +885,11 @@ async def preview_job(websocket: WebSocket, job_id: uuid.UUID) -> None:
     await websocket.accept()
     if job_status in _TERMINAL_STATUSES:
         await websocket.send_json(_terminal_message(session_id, job_id, job_status))
+        return
+    if job_kind is JobKind.LIVE_ANALYSIS:
+        from flowsight.api.live_public import preview_live_job
+
+        await preview_live_job(websocket, job_id, session_id)
         return
     if job_kind is JobKind.VIDEO_ANALYSIS:
         await _preview_video_analysis(websocket, job_id, session_id)

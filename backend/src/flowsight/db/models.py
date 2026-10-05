@@ -37,11 +37,13 @@ class Base(DeclarativeBase):
 class SourceKind(str, enum.Enum):
     SYNTHETIC = "synthetic"
     VIDEO_FILE = "video_file"
+    WEBCAM = "webcam"
 
 
 class JobKind(str, enum.Enum):
     SYNTHETIC_BASE_FLOW = "synthetic_base_flow"
     VIDEO_ANALYSIS = "video_analysis"
+    LIVE_ANALYSIS = "live_analysis"
 
 
 class JobStatus(str, enum.Enum):
@@ -107,7 +109,7 @@ class ProcessingJob(Base):
             name="fk_processing_jobs_scene_version",
         ),
         CheckConstraint(
-            "(kind = 'video_analysis') = "
+            "(kind IN ('video_analysis', 'live_analysis')) = "
             "(scene_version_id IS NOT NULL AND registered_camera_id IS NOT NULL)",
             name="ck_processing_jobs_video_analysis_scene",
         ),
@@ -131,6 +133,7 @@ class ProcessingJob(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     claimed_by: Mapped[str | None] = mapped_column(String(120))
+    target_machine_id: Mapped[str | None] = mapped_column(String(40))
     failure_code: Mapped[str | None] = mapped_column(String(120))
     failure_message: Mapped[str | None] = mapped_column(String(500))
     processing_duration_ms: Mapped[int | None] = mapped_column(Integer)
@@ -685,3 +688,240 @@ class TrafficBucket(Base):
     bucket_index: Mapped[int] = mapped_column(Integer)
     start_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6))
     track_count: Mapped[int] = mapped_column(Integer)
+
+
+class WorkerMachine(Base):
+    __tablename__ = "worker_machines"
+    __table_args__ = (
+        CheckConstraint("capture_state IN ('idle','probing','analyzing')"),
+        CheckConstraint("(reservation_id IS NULL) = (reserved_until IS NULL)"),
+    )
+
+    machine_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    worker_id: Mapped[str] = mapped_column(String(120))
+    owner_epoch: Mapped[uuid.UUID] = mapped_column(Uuid)
+    heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    capture_state: Mapped[str] = mapped_column(String(20), default="idle")
+    reservation_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    reserved_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class LiveSource(Base):
+    __tablename__ = "live_sources"
+    __table_args__ = (
+        CheckConstraint("device_index >= 0"),
+        CheckConstraint("width BETWEEN 1 AND 1920 AND height BETWEEN 1 AND 1080"),
+        CheckConstraint("label_mode IN ('directions','access')"),
+        CheckConstraint("capture_backend IN ('dshow','msmf','auto','fake')"),
+        UniqueConstraint("session_id", "machine_id"),
+    )
+
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sessions.id"), primary_key=True)
+    machine_id: Mapped[str] = mapped_column(ForeignKey("worker_machines.machine_id"))
+    device_index: Mapped[int] = mapped_column(Integer)
+    capture_backend: Mapped[str] = mapped_column(String(20))
+    width: Mapped[int] = mapped_column(Integer)
+    height: Mapped[int] = mapped_column(Integer)
+    reported_fps: Mapped[float | None] = mapped_column(Double)
+    label_mode: Mapped[str] = mapped_column(String(20), default="directions")
+    prepared_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    frame_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+def _live_job_fk() -> ForeignKeyConstraint:
+    return ForeignKeyConstraint(
+        ["job_id", "session_id"], ["processing_jobs.id", "processing_jobs.session_id"]
+    )
+
+
+def _live_segment_fk() -> ForeignKeyConstraint:
+    return ForeignKeyConstraint(
+        ["segment_id", "job_id", "session_id"],
+        [
+            "live_capture_segments.id",
+            "live_capture_segments.job_id",
+            "live_capture_segments.session_id",
+        ],
+    )
+
+
+def _live_state_fk() -> ForeignKeyConstraint:
+    return ForeignKeyConstraint(
+        ["job_id", "session_id"],
+        ["live_analysis_states.job_id", "live_analysis_states.session_id"],
+        deferrable=True,
+        initially="DEFERRED",
+    )
+
+
+class _LiveJobColumns:
+    job_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    session_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+
+
+class LiveAnalysisState(_LiveJobColumns, Base):
+    __tablename__ = "live_analysis_states"
+    __table_args__ = (
+        _live_job_fk(),
+        UniqueConstraint("job_id", "session_id", name="uq_live_state_job_session"),
+        ForeignKeyConstraint(
+            ["session_id", "machine_id"], ["live_sources.session_id", "live_sources.machine_id"]
+        ),
+        CheckConstraint(
+            "capture_status IN "
+            "('starting','connected','interrupted','awaiting_confirmation',"
+            "'stopping','ended')"
+        ),
+        CheckConstraint("elapsed_capture_seconds >= 0 AND last_capture_sequence >= 0"),
+        CheckConstraint("current_segment_index >= 0 AND revision >= 0"),
+        CheckConstraint("observed_seconds >= 0 AND missing_seconds >= 0"),
+        CheckConstraint("unconfirmed_crossings >= 0 AND sample_candidates_seen >= 0"),
+        CheckConstraint("sample_capacity = 20000"),
+    )
+
+    job_id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    machine_id: Mapped[str] = mapped_column(String(40))
+    capture_status: Mapped[str] = mapped_column(String(30), default="starting")
+    capture_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    capture_ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    elapsed_capture_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6), default=0)
+    last_capture_sequence: Mapped[int] = mapped_column(BigInteger, default=0)
+    last_analyzed_sequence: Mapped[int | None] = mapped_column(BigInteger)
+    current_segment_index: Mapped[int] = mapped_column(Integer, default=0)
+    stop_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    retry_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resume_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    checkpoint_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revision: Mapped[int] = mapped_column(BigInteger, default=0)
+    coverage_complete: Mapped[bool] = mapped_column(Boolean, default=True)
+    unknown_tail: Mapped[bool] = mapped_column(Boolean, default=False)
+    observed_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6), default=0)
+    missing_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6), default=0)
+    detector_parameters: Mapped[dict[str, object]] = mapped_column(JSONB, default=dict)
+    unconfirmed_crossings: Mapped[int] = mapped_column(Integer, default=0)
+    sample_candidates_seen: Mapped[int] = mapped_column(BigInteger, default=0)
+    sample_capacity: Mapped[int] = mapped_column(Integer, default=20000)
+
+
+class LiveCaptureSegment(_LiveJobColumns, Base):
+    __tablename__ = "live_capture_segments"
+    __table_args__ = (
+        _live_job_fk(),
+        _live_state_fk(),
+        UniqueConstraint("job_id", "segment_index"),
+        UniqueConstraint("id", "job_id", "session_id"),
+        CheckConstraint("segment_index >= 0 AND started_capture_seconds >= 0"),
+        CheckConstraint(
+            "ended_capture_seconds IS NULL OR ended_capture_seconds >= started_capture_seconds"
+        ),
+        CheckConstraint(
+            "first_sequence >= 0 AND (last_sequence IS NULL OR last_sequence >= first_sequence)"
+        ),
+        CheckConstraint("reason IN ('initial','reconnected','analysis_gap')"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    segment_index: Mapped[int] = mapped_column(Integer)
+    started_capture_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    ended_capture_seconds: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    first_sequence: Mapped[int] = mapped_column(BigInteger)
+    last_sequence: Mapped[int | None] = mapped_column(BigInteger)
+    reason: Mapped[str] = mapped_column(String(20))
+
+
+class LiveInterruption(_LiveJobColumns, Base):
+    __tablename__ = "live_interruptions"
+    __table_args__ = (
+        _live_job_fk(),
+        _live_state_fk(),
+        CheckConstraint(
+            "start_seconds >= 0 AND (end_seconds IS NULL OR end_seconds >= start_seconds)"
+        ),
+        CheckConstraint("end_known = (end_seconds IS NOT NULL)"),
+        CheckConstraint(
+            "reason IN ('capture_lost','analysis_gap','awaiting_confirmation',"
+            "'worker_interrupted','database_unavailable')"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    start_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    end_seconds: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    reason: Mapped[str] = mapped_column(String(40))
+    end_known: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class LiveCrossing(_LiveJobColumns, Base):
+    __tablename__ = "live_crossings"
+    __table_args__ = (
+        _live_job_fk(),
+        _live_segment_fk(),
+        UniqueConstraint("job_id", "candidate_sequence"),
+        CheckConstraint("candidate_sequence >= 0 AND capture_sequence >= 0"),
+        CheckConstraint(
+            "capture_timestamp_seconds >= 0 AND "
+            "confirmed_at_capture_seconds >= capture_timestamp_seconds"
+        ),
+        CheckConstraint("direction IN ('entry','exit')"),
+        CheckConstraint("foot_x BETWEEN 0 AND 1 AND foot_y BETWEEN 0 AND 1"),
+        Index("ix_live_crossings_job_time", "job_id", "capture_timestamp_seconds"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    segment_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    shop_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("shops.id"))
+    track_id: Mapped[int] = mapped_column(BigInteger)
+    candidate_sequence: Mapped[int] = mapped_column(BigInteger)
+    capture_sequence: Mapped[int] = mapped_column(BigInteger)
+    capture_timestamp_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    confirmed_at_capture_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    direction: Mapped[str] = mapped_column(String(10))
+    foot_x: Mapped[Decimal] = mapped_column(Numeric(9, 6))
+    foot_y: Mapped[Decimal] = mapped_column(Numeric(9, 6))
+
+
+class LiveCrossingBucket(_LiveJobColumns, Base):
+    __tablename__ = "live_crossing_buckets"
+    __table_args__ = (
+        _live_job_fk(),
+        CheckConstraint("bucket_index >= 0 AND start_seconds = 60 * bucket_index"),
+        CheckConstraint("end_seconds BETWEEN start_seconds AND start_seconds + 60"),
+        CheckConstraint("entries >= 0 AND exits >= 0 AND pending_count >= 0 AND revision >= 0"),
+        CheckConstraint("observed_seconds BETWEEN 0 AND 60 AND missing_seconds BETWEEN 0 AND 60"),
+        CheckConstraint("observed_seconds + missing_seconds <= end_seconds - start_seconds"),
+    )
+
+    job_id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    shop_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("shops.id"), primary_key=True)
+    bucket_index: Mapped[int] = mapped_column(Integer, primary_key=True)
+    start_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    end_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    entries: Mapped[int] = mapped_column(Integer, default=0)
+    exits: Mapped[int] = mapped_column(Integer, default=0)
+    observed_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6), default=0)
+    missing_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6), default=0)
+    pending_count: Mapped[int] = mapped_column(Integer, default=0)
+    is_open: Mapped[bool] = mapped_column(Boolean, default=True)
+    coverage_incomplete: Mapped[bool] = mapped_column(Boolean, default=False)
+    unknown_tail: Mapped[bool] = mapped_column(Boolean, default=False)
+    revision: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class LivePositionSample(_LiveJobColumns, Base):
+    __tablename__ = "live_position_samples"
+    __table_args__ = (
+        _live_job_fk(),
+        _live_segment_fk(),
+        CheckConstraint("slot_index >= 0 AND slot_index < 20000"),
+        CheckConstraint("capture_sequence >= 0 AND capture_timestamp_seconds >= 0"),
+        CheckConstraint("foot_x BETWEEN 0 AND 1 AND foot_y BETWEEN 0 AND 1"),
+    )
+
+    job_id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    slot_index: Mapped[int] = mapped_column(Integer, primary_key=True)
+    segment_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    track_id: Mapped[int] = mapped_column(BigInteger)
+    capture_sequence: Mapped[int] = mapped_column(BigInteger)
+    capture_timestamp_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    foot_x: Mapped[Decimal] = mapped_column(Numeric(9, 6))
+    foot_y: Mapped[Decimal] = mapped_column(Numeric(9, 6))

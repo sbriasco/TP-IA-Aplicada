@@ -1,0 +1,31 @@
+name: cross-feature
+version: 1.0.0
+description: Cross-feature alignment analysis using systems thinking
+
+# Optional: Agent compatibility information
+compatibility:
+  agents:
+    - claude
+    - github-copilot
+    - cursor
+    - gemini
+    - qwen
+    - opencode
+    - windsurf
+    - codex
+    - kilocode
+    - augment
+    - roo
+    - amazonq
+
+files:
+  commands:
+    - addon/commands/speckit.extn.cross-feature.md
+  scripts:
+    bash:
+      - source: addon/scripts/bash/cross-feature-check-all-features.sh
+        executable: true
+    powershell:
+      - addon/scripts/powershell/cross-feature-check-all-features.ps1
+  templates:
+    - addon/templates/cross-feature-analysis-template.md

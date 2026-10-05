@@ -29,6 +29,15 @@ class UltralyticsTracker:
         self.execution_mode: str | None = None
         self.limitations: list[str] = []
 
+    def reset_tracking(self) -> None:
+        """Start a new continuity segment while keeping loaded model weights."""
+        predictor = getattr(self._model, "predictor", None)
+        trackers = getattr(predictor, "trackers", ())
+        for tracker in trackers:
+            tracker.reset()
+        if predictor is not None and hasattr(predictor, "vid_path"):
+            predictor.vid_path = [None] * len(trackers)
+
     def detect(
         self,
         frame_index: int,

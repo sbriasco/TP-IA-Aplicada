@@ -14,6 +14,7 @@ import copy
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import pytest
 from alembic.config import Config
@@ -37,6 +38,42 @@ VGA = (640, 480)
 FRONT = [[0.1, 0.5], [0.3, 0.5], [0.3, 0.7], [0.1, 0.7]]
 INTERIOR = [[0.1, 0.2], [0.3, 0.2], [0.3, 0.45], [0.1, 0.45]]
 LINE = {"start": [0.05, 0.6], "end": [0.35, 0.6], "entry_direction": "a_to_b"}
+
+
+def test_new_video_job_belongs_to_source_machine(client, hd_session, version) -> None:
+    response = _post_job(client, hd_session["id"], "video_analysis", version["id"])
+    assert response.status_code == 201, response.text
+    with client.app.state.session_factory() as database:
+        job = database.get(ProcessingJob, UUID(response.json()["id"]))
+        assert job.target_machine_id == MACHINE_ID
+
+
+def test_new_synthetic_job_belongs_to_api_machine(client, synthetic_session) -> None:
+    response = _post_job(client, synthetic_session["id"], "synthetic_base_flow")
+    assert response.status_code == 201, response.text
+    with client.app.state.session_factory() as database:
+        job = database.get(ProcessingJob, UUID(response.json()["id"]))
+        assert job.target_machine_id == MACHINE_ID
+
+
+@pytest.mark.parametrize("first_status", [JobStatus.PENDING, JobStatus.PROCESSING])
+def test_registered_machine_preserves_file_queue(client, hd_session, version, first_status) -> None:
+    from datetime import UTC, datetime
+
+    from flowsight.worker.live_control import MachineLease
+
+    lease = MachineLease(client.app.state.engine, MACHINE_ID, "worker-contract")
+    assert lease.acquire(datetime.now(UTC))
+    try:
+        first = _post_job(client, hd_session["id"], "video_analysis", version["id"])
+        assert first.status_code == 201
+        with client.app.state.session_factory.begin() as database:
+            database.get(ProcessingJob, UUID(first.json()["id"])).status = first_status
+        second = _post_job(client, hd_session["id"], "video_analysis", version["id"])
+        assert second.status_code == 201, second.text
+        assert second.json()["status"] == "pending"
+    finally:
+        lease.release()
 
 
 # --- Fixtures (same setup as test_scene_api.py) -------------------------------------

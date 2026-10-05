@@ -8,7 +8,9 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session as DatabaseSession
 
+from flowsight.db.models import SourceKind
 from flowsight.services.scene_metrics import ResultIncomplete, load_shop_metrics
+from flowsight.services.sessions import get_active_session
 from flowsight.vision.metrics import MetricValue
 
 FIGURE_CODES = (
@@ -28,6 +30,16 @@ _LABELS = {
 
 class AnalysisNotFinal(Exception):
     """The latest analysis cannot be cited as a final result."""
+
+
+class LiveChatUnavailable(Exception):
+    """Live crossings do not expose the commercial chat tools."""
+
+
+def ensure_chat_source(database_session, session_id):
+    session = get_active_session(database_session, session_id)
+    if session is not None and session.source_kind == SourceKind.WEBCAM:
+        raise LiveChatUnavailable
 
 
 @dataclass(frozen=True)
@@ -56,6 +68,7 @@ def read_figures(
     """
 
     del from_seconds, to_seconds
+    ensure_chat_source(database_session, session_id)
     try:
         rows, flow, peak = load_shop_metrics(database_session, session_id, shop_id)
     except ResultIncomplete as error:

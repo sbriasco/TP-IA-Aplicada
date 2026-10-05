@@ -11,7 +11,13 @@ from sqlalchemy.orm import Session as DatabaseSession
 from sqlalchemy.orm import selectinload
 
 from flowsight.core.config import Settings
-from flowsight.db.models import JobStatus, ProcessingJob, SceneVersion, VideoSource
+from flowsight.db.models import (
+    JobStatus,
+    LiveAnalysisState,
+    ProcessingJob,
+    SceneVersion,
+    VideoSource,
+)
 from flowsight.db.models import Session as FlowSession
 from flowsight.video.storage import Availability, check_availability
 
@@ -30,6 +36,9 @@ class ProcessedSessionRow:
     scene_version_id: uuid.UUID | None
     version_number: int | None
     result_complete: bool
+    source_kind: str = "video_file"
+    live_duration_seconds: float | None = None
+    coverage_complete: bool | None = None
 
 
 def list_processed_sessions(
@@ -58,6 +67,11 @@ def list_processed_sessions(
         if flow_session is None:
             continue
         source = database_session.get(VideoSource, job.session_id)
+        live = (
+            database_session.get(LiveAnalysisState, job.id)
+            if flow_session.source_kind.value == "webcam"
+            else None
+        )
         version = (
             None
             if job.scene_version_id is None
@@ -85,6 +99,9 @@ def list_processed_sessions(
                 scene_version_id=job.scene_version_id,
                 version_number=None if version is None else version.version_number,
                 result_complete=job.result_complete,
+                source_kind=flow_session.source_kind.value,
+                live_duration_seconds=None if live is None else float(live.elapsed_capture_seconds),
+                coverage_complete=None if live is None else live.coverage_complete,
             )
         )
     return rows

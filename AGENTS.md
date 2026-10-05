@@ -29,7 +29,7 @@ Exposición, detención y atención estimada hacia vidrieras; funnel comercial y
 - El LLM consulta herramientas/API de analytics. No calcula métricas desde el video ni ejecuta SQL arbitrario generado por el modelo.
 - Mantener credenciales y llamadas al modelo en el backend.
 - Un `track_id` es temporal y pertenece a una sesión/cámara: no representa una identidad real ni garantiza una persona única.
-- Medir tiempos con timestamps del video, no con el tiempo de procesamiento.
+- Medir tiempos con timestamps del video en archivos y timestamps de captura relativos al inicio analítico en fuentes en vivo, no con el tiempo de procesamiento. Descartar frames no comprime el tiempo observado; una interrupción no demuestra continuidad de un track.
 - Debe existir persistencia y aislamiento por sesión; versionar migraciones, configuración de ejemplo e instrucciones.
 - Eliminar una sesión del historial es una baja lógica (`deleted_at`): se conservan archivos y referencias de escenas inmutables; los trabajos activos bloquean la baja. Los endpoints públicos omiten las sesiones retiradas, excepto el frame que sigue siendo referencia de una escena guardada.
 - Eliminar una cámara es una baja lógica (`cameras.deleted_at`): sale del selector para videos nuevos, conserva sus sesiones y escenas, y no admite nuevos trabajos. Los trabajos activos bloquean su baja. Se conserva la unicidad de sus nombres, incluidos los retirados. Ver la migración `0007_camera_management` y las decisiones técnicas.

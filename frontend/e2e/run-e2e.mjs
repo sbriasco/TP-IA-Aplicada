@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 
 import { assertSafeDatabase, loadLocalEnvironment } from "./environment.mjs";
 import { assertPortAvailable } from "./ports.mjs";
@@ -61,7 +62,8 @@ function stopTree(child) {
 }
 
 async function waitFor(url) {
-  const deadline = Date.now() + 30_000;
+  // Native imports on Windows can exceed 30 s on a cold checkout (measured 29.23 s).
+  const deadline = Date.now() + (process.platform === "win32" ? 120_000 : 30_000);
   while (Date.now() < deadline) {
     try {
       const response = await fetch(url);
@@ -87,6 +89,9 @@ environment.FLOWSIGHT_VIDEOS_DIR = videosDirectory;
 environment.FLOWSIGHT_MACHINE_ID = "e2e-ci";
 environment.FLOWSIGHT_CHAT_FAKE_DRAFTER = "1";
 environment.FLOWSIGHT_DETECTOR = "fake";
+environment.FLOWSIGHT_ENV = "test";
+environment.FLOWSIGHT_LIVE_CAPTURE_SOURCE = "fake";
+environment.FLOWSIGHT_LIVE_CHANNEL_TOKEN = randomUUID();
 
 const clip = spawnSync(python, ["-m", "flowsight.video.fixtures", clipDirectory, "--size", "1280x720"], {
   cwd: backend,
@@ -125,7 +130,7 @@ try {
     waitFor(environment.FLOWSIGHT_E2E_BASE_URL),
   ]);
   const playwrightCli = path.join(frontend, "node_modules", "@playwright", "test", "cli.js");
-  result = spawnSync(process.execPath, [playwrightCli, "test"], {
+  result = spawnSync(process.execPath, [playwrightCli, "test", ...process.argv.slice(2)], {
     cwd: frontend,
     env: environment,
     stdio: "inherit",

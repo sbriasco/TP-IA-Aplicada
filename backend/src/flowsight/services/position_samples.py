@@ -10,7 +10,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as DatabaseSession
 
 from flowsight.core.config import Settings
-from flowsight.db.models import ProcessingJob, Session
+from flowsight.db.models import (
+    LiveAnalysisState,
+    LivePositionSample,
+    ProcessingJob,
+    Session,
+    SourceKind,
+)
 from flowsight.video.storage import video_path
 
 
@@ -27,13 +33,25 @@ class PositionSampleSet:
     samples: list[PositionSample]
 
 
+@dataclass(frozen=True)
+class LivePositionSampleSet:
+    job_id: uuid.UUID
+    availability: str
+    samples: list[dict]
+    sample_count: int
+    candidate_count: int
+    capacity: int
+    source_kind: str = "webcam"
+    time_basis: str = "capture"
+
+
 class JobNotFound(LookupError):
     pass
 
 
 def list_position_samples(
     database_session: DatabaseSession, settings: Settings, job_id: uuid.UUID
-) -> PositionSampleSet:
+) -> PositionSampleSet | LivePositionSampleSet:
     job = database_session.scalar(
         select(ProcessingJob)
         .join(Session, Session.id == ProcessingJob.session_id)
@@ -41,6 +59,33 @@ def list_position_samples(
     )
     if job is None:
         raise JobNotFound
+    session = database_session.get(Session, job.session_id)
+    if session.source_kind == SourceKind.WEBCAM:
+        state = database_session.get(LiveAnalysisState, job_id)
+        rows = list(
+            database_session.scalars(
+                select(LivePositionSample)
+                .where(LivePositionSample.job_id == job_id)
+                .order_by(LivePositionSample.slot_index)
+                .limit(20000)
+            )
+        )
+        count = len(rows)
+        selected = rows if count <= 2000 else [rows[index * count // 2000] for index in range(2000)]
+        return LivePositionSampleSet(
+            job_id=job_id,
+            availability="available",
+            samples=[
+                {
+                    "capture_timestamp_seconds": float(row.capture_timestamp_seconds),
+                    "foot": (float(row.foot_x), float(row.foot_y)),
+                }
+                for row in selected
+            ],
+            sample_count=count,
+            candidate_count=0 if state is None else state.sample_candidates_seen,
+            capacity=20000 if state is None else state.sample_capacity,
+        )
     relative = job.trajectory_relative_path
     if relative is None or settings.videos_dir is None:
         return PositionSampleSet(job_id=job.id, availability="unavailable", samples=[])

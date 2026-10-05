@@ -12,10 +12,14 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from flowsight.api.live_internal import router as live_internal_router
+from flowsight.api.live_routes import router as live_router
 from flowsight.api.routes import router
 from flowsight.core.config import ConfigurationError, Settings, load_settings
 from flowsight.db.session import create_database_engine, create_session_factory
 from flowsight.preview.broker import PreviewBroker
+from flowsight.preview.live_channel import LiveBroker, LiveChannel
+from flowsight.services.live_sessions import LiveChecks
 from flowsight.video.storage import StorageError, cleanup_stale_partials, ensure_videos_dir
 
 logger = logging.getLogger(__name__)
@@ -45,11 +49,16 @@ def create_app() -> FastAPI:
     application.state.session_factory = create_session_factory(application.state.engine)
     prepare_videos_dir(settings)
     application.state.preview_broker = PreviewBroker()
+    application.state.live_checks = LiveChecks()
+    application.state.live_broker = LiveBroker()
+    application.state.live_channel = LiveChannel(application.state.live_broker)
     if os.environ.get("FLOWSIGHT_CHAT_FAKE_DRAFTER") == "1":
         from flowsight.services.chat import suite_drafter
 
         application.state.chat_drafter = suite_drafter
     application.include_router(router)
+    application.include_router(live_router)
+    application.include_router(live_internal_router)
 
     @application.exception_handler(RequestValidationError)
     async def validation_error_handler(_request, _error) -> JSONResponse:

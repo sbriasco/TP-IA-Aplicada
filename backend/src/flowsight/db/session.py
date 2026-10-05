@@ -11,6 +11,8 @@ def create_database_engine(settings: Settings) -> Engine:
         settings.database_url.get_secret_value(),
         pool_pre_ping=True,
         hide_parameters=True,
+        connect_args={"connect_timeout": 2},
+        pool_timeout=1,
     )
 
 

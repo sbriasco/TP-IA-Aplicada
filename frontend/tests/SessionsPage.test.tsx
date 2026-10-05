@@ -76,6 +76,21 @@ describe("SessionsPage", () => {
     expect(container.textContent).toContain("Nuevo análisis");
   });
 
+  it("abre webcam activa y fallida en sus vistas y señala que no hay grabación", async () => {
+    vi.stubGlobal("fetch", vi.fn((url: string) => Promise.resolve(response(200,
+      url.endsWith("/processed-sessions") ? [
+        { session_id: "live-1", job_id: "job-1", status: "processing", source_kind: "webcam", result_complete: false },
+        { session_id: "live-2", job_id: "job-2", status: "failed", source_kind: "webcam", result_complete: false },
+      ] : [
+        { id: "live-1", name: "Expo activa", source_kind: "webcam", camera, created_at: camera.created_at },
+        { id: "live-2", name: "Expo parcial", source_kind: "webcam", camera, created_at: camera.created_at },
+      ]))));
+    await act(async () => root.render(<SessionsPage apiBaseUrl={API} />));
+    expect(container.querySelector('a[href="/live/jobs/job-1"]')).not.toBeNull();
+    expect(container.querySelector('a[href="/live/jobs/job-2/results"]')).not.toBeNull();
+    expect(container.textContent).toContain("Sin grabación");
+  });
+
   it("muestra el error de la API", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("offline")));
 

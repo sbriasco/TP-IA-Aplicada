@@ -1,4 +1,6 @@
-export type SourceKind = "synthetic" | "video_file";
+import type { LiveSource } from "./live";
+
+export type SourceKind = "synthetic" | "video_file" | "webcam";
 
 export type VideoAvailability = "available" | "missing" | "mismatch" | "not_configured";
 
@@ -49,6 +51,7 @@ export interface SessionDetail extends SessionSummary {
   video: VideoSource | null;
   reference_frame: ReferenceFrame | null;
   duplicate_session_ids: string[];
+  live_source?: LiveSource | null;
 }
 
 export interface ApiError {

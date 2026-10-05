@@ -120,6 +120,19 @@ class ReferenceFrameResponse(BaseModel):
         return f"/sessions/{self.session_id}/reference-frame"
 
 
+class LiveSourceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    machine_id: str
+    device_index: int
+    capture_backend: str
+    width: int
+    height: int
+    reported_fps: float | None
+    label_mode: Literal["directions", "access"]
+    prepared_at: datetime
+    frame_checked_at: datetime | None
+
+
 class SessionDetail(SessionSummary):
     """Extends the specs/002 session response; keeps every field it returned."""
 
@@ -127,6 +140,7 @@ class SessionDetail(SessionSummary):
     video: VideoSourceResponse | None
     reference_frame: ReferenceFrameResponse | None
     duplicate_session_ids: list[uuid.UUID]
+    live_source: LiveSourceResponse | None = None
 
 
 class JobCreate(BaseModel):
@@ -145,6 +159,31 @@ class TransitionResponse(BaseModel):
     to_status: JobStatus
     occurred_at: datetime
     reason_code: str | None
+
+
+class LiveStateResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    capture_status: Literal[
+        "starting", "connected", "interrupted", "awaiting_confirmation", "stopping", "ended"
+    ]
+    capture_started_at: datetime | None
+    capture_ended_at: datetime | None
+    elapsed_capture_seconds: float
+    last_capture_sequence: int
+    last_analyzed_sequence: int | None
+    current_segment_index: int
+    stop_requested_at: datetime | None
+    retry_requested_at: datetime | None
+    resume_confirmed_at: datetime | None
+    checkpoint_at: datetime
+    revision: int
+    coverage_complete: bool
+    unknown_tail: bool
+    observed_seconds: float
+    missing_seconds: float
+    unconfirmed_crossings: int
+    sample_candidates_seen: int
+    sample_capacity: int
 
 
 class JobResponse(BaseModel):
@@ -170,6 +209,15 @@ class JobResponse(BaseModel):
     failure_code: str | None
     failure_message: str | None
     transitions: list[TransitionResponse]
+    target_machine_id: str | None = None
+    live_state: LiveStateResponse | None = None
+
+    @computed_field
+    @property
+    def progress_percent(self) -> float | None:
+        if not self.frames_total:
+            return None
+        return min(100, 100 * (self.frames_analyzed or 0) / self.frames_total)
 
 
 class AnalysisMeasureResponse(BaseModel):
@@ -380,6 +428,9 @@ class ProcessedSessionResponse(BaseModel):
     scene_version_id: uuid.UUID | None
     version_number: int | None
     result_complete: bool
+    source_kind: SourceKind
+    live_duration_seconds: float | None = None
+    coverage_complete: bool | None = None
 
 
 class PositionSampleResponse(BaseModel):
@@ -395,6 +446,25 @@ class PositionSamplesResponse(BaseModel):
     job_id: uuid.UUID
     availability: str
     samples: list[PositionSampleResponse]
+
+
+class LivePositionSampleResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    capture_timestamp_seconds: float
+    foot: tuple[float, float]
+
+
+class LivePositionSamplesResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    job_id: uuid.UUID
+    availability: str
+    source_kind: Literal["webcam"] = "webcam"
+    time_basis: Literal["capture"] = "capture"
+    sample_count: int
+    candidate_count: int
+    returned_count: int
+    capacity: int
+    samples: list[LivePositionSampleResponse]
 
 
 class ChatFigure(BaseModel):

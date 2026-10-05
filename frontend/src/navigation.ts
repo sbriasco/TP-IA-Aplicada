@@ -6,12 +6,21 @@ export type Route =
   | { name: "session"; sessionId: string }
   | { name: "editor"; sessionId: string }
   | { name: "results"; sessionId: string }
+  | { name: "live_preparation"; sessionId?: string }
+  | { name: "live_analysis"; jobId: string }
+  | { name: "live_results"; jobId: string }
   | { name: "not_found" };
 
 const NAVIGATION_EVENT = "flowsight:navigate";
-const SESSION_PATH = /^\/sessions\/([^/]+)(\/editor|\/results)?\/?$/;
+const SESSION_PATH = /^\/sessions\/([^/]+)(\/editor|\/results|\/live)?\/?$/;
 
 export function matchRoute(pathname: string, search: string): Route {
+  const liveJob = /^\/live\/jobs\/([^/]+)(\/results)?\/?$/.exec(pathname);
+  if (liveJob) {
+    try { return { name: liveJob[2] ? "live_results" : "live_analysis", jobId: decodeURIComponent(liveJob[1]) }; }
+    catch { return { name: "not_found" }; }
+  }
+  if (pathname === "/live") return { name: "live_preparation" };
   const jobId = (new URLSearchParams(search).get("job") ?? "").trim();
   if (jobId !== "") {
     return { name: "job", jobId };
@@ -30,6 +39,7 @@ export function matchRoute(pathname: string, search: string): Route {
     return { name: "not_found" };
   }
   if (match[2] === "/editor") return { name: "editor", sessionId };
+  if (match[2] === "/live") return { name: "live_preparation", sessionId };
   if (match[2] === "/results") return { name: "results", sessionId };
   return { name: "session", sessionId };
 }
