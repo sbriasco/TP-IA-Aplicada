@@ -156,3 +156,8 @@ T016/T024/T026/T027/T028/T032 cierran con evidencia anterior. T035 queda abierta
 - Frontend final:320 pruebas aprobadas en34archivos (102.52s). Ruff backend y diff staged --check aprobados. Índice revisado:112 archivos de la feature y extensión, sin videos/modelos/bases ni secretos; .env permanece excluido.
 - Primer intento de regresión backend:560 aprobadas,56 errores de fixture por datos live de E2E previos incompatibles con downgrade y1 fallo intermitente de captura. Limpieza mediante fixture protegida live_engine en ejecución separada:13 pruebas aprobadas, incluyendo captura. Se repite suite completa desde la base limpia; no se modifica la migración ni se ocultan resultados.
 - Regresión backend final desde base limpia:617 aprobadas,1 omitida por permisos POSIX en Windows y5 subtests aprobados (783.80s). No reapareció el fallo intermitente de captura. Validación física T035 y duración completa2h permanecen pendientes.
+
+## Correcciones de CI · 2026-10-05
+
+- Enumeración: CREATE_NO_WINDOW obtenido con getattr(...,0) para tests que simulan Windows sobre Ubuntu. Regresión reproduce AttributeError al quitar la constante;9 pruebas de enumeración y Ruff aprobados (commit bcfbe7f).
+- E2E video: worker iniciado antes de navegar, espera de frame/mensaje de30s y presupuesto de60s para ese caso. Primer ensayo reprodujo una segunda carrera: timestamp guardado0.84s frente a pantalla ya en1.96s. La comparación ahora vuelve a leer el último mensaje en cada intento, conservando la comprobación de sincronización. Resultado final:2 recorridos de video-analysis.spec.ts aprobados (9.2s) y TypeScript lint aprobado. CI remoto pendiente de resultado.

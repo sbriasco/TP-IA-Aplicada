@@ -13,6 +13,7 @@ test("la vista de un video muestra el fotograma y el instante del mensaje", asyn
   page,
   request,
 }) => {
+  test.setTimeout(60_000);
   const clipPath = process.env.FLOWSIGHT_E2E_CLIP;
   if (clipPath === undefined || clipPath === "") {
     throw new Error("Falta FLOWSIGHT_E2E_CLIP: correr con `npm run test:e2e`.");
@@ -88,17 +89,23 @@ test("la vista de un video muestra el fotograma y el instante del mensaje", asyn
     };
   });
 
-  await page.goto(`/?job=${job.id}`);
   const worker = startWorker(root);
   try {
-    await expect(page.getByRole("img", { name: /Previsualización del frame/ })).toBeVisible();
+    await page.goto(`/?job=${job.id}`);
+    await expect(page.getByRole("img", { name: /Previsualización del frame/ })).toBeVisible({
+      timeout: 30_000,
+    });
     await expect
-      .poll(() => page.evaluate(() => (window as Window & { __previewTimestamp?: number }).__previewTimestamp))
-      .toBeDefined();
-    const timestamp = await page.evaluate(
-      () => (window as Window & { __previewTimestamp?: number }).__previewTimestamp,
-    );
-    await expect(page.getByText(`${timestamp} s`, { exact: true })).toBeVisible();
+      .poll(
+        async () => {
+          const timestamp = await page.evaluate(
+            () => (window as Window & { __previewTimestamp?: number }).__previewTimestamp,
+          );
+          return timestamp !== undefined && page.getByText(`${timestamp} s`, { exact: true }).isVisible();
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(true);
     await expect(page.getByText("no promete la velocidad del video")).toBeVisible();
   } finally {
     stopWorker(worker);
