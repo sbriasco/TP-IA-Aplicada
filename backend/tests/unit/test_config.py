@@ -10,6 +10,12 @@ from flowsight.core.config import ConfigurationError, load_settings
 
 
 class SettingsTests(unittest.TestCase):
+    def test_empty_live_token_is_not_configured(self) -> None:
+        environment = self.valid_environment()
+        environment["FLOWSIGHT_LIVE_CHANNEL_TOKEN"] = " "
+        with patch.dict(os.environ, environment, clear=True):
+            self.assertIsNone(load_settings().live_channel_token)
+
     def valid_environment(self) -> dict[str, str]:
         return {
             "FLOWSIGHT_ENV": "test",

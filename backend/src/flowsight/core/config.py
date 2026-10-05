@@ -37,6 +37,15 @@ class Settings(BaseSettings):
     # the video endpoints report them as not configured.
     videos_dir: Path | None = Field(default=None, validation_alias="FLOWSIGHT_VIDEOS_DIR")
     machine_id: str | None = Field(default=None, validation_alias="FLOWSIGHT_MACHINE_ID")
+    live_channel_token: SecretStr | None = Field(
+        default=None, validation_alias="FLOWSIGHT_LIVE_CHANNEL_TOKEN"
+    )
+    live_capture_source: Literal["webcam", "fake"] = Field(
+        default="webcam", validation_alias="FLOWSIGHT_LIVE_CAPTURE_SOURCE"
+    )
+    live_fake_fail_after: int | None = Field(
+        default=None, ge=1, le=1000000, validation_alias="FLOWSIGHT_LIVE_FAKE_FAIL_AFTER"
+    )
     # Tests and CI stay on the fake detector. A bad value must not block startup.
     detector: Literal["fake", "ultralytics"] = Field(
         default="fake", validation_alias="FLOWSIGHT_DETECTOR"
@@ -56,6 +65,13 @@ class Settings(BaseSettings):
                 return None
         if value is not None and not Path(value).is_absolute():
             raise ValueError("must be an absolute path")
+        return value
+
+    @field_validator("live_channel_token", mode="before")
+    @classmethod
+    def validate_live_channel_token(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
         return value
 
     @field_validator("detector", mode="before")

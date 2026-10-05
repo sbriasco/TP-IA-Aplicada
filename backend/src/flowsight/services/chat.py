@@ -22,7 +22,12 @@ from flowsight.db.models import ProcessingJob, SceneVersionShop
 from flowsight.llm.client import build_client
 from flowsight.llm.settings import AzureLlmConfigurationError, load_azure_llm_settings
 from flowsight.services.chat_guard import draft_refusal, question_refusal
-from flowsight.services.chat_metrics import AnalysisNotFinal, ChatFigure, read_figures
+from flowsight.services.chat_metrics import (
+    AnalysisNotFinal,
+    ChatFigure,
+    ensure_chat_source,
+    read_figures,
+)
 from flowsight.services.processed_sessions import ProcessedSessionRow, list_processed_sessions
 from flowsight.services.scene_metrics import ShopNotInSession
 from flowsight.services.sessions import get_active_session
@@ -91,6 +96,7 @@ def ask(
 
     if get_active_session(database_session, session_id) is None:
         raise SessionMissing
+    ensure_chat_source(database_session, session_id)
     refusal = question_refusal(question)
     if refusal is not None:
         _log(0, "refused")
@@ -98,6 +104,8 @@ def ask(
     rows = list_processed_sessions(database_session, settings)
     catalog = _catalog(rows)
     session_id, stop = _resolve_session(question, session_id, rows)
+    if session_id is not None:
+        ensure_chat_source(database_session, session_id)
     if stop == "empty":
         _log(0, "no_processed_sessions")
         return _answer("unavailable", "No hay sesiones procesadas.")
@@ -343,7 +351,8 @@ def azure_draft(
             tools=tools,
             tool_choice=(
                 {"type": "function", "function": {"name": "get_session_figures"}}
-                if calls == 1 else "none"
+                if calls == 1
+                else "none"
             ),
             # Includes hidden reasoning as well as visible answer tokens.
             max_completion_tokens=MAX_COMPLETION_TOKENS,
@@ -404,11 +413,14 @@ def _public_figures(figures: list[ChatFigure]) -> list[dict[str, object]]:
             ),
             "value": _decimal_text(figure.value),
             "unit": (
-                "segundos" if figure.code.startswith("dwell_") or figure.code == "peak"
+                "segundos"
+                if figure.code.startswith("dwell_") or figure.code == "peak"
                 else "cantidad"
             ),
             "unavailable_reason": (
-                None if figure.availability == "available" else _MISSING_REASONS.get(
+                None
+                if figure.availability == "available"
+                else _MISSING_REASONS.get(
                     figure.unavailable_reason or "", "No hay un valor disponible para esta métrica."
                 )
             ),

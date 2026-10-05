@@ -19,6 +19,7 @@ from flowsight.db.models import (
     SceneVersionRemoval,
     SourceKind,
     VideoSource,
+    WorkerMachine,
 )
 from flowsight.db.models import Session as FlowSession
 from flowsight.scene.geometry import NORMALIZED_DECIMALS, aspect_ratio_matches
@@ -91,6 +92,7 @@ def transition_job(
 
 
 JobRequestErrorCode = Literal[
+    "machine_busy",
     "camera_removed",
     "scene_version_removed",
     "session_not_found",
@@ -126,6 +128,8 @@ def create_job_for_session(
     flow_session: FlowSession,
     kind: JobKind | str,
     scene_version_id: uuid.UUID | None,
+    *,
+    target_machine_id: str | None = None,
 ) -> ProcessingJob:
     """Create a `pending` job after the checks of FR-025 to FR-028 (specs/004, R12).
 
@@ -135,6 +139,33 @@ def create_job_for_session(
     `registered_camera_id`). The caller commits.
     """
 
+    source_video = database_session.get(VideoSource, flow_session.id)
+    if source_video is not None:
+        target_machine_id = source_video.origin_machine_id
+    # Preserve the file queue; claim serializes execution. Live owns the device
+    # exclusively and reservations prevent a queued file racing a framing probe.
+    if target_machine_id is not None:
+        machine = database_session.scalar(
+            select(WorkerMachine)
+            .where(WorkerMachine.machine_id == target_machine_id)
+            .with_for_update()
+        )
+        if machine is not None:
+            active = database_session.scalar(
+                select(ProcessingJob.id)
+                .where(
+                    ProcessingJob.target_machine_id == target_machine_id,
+                    ProcessingJob.kind == JobKind.LIVE_ANALYSIS,
+                    ProcessingJob.status.in_((JobStatus.PENDING, JobStatus.PROCESSING)),
+                )
+                .limit(1)
+            )
+            if (
+                active is not None
+                or machine.reserved_until is not None
+                and machine.reserved_until > datetime.now(UTC)
+            ):
+                raise JobRequestError("machine_busy")
     current_session = get_active_session(database_session, flow_session.id, lock=True)
     if current_session is None:
         raise JobRequestError("session_not_found")
@@ -148,7 +179,7 @@ def create_job_for_session(
     if camera is None or camera.deleted_at is not None:
         raise JobRequestError("camera_removed")
     job_kind = JobKind(kind)
-    if _KIND_FOR_SOURCE[flow_session.source_kind] is not job_kind:
+    if _KIND_FOR_SOURCE.get(flow_session.source_kind) is not job_kind:
         raise JobRequestError("job_kind_mismatch")
 
     registered_camera_id: uuid.UUID | None = None
@@ -200,6 +231,7 @@ def create_job_for_session(
         status=JobStatus.PENDING,
         scene_version_id=scene_version_id,
         registered_camera_id=registered_camera_id,
+        target_machine_id=target_machine_id,
         transitions=[
             JobStatusTransition(
                 from_status=None,

@@ -5,11 +5,20 @@ import { SceneEditorPage } from "./pages/SceneEditorPage";
 import { SessionDetailPage } from "./pages/SessionDetailPage";
 import { SessionResultsPage } from "./pages/SessionResultsPage";
 import { SessionsPage } from "./pages/SessionsPage";
+import { LivePreparationPage } from "./pages/LivePreparationPage";
+import { LiveAnalysisPage } from "./pages/LiveAnalysisPage";
+import { LiveResultsPage } from "./pages/LiveResultsPage";
 
 export function App() {
   const route = useRoute();
 
   switch (route.name) {
+    case "live_results":
+      return <LiveResultsPage key={route.jobId} jobId={route.jobId} />;
+    case "live_analysis":
+      return <LiveAnalysisPage key={route.jobId} jobId={route.jobId} />;
+    case "live_preparation":
+      return <LivePreparationPage key={route.sessionId ?? "new"} sessionId={route.sessionId} />;
     case "job":
       return <JobPreviewPage jobId={route.jobId} />;
     case "sessions":

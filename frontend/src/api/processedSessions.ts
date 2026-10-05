@@ -13,6 +13,9 @@ export interface ProcessedSession {
   scene_version_id: string | null;
   version_number: number | null;
   result_complete: boolean;
+  source_kind?: "video_file" | "synthetic" | "webcam";
+  live_duration_seconds?: number | null;
+  coverage_complete?: boolean | null;
 }
 
 export function listProcessedSessions(apiBaseUrl: string): Promise<ProcessedSession[]> {

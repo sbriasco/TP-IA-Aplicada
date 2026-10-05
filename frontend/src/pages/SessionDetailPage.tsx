@@ -11,6 +11,7 @@ import { VideoRelinkForm } from "../components/VideoRelinkForm";
 import type { SessionDetail, VideoAvailability, VideoSource } from "../types/session";
 
 import styles from "./SessionDetailPage.module.css";
+import { LivePreparationPage } from "./LivePreparationPage";
 
 const AVAILABILITY_TEXT: Record<VideoAvailability, string> = {
   available: "Video disponible en este equipo",
@@ -107,6 +108,9 @@ export function SessionDetailPage({ sessionId, apiBaseUrl = API_BASE_URL }: Sess
   }
 
   const { session } = state;
+  if (session.source_kind === "webcam") {
+    return <LivePreparationPage sessionId={session.id} apiBaseUrl={apiBaseUrl} />;
+  }
   const { video, reference_frame: frame } = session;
 
   return (

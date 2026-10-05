@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -12,6 +14,24 @@ from flowsight.vision.ultralytics_tracker import UltralyticsTracker
 
 def test_tracker_name_is_yolo11m() -> None:
     assert UltralyticsTracker.name == "yolo11m"
+
+
+def test_reset_tracking_keeps_loaded_weights_and_clears_trackers(tmp_path: Path) -> None:
+    tracker = UltralyticsTracker(_weight(tmp_path))
+    underlying = Mock()
+    predictor = SimpleNamespace(trackers=[underlying], vid_path=["old"])
+    model = SimpleNamespace(predictor=predictor)
+    tracker._model = model
+    tracker.reset_tracking()
+    underlying.reset.assert_called_once_with()
+    assert tracker._model is model
+    assert predictor.vid_path == [None]
+
+
+def test_reset_before_model_load_does_not_load_weights(tmp_path: Path) -> None:
+    tracker = UltralyticsTracker(_weight(tmp_path))
+    tracker.reset_tracking()
+    assert tracker._model is None
 
 
 def test_yolo11m_file_is_accepted_without_loading_the_model(tmp_path: Path) -> None:

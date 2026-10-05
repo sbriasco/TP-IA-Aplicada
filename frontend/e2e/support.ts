@@ -17,12 +17,19 @@ export function localEnvironment(root: string): NodeJS.ProcessEnv {
   return values;
 }
 
-export function startWorker(root: string): ChildProcess {
-  return spawn(resolveWorkerExecutable(root, process.platform), ["-m", "flowsight.worker.main"], {
+export function startWorker(root: string, captureDiagnostics = false, overrides: NodeJS.ProcessEnv = {}): ChildProcess {
+  const worker = spawn(resolveWorkerExecutable(root, process.platform), ["-m", "flowsight.worker.main"], {
     cwd: path.join(root, "backend"),
-    env: localEnvironment(root),
-    stdio: "ignore",
+    env: { ...localEnvironment(root), ...overrides },
+    stdio: captureDiagnostics ? ["ignore", "ignore", "pipe"] : "ignore",
+    windowsHide: true,
   });
+  if (captureDiagnostics) worker.stderr?.on("data", (chunk: Buffer) => {
+    for (const line of chunk.toString().split(/\r?\n/)) {
+      if (line.startsWith("INFO:flowsight.capture:")) console.log(line);
+    }
+  });
+  return worker;
 }
 
 export function stopWorker(worker: ChildProcess): void {

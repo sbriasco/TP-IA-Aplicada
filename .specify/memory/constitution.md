@@ -1,7 +1,7 @@
 <!--
 Sync Impact Report
-- Version change: 1.0.0 -> 1.0.1
-- Modified principles: ninguno; se aclara la evidencia pertinente a cada decisión y se omite la mención a aprobaciones de otros integrantes.
+- Version change: 1.0.1 -> 1.0.2
+- Modified principles: III; se aclara que una fuente en vivo usa timestamps de captura, conservando la prohibición de medir comportamiento con duración de procesamiento.
 - Added sections: ninguna.
 - Removed sections: ninguna.
 - Follow-up TODOs: validar compatibilidad, rendimiento, tracker, previsualización, Azure y reproducibilidad según el documento de decisiones.
@@ -27,7 +27,10 @@ se mantiene alineada con [Decisiones técnicas](../../docs/decisiones-tecnicas.m
 ### III. Trazabilidad temporal y por sesión
 Cada detección, evento y métrica DEBE poder vincularse con su sesión, cámara, frame y
 timestamp del video cuando corresponda. Los tiempos de negocio DEBEN calcularse con los
-timestamps del video, nunca con la duración del procesamiento. Las consultas y trabajos
+timestamps del video para archivos y con timestamps de captura relativos al inicio
+analítico para fuentes en vivo, nunca con la duración del procesamiento. En vivo,
+los frames descartados conservan su secuencia temporal y las interrupciones no
+demuestran continuidad de seguimiento. Las consultas y trabajos
 DEBEN aislar los datos entre sesiones, y las métricas DEBEN documentar denominadores,
 deduplicación, datos incompletos y divisiones por cero como no disponible.
 
@@ -88,4 +91,4 @@ principios o secciones incrementan la versión MINOR; las eliminaciones o redefi
 incompatibles incrementan MAJOR; las aclaraciones sin cambio de obligación incrementan
 PATCH. Cada revisión debe comprobar principios, fechas, enlaces y validaciones pendientes.
 
-**Version**: 1.0.1 | **Ratified**: 2026-09-14 | **Last Amended**: 2026-09-15
+**Version**: 1.0.2 | **Ratified**: 2026-09-14 | **Last Amended**: 2026-10-03

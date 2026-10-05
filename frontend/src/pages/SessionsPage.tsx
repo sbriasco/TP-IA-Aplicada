@@ -67,7 +67,7 @@ export function SessionsPage({ apiBaseUrl = API_BASE_URL }: SessionsPageProps) {
     <AppShell title="Tus análisis">
       <div className={styles.heading}>
         <p>Cargá un video, configurá la escena y consultá lo que sucede en tu espacio.</p>
-        <div className={styles.headingActions}><button type="button" onClick={() => setManagingCameras(true)}>Cámaras</button><button type="button" data-primary onClick={() => setUploading(true)}>Nuevo análisis</button></div>
+        <div className={styles.headingActions}><Link href="/live">Webcam en vivo</Link><button type="button" onClick={() => setManagingCameras(true)}>Cámaras</button><button type="button" data-primary onClick={() => setUploading(true)}>Nuevo análisis</button></div>
       </div>
       <ol className={styles.steps} aria-label="Cómo funciona FlowSight">
         <li><span>1</span><div><strong>Cargá un video</strong><small>De una cámara fija</small></div></li>
@@ -89,12 +89,13 @@ export function SessionsPage({ apiBaseUrl = API_BASE_URL }: SessionsPageProps) {
                 const busy = job?.status === "pending" || job?.status === "processing";
                 const ready = job?.status === "completed" && job.result_complete;
                 const path = "/sessions/" + encodeURIComponent(session.id);
-                const target = busy ? "/?job=" + encodeURIComponent(job.job_id) : ready ? path + "/results" : path;
-                const action = busy ? "Ver avance" : ready ? "Ver resultados" : "Continuar";
+                const live = session.source_kind === "webcam";
+                const target = live && job ? `/live/jobs/${encodeURIComponent(job.job_id)}${busy ? "" : "/results"}` : busy ? "/?job=" + encodeURIComponent(job.job_id) : ready ? path + "/results" : path;
+                const action = live && job ? busy ? "Ver en vivo" : "Ver resultados" : busy ? "Ver avance" : ready ? "Ver resultados" : "Continuar";
                 const status = !jobsLoaded ? "Cargando estado…" : jobsError ? "Estado no disponible" : !job ? "Sin analizar" : job.status === "completed" && !job.result_complete ? "Resultado incompleto" : STATUS[job.status];
                 return <tr key={session.id}>
                   <td><Link href={path}>{session.name}</Link></td><td>{session.camera.name}</td>
-                  <td><span className={ready ? styles.ready : busy ? styles.running : styles.status}>{status}</span>{session.source_kind === "synthetic" && <small className={styles.synthetic}>Datos sintéticos</small>}</td>
+                  <td><span className={ready ? styles.ready : busy ? styles.running : styles.status}>{status}</span>{session.source_kind === "synthetic" && <small className={styles.synthetic}>Datos sintéticos</small>}{live && <small className={styles.synthetic}>Webcam · Sin grabación</small>}</td>
                   <td><time dateTime={session.created_at}>{new Date(session.created_at).toLocaleDateString("es-AR", { day: "numeric", month: "short" })}</time></td>
                   <td className={styles.actionCell}><Link className={styles.openAction} href={target}>{action}</Link></td>
                   <td className={styles.deleteCell}><button className={styles.deleteButton} type="button" aria-label={"Eliminar " + session.name} disabled={busy} title={busy ? "Esperá a que termine o cancelá el análisis antes de eliminarlo" : "Eliminar del historial"} onClick={() => { setSelected(session); setRemoveError(null); }}>
