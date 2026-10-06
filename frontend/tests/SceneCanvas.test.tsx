@@ -164,11 +164,11 @@ describe("SceneCanvas", () => {
     await render(loaded());
 
     for (let n = 1; n <= 4; n += 1) {
-      const circle = vertex(`Vértice ${n} de zona frontal de Local A`);
+      const circle = vertex(`Vértice ${n} de área externa de Local A`);
       expect(circle.getAttribute("role")).toBe("button");
       expect(circle.getAttribute("tabindex")).toBe("0");
     }
-    expect(vertex("Vértice 3 de zona interior de Local A")).toBeDefined();
+    expect(vertex("Vértice 3 de área interior de Local A")).toBeDefined();
     const start = vertex("Vértice 1 de línea de entrada de Local A");
     expect(start.getAttribute("cx")).toBe("160");
     expect(start.getAttribute("cy")).toBe("630");
@@ -179,8 +179,8 @@ describe("SceneCanvas", () => {
   it("distingue los roles por algo más que el color y los nombra", async () => {
     await render(loaded());
 
-    const front = group("Zona frontal de Local A");
-    const interior = group("Zona interior de Local A");
+    const front = group("Área externa de Local A");
+    const interior = group("Área interior de Local A");
     const frontShape = front.querySelector("polygon");
     const interiorShape = interior.querySelector("polygon");
     expect(frontShape?.getAttribute("points")).toBe("160,360 480,360 480,540 160,540");
@@ -219,13 +219,13 @@ describe("SceneCanvas", () => {
   it("mueve un vértice con las flechas: 1 px y 10 px con Shift", async () => {
     await render(loaded());
 
-    await key(vertex("Vértice 1 de zona frontal de Local A"), "ArrowRight");
+    await key(vertex("Vértice 1 de área externa de Local A"), "ArrowRight");
     expect(current.shops[0].zones.front?.[0]).toEqual([161, 360]);
     expect(current.isDirty).toBe(true);
 
-    await key(vertex("Vértice 1 de zona frontal de Local A"), "ArrowDown", true);
+    await key(vertex("Vértice 1 de área externa de Local A"), "ArrowDown", true);
     expect(current.shops[0].zones.front?.[0]).toEqual([161, 370]);
-    expect(vertex("Vértice 1 de zona frontal de Local A").getAttribute("cy")).toBe("370");
+    expect(vertex("Vértice 1 de área externa de Local A").getAttribute("cy")).toBe("370");
 
     await key(vertex("Vértice 2 de línea de entrada de Local A"), "ArrowUp");
     expect(current.shops[0].entry_line?.end).toEqual([480, 629]);
@@ -234,7 +234,7 @@ describe("SceneCanvas", () => {
   it("selecciona el vértice al enfocarlo y lo elimina con Supr", async () => {
     await render(loaded());
 
-    const circle = vertex("Vértice 2 de zona frontal de Local A");
+    const circle = vertex("Vértice 2 de área externa de Local A");
     await act(async () => circle.dispatchEvent(new FocusEvent("focus")));
     await act(async () => circle.dispatchEvent(new FocusEvent("focusin", { bubbles: true })));
     expect(current.selection).toEqual({ shopIndex: 0, element: "zone:front", vertexIndex: 1 });
@@ -246,7 +246,7 @@ describe("SceneCanvas", () => {
   it("arrastra un vértice con el puntero convirtiendo a píxeles del frame", async () => {
     await render(loaded());
 
-    const circle = vertex("Vértice 1 de zona frontal de Local A");
+    const circle = vertex("Vértice 1 de área externa de Local A");
     await mouse(circle, "pointerdown", 80, 180);
     await mouse(circle, "pointermove", 100, 200);
     await mouse(circle, "pointerup", 100, 200);
@@ -292,7 +292,7 @@ describe("SceneCanvas", () => {
     await key(svg, "Enter");
     expect(current.drawing).toBeNull();
     expect(current.shops[0].zones.showcase).toHaveLength(3);
-    expect(vertex("Vértice 1 de zona de vidriera de Local A")).toBeDefined();
+    expect(vertex("Vértice 1 de área de interés de Local A")).toBeDefined();
   });
 
   it("Escape descarta el dibujo en curso", async () => {
@@ -315,13 +315,13 @@ describe("SceneCanvas", () => {
       element: "zone:front",
       shop_index: 0,
       shop_name: "Local A",
-      message: "La zona frontal se cruza a sí misma.",
+      message: "El área externa se cruza a sí misma.",
     };
     await render(apply(loaded(), { type: "saveFailed", errors: [error] }));
 
-    const front = group("Zona frontal de Local A");
+    const front = group("Área externa de Local A");
     expect(front.getAttribute("aria-invalid")).toBe("true");
-    expect(front.textContent).toContain("La zona frontal se cruza a sí misma.");
-    expect(group("Zona interior de Local A").getAttribute("aria-invalid")).toBeNull();
+    expect(front.textContent).toContain("El área externa se cruza a sí misma.");
+    expect(group("Área interior de Local A").getAttribute("aria-invalid")).toBeNull();
   });
 });

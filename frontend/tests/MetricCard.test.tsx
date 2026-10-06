@@ -27,7 +27,7 @@ describe("MetricCard", () => {
       await act(async () => root.render(<MetricCard metric={{ code: "entry_rate", value: null, availability: "unavailable", label: "none", unavailable_reason: "no_passes" }} />));
       expect(container.textContent).toContain("no disponible");
       expect(container.textContent).not.toContain("0 %");
-      expect(container.textContent).toContain("Sin pasos frente al local");
+      expect(container.textContent).toContain("Sin pasos en el área externa");
     } finally { await act(async () => root.unmount()); }
   });
 });

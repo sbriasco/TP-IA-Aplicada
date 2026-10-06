@@ -4,7 +4,7 @@ import { formatVideoTime } from "../presentation/metrics";
 import styles from "./FlowChart.module.css";
 
 export function FlowChart({ points, fromSeconds, toSeconds }: { points: FlowPoint[]; fromSeconds: number; toSeconds: number }) {
-  if (points.length === 0) return <p className={styles.empty}>No hay tracks en la zona frontal para este tramo.</p>;
+  if (points.length === 0) return <p className={styles.empty}>No hay tracks en el área externa para este tramo.</p>;
   return (
     <div className={styles.chart}>
       <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 480, height: 240 }}>
@@ -22,12 +22,12 @@ export function FlowChart({ points, fromSeconds, toSeconds }: { points: FlowPoin
           <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#637480" }} axisLine={false} tickLine={false} width={28} />
           <Tooltip
             labelFormatter={(value) => formatVideoTime(Number(value))}
-            formatter={(value) => [String(value), "En la zona frontal"]}
+            formatter={(value) => [String(value), "En el área externa"]}
           />
           <Line
             type="stepAfter"
             dataKey="track_count"
-            name="Tracks en la zona frontal"
+            name="Tracks en el área externa"
             stroke="#146071"
             strokeWidth={2}
             dot={false}

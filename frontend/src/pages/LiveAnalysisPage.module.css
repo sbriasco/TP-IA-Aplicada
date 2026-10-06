@@ -1,13 +1,15 @@
 .layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(300px, 2fr); gap: 1.5rem; }
-.camera { background: #101827; border-radius: 12px; overflow: hidden; min-height: 260px; display: grid; place-items: center; }
+.camera { position: relative; background: #101827; border-radius: 12px; overflow: hidden; min-height: 260px; display: grid; place-items: center; }
+.heatmapControl { display: flex; align-items: center; gap: .5rem; margin-top: .75rem; }
 .camera img { display: block; width: 100%; height: auto; }
+.camera:has(img) { min-height: 0; }
 .camera p { color: #fff; padding: 2rem; text-align: center; }
-.panel { padding: 1.25rem; border: 1px solid #d8e0ea; border-radius: 12px; background: #fff; }
+.panel { padding: 1.25rem; border: 1px solid var(--fs-line); border-radius: 12px; background: var(--fs-surface); }
 .metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
-.metrics div { padding: 0.75rem; border-radius: 8px; background: #edf3fb; }
+.metrics div { padding: 0.75rem; border-radius: 8px; background: var(--fs-raised); }
 .metrics dt { font-size: 0.875rem; }
 .metrics dd { font-size: 2rem; font-weight: 700; margin: 0.5rem 0 0; }
 .controls { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
-.diagnostics { font-size: 0.875rem; color: #475569; }
-.warning { padding: 0.75rem; background: #fff3cd; border-radius: 8px; }
+.diagnostics { font-size: 0.875rem; color: var(--fs-muted); }
+.warning { padding: 0.75rem; color: var(--fs-warning); background: var(--fs-warning-bg); border-radius: 8px; }
 @media (max-width: 850px) { .layout { grid-template-columns: 1fr; } }

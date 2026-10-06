@@ -16,6 +16,7 @@ from flowsight.api.live_internal import router as live_internal_router
 from flowsight.api.live_routes import router as live_router
 from flowsight.api.routes import router
 from flowsight.core.config import ConfigurationError, Settings, load_settings
+from flowsight.core.local_webcam import configure_local_webcam
 from flowsight.db.session import create_database_engine, create_session_factory
 from flowsight.preview.broker import PreviewBroker
 from flowsight.preview.live_channel import LiveBroker, LiveChannel
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 def create_app() -> FastAPI:
     """Validate configuration before exposing an application instance."""
 
-    settings: Settings = load_settings()
+    settings: Settings = configure_local_webcam(load_settings())
     application = FastAPI(title="FlowSight API", version="0.1.0")
     application.add_middleware(
         CORSMiddleware,

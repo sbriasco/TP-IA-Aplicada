@@ -7,13 +7,13 @@
 .confirmActions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 .confirmDelete { color: white; background: #a43630; border-color: #a43630; }
 .option, .selectedOption { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid var(--fs-line); border-radius: 8px; cursor: pointer; }
-.option:hover { background: #f8fafb; }
+.option:hover { background: var(--fs-raised); }
 .selectedOption { background: var(--fs-tint); border-color: var(--fs-accent); }
 .option input, .selectedOption input { flex: 0 0 auto; width: 16px; height: 16px; margin: 3px 0 0; accent-color: var(--fs-accent); }
 .optionBody { display: grid; gap: 5px; min-width: 0; flex: 1; }
 .optionHeading { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .optionHeading strong { font-size: 13px; }
-.latest { padding: 3px 6px; background: white; border: 1px solid #c9e0e4; border-radius: 4px; font-size: 10px; color: var(--fs-accent); white-space: nowrap; }
+.latest { padding: 3px 6px; background: var(--fs-surface); border: 1px solid #c9e0e4; border-radius: 4px; font-size: 10px; color: var(--fs-accent); white-space: nowrap; }
 .shopCount { font-size: 12px; }
 .savedAt { font-size: 11px; color: var(--fs-muted); }
 .previous { margin-top: 12px; }
@@ -24,7 +24,7 @@
 .explanation { margin: 14px 0 16px; font-size: 12px; line-height: 1.6; color: var(--fs-muted); }
 .startButton { width: 100%; }
 .feedback { font-size: 12px; line-height: 1.6; margin: 12px 0 0; overflow-wrap: anywhere; }
-.empty { background: #f8fafb; padding: 14px; border-radius: 8px; font-size: 13px; }
+.empty { background: var(--fs-raised); padding: 14px; border-radius: 8px; font-size: 13px; }
 .empty p { color: var(--fs-muted); line-height: 1.6; }
 .editorLink { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; padding: 6px 12px; border: 1px solid var(--fs-line); border-radius: 6px; background: var(--fs-surface); text-decoration: none; font-weight: 600; font-size: 12px; }
 .configurations:disabled .option, .configurations:disabled .selectedOption { cursor: default; opacity: 0.6; }

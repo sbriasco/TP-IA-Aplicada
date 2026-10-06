@@ -116,7 +116,7 @@ Pop-Location
 
 Completá `.env` con `FLOWSIGHT_DATABASE_URL`. Por defecto el ejemplo apunta a PostgreSQL local. Para la base compartida de integración/demo y para Foundry (API key), seguí **[`docs/acceso-compartido-azure.md`](docs/acceso-compartido-azure.md)**: secretos solo por canal seguro del equipo, nunca en Git. Cada integrante debe agregar su IP al firewall de Azure PostgreSQL.
 
-Para registrar videos (specs/004), completá además `FLOWSIGHT_VIDEOS_DIR` (ruta absoluta a una carpeta fuera del repo, donde se copian los videos registrados) y `FLOWSIGHT_MACHINE_ID` (identificador de este equipo, sin tu nombre ni tu usuario del sistema; ver el formato en `.env.example`). Ambas son opcionales: la API y el worker arrancan sin ellas, pero registrar o recargar un video responde 503 (`videos_dir_not_configured` o `machine_id_not_configured`) hasta que estén configuradas.
+Para registrar videos (specs/004), completá además `FLOWSIGHT_VIDEOS_DIR` (ruta absoluta a una carpeta fuera del repo, donde se copian los videos registrados). La API y el worker arrancan sin ella, pero registrar o recargar un video responde 503 (`videos_dir_not_configured`) hasta que esté configurada. El identificador del equipo y la conexión local de webcam se generan automáticamente y se comparten mediante `.tools/runtime/webcam.json`, excluido de Git. No hace falta completar `FLOWSIGHT_MACHINE_ID` ni `FLOWSIGHT_LIVE_CHANNEL_TOKEN`; los valores explícitos siguen disponibles como ajustes opcionales.
 
 PostgreSQL queda en `.tools/postgresql-17/pgsql`. Esa carpeta y `.postgres-data` están excluidas de Git. Para volver a levantarlo:
 

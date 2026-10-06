@@ -1,18 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
+import { Camera, Plus, Search, Trash2, Video } from "lucide-react";
 import { API_BASE_URL } from "../api/config";
 import { ApiRequestError } from "../api/http";
 import { listProcessedSessions, type ProcessedSession } from "../api/processedSessions";
 import { deleteSession, listSessions } from "../api/sessions";
 import { AppShell } from "../components/AppShell";
 import { CameraManager } from "../components/CameraManager";
+import { DashboardSteps } from "../components/DashboardSteps";
 import { Link } from "../components/Link";
 import { Modal } from "../components/Modal";
 import { VideoUploadForm } from "../components/VideoUploadForm";
 import { navigate } from "../navigation";
 import type { SessionSummary } from "../types/session";
+import type { AnalysisStatus } from "../types/analysis";
+import { analysisDuration, analysisItem } from "../presentation/analysis";
 import styles from "./SessionsPage.module.css";
 
-const STATUS: Record<ProcessedSession["status"], string> = {
+const STATUS: Record<AnalysisStatus, string> = {
+  unanalysed: "Sin analizar", loading: "Cargando estado…", unavailable: "Estado no disponible", incomplete: "Resultado incompleto",
   pending: "En cola", processing: "Analizando", completed: "Resultados listos",
   failed: "Error en el análisis", cancelled: "Cancelado",
 };
@@ -22,12 +27,16 @@ function message(reason: unknown): string {
 interface SessionsPageProps { apiBaseUrl?: string; }
 
 export function SessionsPage({ apiBaseUrl = API_BASE_URL }: SessionsPageProps) {
+  const searchId = useId();
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<"all" | "active" | "completed">("all");
   const [sessions, setSessions] = useState<SessionSummary[] | null>(null);
   const [jobs, setJobs] = useState<ProcessedSession[]>([]);
   const [jobsLoaded, setJobsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [jobsError, setJobsError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [videoBusy, setVideoBusy] = useState(false);
   const [managingCameras, setManagingCameras] = useState(false);
   const [cameraBusy, setCameraBusy] = useState(false);
   const [selected, setSelected] = useState<SessionSummary | null>(null);
@@ -62,18 +71,17 @@ export function SessionsPage({ apiBaseUrl = API_BASE_URL }: SessionsPageProps) {
     finally { setRemoving(false); }
   }
   const jobsBySession = new Map(jobs.map((job) => [job.session_id, job]));
+  const items = (sessions ?? []).map(session => analysisItem(session, jobsBySession.get(session.id), jobsLoaded, jobsError !== null));
+  const needle = query.trim().toLocaleLowerCase("es-AR");
+  const visible = items.filter(item => (filter === "all" || (filter === "active" ? item.busy : item.status === "completed" || item.status === "incomplete")) &&
+    `${item.session.name} ${item.session.camera.name}`.toLocaleLowerCase("es-AR").includes(needle));
+  const editable = sessions?.find(session => session.source_kind !== "synthetic");
 
   return (
-    <AppShell title="Tus análisis">
-      <div className={styles.heading}>
-        <p>Cargá un video, configurá la escena y consultá lo que sucede en tu espacio.</p>
-        <div className={styles.headingActions}><Link href="/live">Webcam en vivo</Link><button type="button" onClick={() => setManagingCameras(true)}>Cámaras</button><button type="button" data-primary onClick={() => setUploading(true)}>Nuevo análisis</button></div>
-      </div>
-      <ol className={styles.steps} aria-label="Cómo funciona FlowSight">
-        <li><span>1</span><div><strong>Cargá un video</strong><small>De una cámara fija</small></div></li>
-        <li><span>2</span><div><strong>Configurá la escena</strong><small>Dibujá locales, zonas y accesos</small></div></li>
-        <li><span>3</span><div><strong>Analizá y consultá</strong><small>Resultados y agente de IA</small></div></li>
-      </ol>
+    <AppShell title="Tus análisis" subtitle="Cargá un video, configurá la escena y consultá lo que sucede en tu espacio." actions={
+      <div className={styles.headingActions}><Link href="/live" className={styles.outlineAction}><Video size={16} aria-hidden="true" />Webcam en vivo</Link><button type="button" onClick={() => setManagingCameras(true)}><Camera size={16} aria-hidden="true" />Cámaras</button><button type="button" data-primary onClick={() => setUploading(true)}><Plus size={18} aria-hidden="true" />Nuevo análisis</button></div>
+    }>
+      <DashboardSteps onUpload={() => setUploading(true)} configureHref={editable ? `/sessions/${encodeURIComponent(editable.id)}/editor` : undefined} resultsHref={items.find(item => item.ready)?.href} />
       {error && <p role="alert">{error}</p>}
       {jobsError && <p role="alert">No se pudieron cargar los estados. {jobsError}</p>}
       {notice && <p role="status">{notice}</p>}
@@ -81,43 +89,36 @@ export function SessionsPage({ apiBaseUrl = API_BASE_URL }: SessionsPageProps) {
       {sessions?.length === 0 && <div className={styles.empty}><h2>Todavía no hay análisis.</h2><p>Empezá con un video. Después podrás definir qué querés medir.</p><button type="button" onClick={() => setUploading(true)}>Cargar mi primer video</button></div>}
       {sessions !== null && sessions.length > 0 && (
         <section className={styles.history} aria-label="Historial de análisis">
-          <div className={styles.tableHeading}><h2>Videos y análisis</h2><span>{sessions.length} en el historial</span></div>
+          <div className={styles.tableHeading}><div className={styles.tableTitle}><h2>Videos y análisis</h2><span>{sessions.length} en el historial</span></div>
+            <div className={styles.tableControls}>
+              <div className={styles.search}><label htmlFor={searchId} className={styles.srOnly}>Buscar análisis</label><Search size={15} aria-hidden="true" /><input id={searchId} type="search" placeholder="Buscar video…" value={query} onChange={event => setQuery(event.target.value)} /></div>
+              <div className={styles.filters} role="group" aria-label="Filtrar análisis por estado">
+                <button type="button" aria-pressed={filter === "all"} onClick={() => setFilter("all")}>Todos</button>
+                <button type="button" aria-pressed={filter === "active"} onClick={() => setFilter("active")}>Activos</button>
+                <button type="button" aria-pressed={filter === "completed"} onClick={() => setFilter("completed")}>Completados</button>
+              </div>
+            </div>
+          </div>
           <div className={styles.tableScroll} role="region" aria-label="Tabla de análisis" tabIndex={0}>
-            <table><thead><tr><th scope="col">Video / análisis</th><th scope="col">Cámara</th><th scope="col">Estado</th><th scope="col">Creado</th><th scope="col" className={styles.actionCell}>Acciones</th><th scope="col" className={styles.deleteCell} aria-label="Eliminar análisis" /></tr></thead>
-              <tbody>{sessions.map((session) => {
-                const job = jobsBySession.get(session.id);
-                const busy = job?.status === "pending" || job?.status === "processing";
-                const ready = job?.status === "completed" && job.result_complete;
+            <table><thead><tr><th scope="col">Video / análisis</th><th scope="col">Cámara</th><th scope="col">Estado</th><th scope="col">Creado</th><th scope="col" className={styles.actionCell}>Acciones</th></tr></thead>
+              <tbody>{visible.map(({ session, busy, ready, status, href, action, durationSeconds }) => {
                 const path = "/sessions/" + encodeURIComponent(session.id);
                 const live = session.source_kind === "webcam";
-                const target = live && job ? `/live/jobs/${encodeURIComponent(job.job_id)}${busy ? "" : "/results"}` : busy ? "/?job=" + encodeURIComponent(job.job_id) : ready ? path + "/results" : path;
-                const action = live && job ? busy ? "Ver en vivo" : "Ver resultados" : busy ? "Ver avance" : ready ? "Ver resultados" : "Continuar";
-                const status = !jobsLoaded ? "Cargando estado…" : jobsError ? "Estado no disponible" : !job ? "Sin analizar" : job.status === "completed" && !job.result_complete ? "Resultado incompleto" : STATUS[job.status];
                 return <tr key={session.id}>
-                  <td><Link href={path}>{session.name}</Link></td><td>{session.camera.name}</td>
-                  <td><span className={ready ? styles.ready : busy ? styles.running : styles.status}>{status}</span>{session.source_kind === "synthetic" && <small className={styles.synthetic}>Datos sintéticos</small>}{live && <small className={styles.synthetic}>Webcam · Sin grabación</small>}</td>
+                  <td><Link href={path}>{session.name}</Link><small className={styles.duration}>Tiempo analizado: {analysisDuration(durationSeconds)}</small></td><td><span className={styles.cameraName}><Video size={14} aria-hidden="true" />{session.camera.name}</span></td>
+                  <td><span className={ready ? styles.ready : busy ? styles.running : status === "failed" ? styles.failed : styles.status}>{ready && <span className={styles.dot} aria-hidden="true" />}{STATUS[status]}</span>{session.source_kind === "synthetic" && <small className={styles.synthetic}>Datos sintéticos</small>}{live && <small className={styles.synthetic}>Webcam · Sin grabación</small>}</td>
                   <td><time dateTime={session.created_at}>{new Date(session.created_at).toLocaleDateString("es-AR", { day: "numeric", month: "short" })}</time></td>
-                  <td className={styles.actionCell}><Link className={styles.openAction} href={target}>{action}</Link></td>
-                  <td className={styles.deleteCell}><button className={styles.deleteButton} type="button" aria-label={"Eliminar " + session.name} disabled={busy} title={busy ? "Esperá a que termine o cancelá el análisis antes de eliminarlo" : "Eliminar del historial"} onClick={() => { setSelected(session); setRemoveError(null); }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6" /></svg>
-                  </button></td>
+                  <td className={styles.actionCell}><div className={styles.rowActions}><Link className={styles.openAction} href={href}>{action}</Link>
+                  <button className={styles.deleteButton} type="button" aria-label={"Eliminar " + session.name} disabled={busy} title={busy ? "Esperá a que termine o cancelá el análisis antes de eliminarlo" : "Eliminar del historial"} onClick={() => { setSelected(session); setRemoveError(null); }}>
+                    <Trash2 size={16} aria-hidden="true" />
+                  </button></div></td>
                 </tr>;
-              })}</tbody>
+              })}{visible.length === 0 && <tr><td colSpan={5} className={styles.noMatches}>No hay análisis que coincidan con la búsqueda y el filtro.</td></tr>}</tbody>
             </table>
           </div>
-          <aside className={styles.legend} aria-label="Guía de estados">
-            <div className={styles.legendTitle}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7h.01" /></svg>
-              <span>Guía de estados</span>
-            </div>
-            <dl className={styles.legendStates}>
-              <div><dt><span className={styles.status}>Sin analizar</span></dt><dd>Video cargado. Configurá la escena para empezar.</dd></div>
-              <div><dt><span className={styles.ready}>Resultados listos</span></dt><dd>Análisis completo. Explorá las métricas y consultá al agente.</dd></div>
-            </dl>
-          </aside>
         </section>
       )}
-      {uploading && <Modal title="Nuevo análisis" onClose={() => setUploading(false)}><VideoUploadForm apiBaseUrl={apiBaseUrl} onRegistered={(session) => navigate("/sessions/" + encodeURIComponent(session.id))} /></Modal>}
+      {uploading && <Modal title="Nuevo análisis" subtitle="Cargá el video de tu cámara fija y asigná la ubicación para comenzar." wide busy={videoBusy} onClose={() => setUploading(false)}><VideoUploadForm apiBaseUrl={apiBaseUrl} onCancel={() => setUploading(false)} onBusyChange={setVideoBusy} onRegistered={(session) => navigate("/sessions/" + encodeURIComponent(session.id))} /></Modal>}
       {managingCameras && <Modal title="Administrar cámaras" busy={cameraBusy} onClose={() => setManagingCameras(false)}>
         <CameraManager apiBaseUrl={apiBaseUrl} onBusyChange={setCameraBusy} onRenamed={(camera) => {
           setSessions((current) => current?.map((session) => session.camera.id === camera.id ? { ...session, camera } : session) ?? null);

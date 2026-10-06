@@ -70,6 +70,39 @@ def test_device_selector_returns_native_names_instead_of_guessed_indices(live_cl
     ]
 
 
+def test_lists_native_devices_without_manual_webcam_configuration(
+    live_engine, monkeypatch, tmp_path
+):
+    import flowsight.api.live_routes as routes
+    import flowsight.api.main as bootstrap
+    from flowsight.core.local_webcam import configure_local_webcam
+
+    monkeypatch.setenv("FLOWSIGHT_ENV", "test")
+    monkeypatch.setenv("FLOWSIGHT_WORKER_ID", "automatic-test")
+    monkeypatch.setenv("FLOWSIGHT_LIVE_CAPTURE_SOURCE", "webcam")
+    monkeypatch.delenv("FLOWSIGHT_MACHINE_ID", raising=False)
+    monkeypatch.delenv("FLOWSIGHT_LIVE_CHANNEL_TOKEN", raising=False)
+    monkeypatch.setattr(
+        bootstrap,
+        "configure_local_webcam",
+        lambda value: configure_local_webcam(value, directory=tmp_path),
+    )
+    monkeypatch.setattr(
+        routes,
+        "list_webcams",
+        lambda: [{"device_index": 0, "label": "Integrated Camera", "verified": False}],
+    )
+    application = create_app()
+    try:
+        with TestClient(application) as client:
+            response = client.get("/live/devices")
+            assert response.status_code == 200
+            assert response.json()["candidates"][0]["label"] == "Integrated Camera"
+            assert response.json()["worker_available"] is False
+    finally:
+        application.state.engine.dispose()
+
+
 def test_device_discovery_failure_returns_safe_error(live_client, monkeypatch):
     import flowsight.api.live_routes as routes
 

@@ -1,9 +1,39 @@
-.description { color: var(--fs-muted); font-size: 0.8rem; margin: -0.5rem 0 1.3rem; max-width: 65ch; }
-.fields { border: 0; padding: 0; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem 1.5rem; }
-.file { grid-column: 1 / -1; background: #f8fafb; border: 1px dashed #b7cdd5; border-radius: 9px; padding: 1.1rem; }
-.file label, .name label { display: block; margin-bottom: 0.4rem; }
-.file input { background: transparent !important; border: 0 !important; padding: 0 !important; }
-.file small { display: block; margin-top: 0.4rem; }
+.form { margin: 0; }
+.fields { border: 0; padding: 0; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+.fileColumn, .details { min-width: 0; }
+.fileColumn { display: flex; flex-direction: column; gap: 12px; }
+.details { display: flex; flex-direction: column; gap: 24px; }
+.sectionLabel { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
+.fileColumn > .sectionLabel { margin: 0; }
+.sectionLabel span { color: var(--fs-accent); font-size: 12px; font-weight: 700; }
+.sectionLabel label, .sectionLabel h3 { margin: 0; font-size: 14px; font-weight: 600; }
 .name input { width: 100%; }
-.submit { grid-column: 1 / -1; border-top: 1px solid var(--fs-line); padding-top: 1rem; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
-@media (max-width: 850px) { .fields { grid-template-columns: 1fr; } }
+.fileArea { position: relative; flex: 1; display: flex; min-height: 260px; border: 2px dashed var(--fs-line); border-radius: 9px; background: var(--fs-raised); transition: border-color 150ms, background 150ms; }
+.fileArea:hover, .fileArea:focus-within, .dragging { border-color: var(--fs-accent); background: var(--fs-tint); }
+.fileInput, .srOnly { position: absolute; width: 1px; height: 1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.dropTarget { width: 100%; min-height: 260px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 17px; padding: 24px; text-align: center; cursor: pointer; }
+.dropTarget strong { font-size: 14px; font-weight: 500; line-height: 1.6; }
+.dropTarget small { font-size: 12px; color: var(--fs-muted); font-weight: 400; }
+.uploadIcon, .videoIcon { color: var(--fs-accent); display: flex; flex-shrink: 0; }
+.selected { width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 20px; }
+.selectedFile { display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0; padding: 14px; border: 1px solid var(--fs-line); border-radius: 8px; background: var(--fs-surface); }
+.selectedFile > div { min-width: 0; flex: 1; }
+.selectedFile strong { display: block; overflow-wrap: anywhere; font-size: 13px; line-height: 1.5; }
+.selectedFile small { display: block; margin-top: 4px; color: var(--fs-muted); font-size: 12px; }
+.removeFile { display: grid; place-items: center; min-height: 30px; width: 30px; padding: 0; flex-shrink: 0; }
+.selected > button { min-height: 36px; font-size: 12px; }
+.camera fieldset { padding: 12px; background: var(--fs-raised); border-radius: 8px; }
+.camera fieldset legend { font-size: 12px; }
+.camera fieldset input, .camera fieldset button { min-height: 38px; font-size: 12px; }
+.footer { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--fs-line); }
+.footer p { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--fs-muted); font-size: 12px; line-height: 1.5; }
+.footer p svg { flex-shrink: 0; }
+.actions { display: flex; gap: 8px; flex-shrink: 0; }
+.actions button { min-height: 40px; padding: 9px 18px; font-size: 13px; font-weight: 500; }
+.actions button[type="submit"] { background: var(--fs-primary); border-color: var(--fs-primary); color: white; box-shadow: 0 1px 2px #00000015; }
+.actions button[type="submit"]:hover:not(:disabled) { background: var(--fs-primary-hover); border-color: var(--fs-primary-hover); }
+@media (max-width: 680px) {
+  .fields { grid-template-columns: 1fr; gap: 24px; }
+  .footer { flex-direction: column; align-items: stretch; gap: 16px; }
+  .actions { justify-content: flex-end; }
+}

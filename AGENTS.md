@@ -2,6 +2,8 @@
 
 ## Contexto del producto
 
+Actualización de vocabulario del producto (2026-10-05, indicada por el usuario): la interfaz usa zonas de análisis, no locales comerciales. Cada zona de análisis agrupa áreas externas, interiores o de interés y sus líneas de acceso. Los identificadores históricos `shops`, `shop_id`, `front`, `interior` y `showcase` se conservan en contratos y persistencia para mantener compatibilidad con escenas existentes; esto no modifica los criterios de medición.
+
 FlowSight es una plataforma de analítica de espacios comerciales para el Grupo 6, seis estudiantes de Ingeniería en Informática. El MVP vence el 2 de octubre de 2026 y la versión final el 13 de noviembre de 2026.
 
 El usuario carga un video de una cámara fija y configura la escena sobre un frame: polígonos de interés, líneas de entrada/salida y locales identificados manualmente. El sistema procesa el video y sincroniza detecciones, `track_id` temporales, zonas y eventos con los timestamps de los frames analizados; luego ofrece un dashboard y consultas sobre resultados actuales o históricos. El procesamiento es local. La PC de referencia tiene Windows y una RTX 5080 de 16 GB de VRAM, pero no se debe asumir esa GPU en todos los equipos ni prometer velocidad de video en tiempo real antes de medirla.
@@ -28,6 +30,7 @@ Exposición, detención y atención estimada hacia vidrieras; funnel comercial y
 - Respetar el stack acordado a continuación. Evaluar y documentar cambios antes de adoptarlos; no asumir versiones ni compatibilidad de GPU sin validarlas.
 - El LLM consulta herramientas/API de analytics. No calcula métricas desde el video ni ejecuta SQL arbitrario generado por el modelo.
 - Mantener credenciales y llamadas al modelo en el backend.
+- La conexión local de webcam se inicializa automáticamente por API y worker; no exigir configurar identificador o token en `.env` para listar dispositivos. Los valores explícitos siguen siendo overrides opcionales. La credencial generada vive en `.tools/runtime/webcam.json`, fuera de Git.
 - Un `track_id` es temporal y pertenece a una sesión/cámara: no representa una identidad real ni garantiza una persona única.
 - Medir tiempos con timestamps del video en archivos y timestamps de captura relativos al inicio analítico en fuentes en vivo, no con el tiempo de procesamiento. Descartar frames no comprime el tiempo observado; una interrupción no demuestra continuidad de un track.
 - Debe existir persistencia y aislamiento por sesión; versionar migraciones, configuración de ejemplo e instrucciones.
@@ -37,7 +40,7 @@ Exposición, detención y atención estimada hacia vidrieras; funnel comercial y
 
 ## Stack acordado
 
-- Frontend: React, TypeScript con `strict` y Vite; CSS Modules para estilos, SVG sobre el frame para el editor visual y Recharts para gráficos.
+- Frontend: React, TypeScript con `strict` y Vite; CSS Modules y variables CSS para estilos/temas, SVG sobre el frame para el editor visual y Recharts para gráficos. Tailwind CSS 4.3.3 con su plugin de Vite, sin preflight global, para el editor de escenas (pedido explícito del usuario el 2026-10-05). Lucide React para iconografía de interfaz; el isotipo propio de FlowSight conserva su SVG.
 - Backend: Python, FastAPI y Pydantic. Worker Python separado para visión, en el mismo repositorio.
 - Datos: PostgreSQL (SQLAlchemy + Alembic). **Local** por integrante para desarrollo aislado, tests y CI; **Azure Database for PostgreSQL – Flexible Server** para integración/demo compartida. Selección solo vía `FLOWSIGHT_DATABASE_URL`. Videos y archivos derivados en disco local. El worker de visión permanece local.
 - Visión: Ultralytics YOLO, PyTorch y OpenCV; ByteTrack como punto de partida sujeto a evaluación.
@@ -54,6 +57,7 @@ Consultar [Decisiones técnicas](docs/decisiones-tecnicas.md) para los motivos, 
 - Evitar eventos duplicados por oscilaciones en líneas y bordes.
 - Distinguir ocupación visible de ocupación total de un local.
 - No inferir permanencia dentro de un comercio si se pierde el seguimiento.
+- En webcam, la estadía promedio por zona usa visitas observadas de duración positiva, incluidas las visitas en curso; una pérdida de track, cambio de segmento o intervalo mayor a un segundo corta la continuidad. Se guarda con el checkpoint (migración `0011_live_zone_dwell`).
 - Documentar denominadores, deduplicación y tratamiento de datos incompletos; una división por cero se muestra como no disponible.
 - Calcular conversiones entre etapas solo con tracks vinculados y criterios compatibles.
 - Mostrar atención y posible compra como estimaciones.

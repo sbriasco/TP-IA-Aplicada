@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { click } from "./dom";
 
 import { AppShell } from "../src/components/AppShell";
 
@@ -9,6 +10,7 @@ describe("AppShell", () => {
   let root: Root;
 
   beforeEach(() => {
+    localStorage.removeItem("flowsight-theme");
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -17,6 +19,22 @@ describe("AppShell", () => {
   afterEach(async () => {
     await act(async () => root.unmount());
     container.remove();
+    localStorage.removeItem("flowsight-theme");
+    document.documentElement.removeAttribute("data-theme");
+    document.documentElement.classList.remove("dark");
+  });
+
+  it("alterna el tema y conserva la preferencia al volver a montar", async () => {
+    await act(async () => root.render(<AppShell title="Análisis">Contenido</AppShell>));
+    await click(container.querySelector('button[aria-label="Activar modo oscuro"]')!);
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(localStorage.getItem("flowsight-theme")).toBe("dark");
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await act(async () => root.render(<AppShell title="Otra vista">Contenido</AppShell>));
+    expect(container.querySelector('button[aria-label="Activar modo claro"]')).not.toBeNull();
+    await click(container.querySelector('button[aria-label="Activar modo claro"]')!);
+    expect(document.documentElement.dataset.theme).toBe("light");
   });
 
   it("pone el título en el único h1 y el contexto al lado", async () => {

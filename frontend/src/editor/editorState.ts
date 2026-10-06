@@ -214,7 +214,7 @@ function shopFromVersion(
   const zones: Zones = {};
   for (const role of ZONE_ROLES) {
     const points = shop.zones[role];
-    if (points !== undefined) zones[role] = points.map(toFrame);
+    if (points != null) zones[role] = points.map(toFrame);
   }
   return {
     key,

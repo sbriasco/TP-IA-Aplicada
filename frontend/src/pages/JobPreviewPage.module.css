@@ -12,5 +12,5 @@
 .progress { width: 100%; height: 8px; display: block; margin: 1.2rem 0; }
 .note { font-size: 0.72rem; color: var(--fs-muted); }
 .cancel { color: #984138; border-color: #e5c8c4; width: 100%; }
-.results { display: block; text-align: center; border-radius: 7px; padding: 0.65rem 1rem; background: var(--fs-accent); color: white; font-weight: 600; text-decoration: none; }
+.results { display: block; text-align: center; border-radius: 7px; padding: 0.65rem 1rem; background: var(--fs-primary); color: white; font-weight: 600; text-decoration: none; }
 .results:hover { background: #104d5b; color: white; }

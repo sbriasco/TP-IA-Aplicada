@@ -2,9 +2,9 @@
 .heading { display: flex; align-items: center; gap: 10px; padding: 16px; border-bottom: 1px solid var(--fs-line); }
 .heading h2 { margin: 0 0 3px; font-size: 15px; font-weight: 600; }
 .heading p { margin: 0; font-size: 12px; color: var(--fs-muted); }
-.avatar { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; background: var(--fs-accent); color: white; flex-shrink: 0; }
+.avatar { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; background: var(--fs-primary); color: white; flex-shrink: 0; }
 .avatar svg { width: 23px; height: 23px; fill: currentColor; }
-.context { padding: 9px 16px; background: #f8fafb; border-bottom: 1px solid var(--fs-line); font-size: 12px; overflow-wrap: anywhere; }
+.context { padding: 9px 16px; background: var(--fs-raised); border-bottom: 1px solid var(--fs-line); font-size: 12px; overflow-wrap: anywhere; }
 .context span { color: var(--fs-muted); }
 .conversation { flex: 1; min-height: 0; padding: 16px; overflow: auto; scrollbar-width: thin; }
 .welcome p, .answer p, .question p { margin: 6px 0; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }

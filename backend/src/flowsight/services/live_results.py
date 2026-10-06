@@ -50,6 +50,7 @@ def persist_live_checkpoint(
     bucket_rows=(),
     owner_epoch=None,
     machine_id=None,
+    zone_dwell=None,
 ):
     database.execute(text("SET LOCAL lock_timeout = '250ms'"))
     database.execute(text("SET LOCAL statement_timeout = '1000ms'"))
@@ -210,6 +211,8 @@ def persist_live_checkpoint(
             )
         )
     state.capture_started_at = started_at
+    if zone_dwell is not None:
+        state.zone_dwell = zone_dwell
     state.elapsed_capture_seconds = (
         frame.timestamp_seconds if ending_capture_seconds is None else ending_capture_seconds
     )
@@ -384,6 +387,7 @@ def load_live_results(database, job_id, *, shop_id=None, bucket_cursor=None):
         "coverage_complete": state.coverage_complete,
         "unknown_tail": state.unknown_tail,
         "capture_started_at": state.capture_started_at,
+        "zone_dwell": state.zone_dwell,
         "capture_ended_at": state.capture_ended_at,
         "elapsed_capture_seconds": float(state.elapsed_capture_seconds),
         "checkpoint_at": state.checkpoint_at,

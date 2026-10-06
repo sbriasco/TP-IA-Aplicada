@@ -197,7 +197,19 @@ def test_atomic_checkpoint_is_idempotent_and_keeps_original_minute(live_job):
         assert database.get(LiveAnalysisState, job_id).revision == 0
     for _ in range(2):
         with factory.begin() as database:
-            persist_live_checkpoint(database, *checkpoint_args, bucket_rows=buckets.dirty_rows())
+            persist_live_checkpoint(
+                database,
+                *checkpoint_args,
+                bucket_rows=buckets.dirty_rows(),
+                zone_dwell={
+                    str(shop_id): {
+                        "interior_average_seconds": None,
+                        "interior_sample_count": 0,
+                        "front_average_seconds": 0.5,
+                        "front_sample_count": 1,
+                    }
+                },
+            )
     with factory() as database:
         event = database.scalar(select(LiveCrossing).where(LiveCrossing.job_id == job_id))
         assert event.capture_timestamp_seconds == Decimal("59.8")
@@ -208,22 +220,42 @@ def test_atomic_checkpoint_is_idempotent_and_keeps_original_minute(live_job):
         assert database.get(LiveCrossingBucket, (job_id, shop_id, 1)).entries == 0
         assert database.query(LivePositionSample).filter_by(job_id=job_id).count() == 2
         assert database.get(LiveAnalysisState, job_id).revision == 3
+        from flowsight.services.live_results import load_live_results
+
+        result = load_live_results(database, job_id)
+        assert result["zone_dwell"][str(shop_id)]["front_average_seconds"] == 0.5
 
 
 def test_published_frame_and_accumulated_counts_share_horizon(live_job):
     from types import SimpleNamespace
 
+    from flowsight.db.models import SceneVersionShop, SceneZone, ZoneRole
+    from flowsight.services.live_results import load_live_results
     from flowsight.worker.live_analysis import process_live_analysis_job
 
     factory, job_id, lease = live_job
     with factory.begin() as database:
-        claim_next_job(
+        job = claim_next_job(
             database,
             "worker-runner",
             datetime.now(UTC),
             machine_id="expo-runner",
             owner_epoch=lease.owner_epoch,
         )
+        version_shop = database.scalar(
+            select(SceneVersionShop).where(
+                SceneVersionShop.scene_version_id == job.scene_version_id
+            )
+        )
+        for role, bottom, top in [(ZoneRole.FRONT, 0, 0.4), (ZoneRole.INTERIOR, 0.6, 1)]:
+            database.add(
+                SceneZone(
+                    version_shop_id=version_shop.id,
+                    role=role,
+                    polygon=[[0, bottom], [1, bottom], [1, top], [0, top]],
+                )
+            )
+        shop_id = str(version_shop.shop_id)
     trajectory = [("0", 144.0), (".1", 36.0), (".5", 36.0), (".9", 144.0), ("1.3", 144.0)]
     current = [0]
     clock = [1_000_000_000]
@@ -281,3 +313,14 @@ def test_published_frame_and_accumulated_counts_share_horizon(live_job):
     assert final["shops"][0]["entry_direction"] == "a_to_b"
     assert final["minutes"][0]["entries"] == 1 and final["minutes"][0]["exits"] == 1
     assert final["image_media_type"] == "image/jpeg" and final["image_base64"]
+    expected_dwell = {
+        "interior_average_seconds": 0.4,
+        "front_average_seconds": 0.4,
+        "interior_sample_count": 1,
+        "front_sample_count": 1,
+    }
+    assert final["zone_dwell"][shop_id] == expected_dwell
+    with factory() as database:
+        stored = load_live_results(database, job_id)
+        assert stored["zone_dwell"][shop_id] == expected_dwell
+        assert stored["capture_started_at"] is not None

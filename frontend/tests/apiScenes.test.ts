@@ -61,7 +61,7 @@ const payload: SceneVersionCreate = {
     {
       shop_id: null,
       name: "Local A",
-      zones: version.shops[0]!.zones,
+      zones: { front: version.shops[0].zones.front ?? [] },
       entry_line: version.shops[0]!.entry_line,
     },
   ],

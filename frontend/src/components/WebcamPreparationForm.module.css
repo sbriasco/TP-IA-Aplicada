@@ -1,0 +1,15 @@
+.form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 1.25rem; width: 100%; margin-top: 1.5rem; }
+.intro { grid-column: 1 / -1; margin: 0; color: var(--fs-muted); }
+.card { display: grid; align-content: start; gap: 1rem; min-width: 0; padding: 1.5rem; background: var(--fs-surface); border: 1px solid var(--fs-line); border-radius: 12px; }
+.form > [role="alert"] { grid-column: 1 / -1; }
+.card h2 { margin: 0 0 .25rem; font-size: 1rem; }
+.field { display: grid; gap: .5rem; min-width: 0; }
+.field input, .field select { width: 100%; min-height: 42px; }
+.field label { font-size: .85rem; }
+.deviceRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: .75rem; }
+.help { color: var(--fs-muted); margin: 0; font-size: .8rem; }
+.actions { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; padding: .25rem 0; }
+.actions span { color: var(--fs-muted); font-size: .8rem; max-width: 28rem; }
+.actions button { flex-shrink: 0; }
+@media (max-width: 900px) { .form { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 600px) { .card { padding: 1rem; } .deviceRow { grid-template-columns: 1fr; } .deviceRow button { justify-self: start; } .actions { flex-direction: column; align-items: stretch; gap: .75rem; } }

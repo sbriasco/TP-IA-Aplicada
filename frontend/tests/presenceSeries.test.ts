@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { presenceSeries } from "../src/flow/presenceSeries";
 
 describe("presenceSeries", () => {
-  it("sube mientras el track está en la zona frontal y baja al salir", () => {
+  it("sube mientras el track está en el área externa y baja al salir", () => {
     const series = presenceSeries(
       [
         { kind: "zone_enter", zone_role: "front", track_id: 1, video_timestamp_seconds: 0 },

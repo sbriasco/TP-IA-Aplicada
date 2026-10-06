@@ -109,26 +109,26 @@ describe("ShopPanel", () => {
   it("agrega un local, lo selecciona y permite renombrarlo", async () => {
     await render(empty());
 
-    await click(byButton(container, "Agregar local"));
+    await click(byButton(container, "Agregar zona"));
     expect(current.shops).toHaveLength(1);
     expect(current.selection?.shopIndex).toBe(0);
-    expect(byLabel<HTMLSelectElement>(container, "Local en edición").value).toBe("0");
+    expect(byLabel<HTMLSelectElement>(container, "Zona en edición").value).toBe("0");
 
-    const name = byLabel<HTMLInputElement>(container, "Nombre del local");
+    const name = byLabel<HTMLInputElement>(container, "Nombre de la zona");
     await changeValue(name, "Local A");
     expect(current.shops[0].name).toBe("Local A");
     expect(current.shops[0].shop_id).toBeNull();
-    expect(optionTexts(byLabel(container, "Local en edición"))).toContain("Local A");
+    expect(optionTexts(byLabel(container, "Zona en edición"))).toContain("Local A");
   });
 
   it("cambia de local con el select y quita solo el local elegido", async () => {
     await render(loaded());
 
-    await changeValue(byLabel<HTMLSelectElement>(container, "Local en edición"), "1");
+    await changeValue(byLabel<HTMLSelectElement>(container, "Zona en edición"), "1");
     expect(current.selection).toEqual({ shopIndex: 1, element: null, vertexIndex: null });
-    expect(byLabel<HTMLInputElement>(container, "Nombre del local").value).toBe("Local B");
+    expect(byLabel<HTMLInputElement>(container, "Nombre de la zona").value).toBe("Local B");
 
-    await click(byButton(container, "Quitar local de esta versión"));
+    await click(byButton(container, "Quitar zona de esta versión"));
     expect(current.shops.map((shop) => shop.name)).toEqual(["Local A"]);
     expect(current.shops[0].shop_id).toBe("shop-a");
   });
@@ -136,26 +136,26 @@ describe("ShopPanel", () => {
   it("ofrece solo los roles disponibles y empieza a dibujar la zona elegida", async () => {
     await render(apply(loaded(), { type: "select", selection: { shopIndex: 0, element: null, vertexIndex: null } }));
 
-    const role = byLabel<HTMLSelectElement>(container, "Rol de la zona nueva");
+    const role = byLabel<HTMLSelectElement>(container, "Tipo de área nueva");
     expect(optionValues(role)).toEqual(["interior", "showcase"]);
-    expect(optionTexts(role)).toEqual(["Interior", "Vidriera"]);
+    expect(optionTexts(role)).toEqual(["Interior", "Interés"]);
 
     await changeValue(role, "showcase");
-    await click(byButton(container, "Crear zona"));
+    await click(byButton(container, "Dibujar área"));
     expect(current.drawing).toEqual({ shopIndex: 0, element: "zone:showcase", points: [] });
   });
 
   it("después de crear una zona vuelve a proponer el primer rol disponible", async () => {
     await render(empty());
-    await click(byButton(container, "Agregar local"));
+    await click(byButton(container, "Agregar zona"));
 
-    await changeValue(byLabel<HTMLSelectElement>(container, "Rol de la zona nueva"), "showcase");
-    await click(byButton(container, "Crear zona"));
+    await changeValue(byLabel<HTMLSelectElement>(container, "Tipo de área nueva"), "showcase");
+    await click(byButton(container, "Dibujar área"));
     expect(current.drawing?.element).toBe("zone:showcase");
     await click(byButton(container, "Cancelar dibujo"));
 
-    await click(byButton(container, "Agregar local"));
-    expect(byLabel<HTMLSelectElement>(container, "Rol de la zona nueva").value).toBe("front");
+    await click(byButton(container, "Agregar zona"));
+    expect(byLabel<HTMLSelectElement>(container, "Tipo de área nueva").value).toBe("front");
   });
 
   it("deshabilita crear zona y crear línea cuando no quedan disponibles", async () => {
@@ -175,13 +175,13 @@ describe("ShopPanel", () => {
     );
     await render(full);
 
-    expect(byButton(container, "Crear zona").disabled).toBe(true);
+    expect(byButton(container, "Dibujar área").disabled).toBe(true);
     expect(byButton(container, "Crear línea de entrada").disabled).toBe(true);
   });
 
   it("crea la línea de entrada y cierra un polígono con el botón", async () => {
     await render(empty());
-    await click(byButton(container, "Agregar local"));
+    await click(byButton(container, "Agregar zona"));
 
     await click(byButton(container, "Crear línea de entrada"));
     expect(current.drawing?.element).toBe("entry_line");
@@ -190,7 +190,7 @@ describe("ShopPanel", () => {
     expect(current.drawing).toBeNull();
     expect(current.shops[0].entry_line).not.toBeNull();
 
-    await click(byButton(container, "Crear zona"));
+    await click(byButton(container, "Dibujar área"));
     expect(current.drawing?.element).toBe("zone:front");
     const close = byButton(container, "Cerrar polígono");
     await click(byButton(container, "Agregar vértice"));
@@ -207,7 +207,7 @@ describe("ShopPanel", () => {
   it("cancela un dibujo en curso", async () => {
     await render(apply(loaded(), { type: "startDrawing", shopIndex: 0, element: "zone:showcase" }));
 
-    expect(container.querySelector('[role="status"]')?.textContent).toContain("zona de vidriera");
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("área de interés");
     await click(byButton(container, "Cancelar dibujo"));
     expect(current.drawing).toBeNull();
   });
@@ -246,7 +246,7 @@ describe("ShopPanel", () => {
       }),
     );
 
-    const role = byLabel<HTMLSelectElement>(container, "Rol de la zona");
+    const role = byLabel<HTMLSelectElement>(container, "Tipo de área");
     expect(optionValues(role)).toEqual(["front", "interior", "showcase"]);
     await changeValue(role, "interior");
     expect(current.shops[0].zones.front).toBeUndefined();
@@ -261,7 +261,7 @@ describe("ShopPanel", () => {
     );
     await render(state);
 
-    const target = byLabel<HTMLSelectElement>(container, "Mover a local");
+    const target = byLabel<HTMLSelectElement>(container, "Mover a zona");
     expect(optionValues(target)).toEqual(["1", "2"]);
     expect(optionTexts(target)).toEqual(["Local B", "Local C"]);
     await changeValue(target, "2");
@@ -279,7 +279,7 @@ describe("ShopPanel", () => {
       }),
     );
 
-    expect(container.textContent).toContain("Ningún otro local puede recibir este elemento.");
+    expect(container.textContent).toContain("Ninguna otra zona puede recibir este elemento.");
     expect(Array.from(container.querySelectorAll("button")).map((b) => b.textContent)).not.toContain(
       "Mover elemento",
     );

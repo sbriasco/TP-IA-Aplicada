@@ -140,7 +140,7 @@ export function ShopPanel({ state, dispatch }: ShopPanelProps) {
         <h3 id={`${id}-element`}>{elementTitle(element)}</h3>
         {zoneRole !== null && (
           <p>
-            <label htmlFor={`${id}-zone-role`}>Rol de la zona</label>{" "}
+            <label htmlFor={`${id}-zone-role`}>Tipo de área</label>{" "}
             <select
               id={`${id}-zone-role`}
               value={zoneRole}
@@ -187,10 +187,10 @@ export function ShopPanel({ state, dispatch }: ShopPanelProps) {
           Eliminar elemento
         </button>
         {targets.length === 0 ? (
-          <p>Ningún otro local puede recibir este elemento.</p>
+          <p>Ninguna otra zona puede recibir este elemento.</p>
         ) : (
           <p>
-            <label htmlFor={`${id}-move`}>Mover a local</label>{" "}
+            <label htmlFor={`${id}-move`}>Mover a zona</label>{" "}
             <select id={`${id}-move`} value={target} onChange={(event) => setMoveTarget(event.target.value)}>
               {targets.map(({ candidate, index }) => (
                 <option key={candidate.key} value={String(index)}>
@@ -214,25 +214,25 @@ export function ShopPanel({ state, dispatch }: ShopPanelProps) {
 
   return (
     <section aria-labelledby={`${id}-title`}>
-      <h2 id={`${id}-title`}>Locales</h2>
+      <h2 id={`${id}-title`}>Zonas de análisis</h2>
       <p>
         <button
           type="button"
           disabled={shops.length >= MAX_SHOPS_PER_VERSION}
-          onClick={() => dispatch({ type: "addShop", name: `Local ${shops.length + 1}` })}
+          onClick={() => dispatch({ type: "addShop", name: `Zona ${shops.length + 1}` })}
         >
-          Agregar local
+          Agregar zona
         </button>
       </p>
       {shops.length > 0 && (
         <p>
-          <label htmlFor={`${id}-shop`}>Local en edición</label>{" "}
+          <label htmlFor={`${id}-shop`}>Zona en edición</label>{" "}
           <select
             id={`${id}-shop`}
             value={shopIndex === null ? "" : String(shopIndex)}
             onChange={(event) => select(event.target.value === "" ? null : Number(event.target.value))}
           >
-            <option value="">Elegí un local</option>
+            <option value="">Elegí una zona</option>
             {shops.map((item, index) => (
               <option key={item.key} value={String(index)}>
                 {shopDisplayName(item.name, index)}
@@ -245,7 +245,7 @@ export function ShopPanel({ state, dispatch }: ShopPanelProps) {
       {shop !== null && shopIndex !== null && (
         <>
           <p>
-            <label htmlFor={`${id}-name`}>Nombre del local</label>{" "}
+            <label htmlFor={`${id}-name`}>Nombre de la zona</label>{" "}
             <input
               id={`${id}-name`}
               type="text"
@@ -253,18 +253,18 @@ export function ShopPanel({ state, dispatch }: ShopPanelProps) {
               onChange={(event) => dispatch({ type: "renameShop", shopIndex, name: event.target.value })}
             />{" "}
             <button type="button" onClick={() => dispatch({ type: "removeShop", shopIndex })}>
-              Quitar local de esta versión
+              Quitar zona de esta versión
             </button>
           </p>
           <p>
-            <label htmlFor={`${id}-new-role`}>Rol de la zona nueva</label>{" "}
+            <label htmlFor={`${id}-new-role`}>Tipo de área nueva</label>{" "}
             <select
               id={`${id}-new-role`}
               value={role}
               disabled={roles.length === 0}
               onChange={(event) => setNewRole(event.target.value as ZoneRole)}
             >
-              {roles.length === 0 && <option value="">Todas las zonas ya están dibujadas</option>}
+              {roles.length === 0 && <option value="">Todas las áreas ya están dibujadas</option>}
               {roles.map((option) => (
                 <option key={option} value={option}>
                   {ZONE_ROLE_OPTION[option]}
@@ -281,7 +281,7 @@ export function ShopPanel({ state, dispatch }: ShopPanelProps) {
                 setNewRole("");
               }}
             >
-              Crear zona
+              Dibujar área
             </button>{" "}
             <button
               type="button"

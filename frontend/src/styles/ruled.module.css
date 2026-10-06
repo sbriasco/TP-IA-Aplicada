@@ -1,8 +1,8 @@
 .scroll { overflow-x: auto; max-width: 100%; }
 .table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
 .table th, .table td { padding: 0.85rem 1rem; border-bottom: 1px solid var(--fs-line); text-align: left; vertical-align: middle; }
-.table th { color: var(--fs-muted); font-size: 0.68rem; font-weight: 650; background: #f8fafb; }
+.table th { color: var(--fs-muted); font-size: 0.68rem; font-weight: 650; background: var(--fs-raised); }
 .table td:first-child a { text-decoration: none; font-weight: 650; }
-.table tbody tr:hover { background: #f8fbfc; }
+.table tbody tr:hover { background: var(--fs-tint); }
 .table tr:last-child td { border-bottom: 0; }
 .table time { color: var(--fs-muted); white-space: nowrap; }

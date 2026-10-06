@@ -25,6 +25,9 @@ interface SceneCanvasProps {
   dispatch: Dispatch<EditorAction>;
   /** URL absoluta del frame de referencia de la sesión. */
   frameUrl: string;
+  hidden?: ReadonlySet<string>;
+  onGestureStart?: () => void;
+  onGestureEnd?: () => void;
 }
 
 /**
@@ -36,7 +39,7 @@ interface SceneCanvasProps {
 const ROLE_STYLE: Record<ZoneRole, { color: string; dash: (unit: number) => string | undefined }> = {
   front: { color: "#1565c0", dash: () => undefined },
   interior: { color: "#2e7d32", dash: (unit) => `${unit * 1.4} ${unit * 0.7}` },
-  showcase: { color: "#ef6c00", dash: (unit) => `${unit * 0.3} ${unit * 0.6}` },
+  showcase: { color: "#16a34a", dash: (unit) => `${unit * 0.3} ${unit * 0.6}` },
 };
 const LINE_COLOR = "#6a1b9a";
 const ERROR_COLOR = "#c62828";
@@ -75,7 +78,7 @@ function sameVertex(a: EditorSelection | VertexRef | null, b: VertexRef): boolea
   );
 }
 
-export function SceneCanvas({ state, dispatch, frameUrl }: SceneCanvasProps) {
+export function SceneCanvas({ state, dispatch, frameUrl, hidden, onGestureStart, onGestureEnd }: SceneCanvasProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<VertexRef | null>(null);
   const markerId = `entry-arrow-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
@@ -106,7 +109,7 @@ export function SceneCanvas({ state, dispatch, frameUrl }: SceneCanvasProps) {
   }
 
   function handleBackgroundClick(event: MouseEvent<SVGSVGElement>) {
-    if (drawing === null) return;
+    if (drawing === null || event.detail > 1) return;
     const point = toFrame(event.clientX, event.clientY);
     if (point !== null) dispatch({ type: "addPoint", point });
   }
@@ -144,6 +147,7 @@ export function SceneCanvas({ state, dispatch, frameUrl }: SceneCanvasProps) {
       },
       onPointerDown: (event: PointerEvent<SVGCircleElement>) => {
         if (event.button !== 0) return;
+        onGestureStart?.();
         event.stopPropagation();
         const target = event.currentTarget;
         if (typeof target.setPointerCapture === "function" && event.pointerId !== undefined) {
@@ -163,9 +167,11 @@ export function SceneCanvas({ state, dispatch, frameUrl }: SceneCanvasProps) {
           target.releasePointerCapture(event.pointerId);
         }
         dragRef.current = null;
+        onGestureEnd?.();
       },
       onPointerCancel: () => {
         dragRef.current = null;
+        onGestureEnd?.();
       },
     };
   }
@@ -212,6 +218,7 @@ export function SceneCanvas({ state, dispatch, frameUrl }: SceneCanvasProps) {
       const points = shop.zones[role];
       if (points === undefined) return [];
       const element: EditorElement = `zone:${role}`;
+      if (hidden?.has(`${shop.key}/${element}`)) return [];
       const invalid = hasIssue(state, shopIndex, element);
       const selected = isSelected(shopIndex, element);
       const style = ROLE_STYLE[role];
@@ -222,6 +229,7 @@ export function SceneCanvas({ state, dispatch, frameUrl }: SceneCanvasProps) {
           role="group"
           aria-label={`${elementTitle(element)} de ${shopName}`}
           aria-invalid={invalid ? true : undefined}
+          onClick={event => { if (drawing === null) { event.stopPropagation(); dispatch({ type: "select", selection: { shopIndex, element, vertexIndex: null } }); } }}
         >
           {issueTitle(shopIndex, element)}
           <polygon
@@ -254,7 +262,7 @@ export function SceneCanvas({ state, dispatch, frameUrl }: SceneCanvasProps) {
     });
 
     const line = shop.entry_line;
-    if (line !== null) {
+    if (line !== null && !hidden?.has(`${shop.key}/entry_line`)) {
       const invalid = hasIssue(state, shopIndex, "entry_line");
       const selected = isSelected(shopIndex, "entry_line");
       const labels = lineSideLabelPositions(line.start, line.end);
@@ -275,6 +283,7 @@ export function SceneCanvas({ state, dispatch, frameUrl }: SceneCanvasProps) {
           key={`${shop.key}-entry_line`}
           role="group"
           aria-label={`Línea de entrada de ${shopName}`}
+          onClick={event => { if (drawing === null) { event.stopPropagation(); dispatch({ type: "select", selection: { shopIndex, element: "entry_line", vertexIndex: null } }); } }}
           aria-invalid={invalid ? true : undefined}
         >
           {issueTitle(shopIndex, "entry_line")}
@@ -352,7 +361,7 @@ export function SceneCanvas({ state, dispatch, frameUrl }: SceneCanvasProps) {
     if (shop.entry_line !== null) {
       elements.push(["entry_line", [shop.entry_line.start, shop.entry_line.end], LINE_COLOR]);
     }
-    return elements.flatMap(([element, points, color]) =>
+    return elements.filter(([element]) => !hidden?.has(`${shop.key}/${element}`)).flatMap(([element, points, color]) =>
       points.map((point, vertexIndex) => {
         const vertex: VertexRef = { shopIndex, element, vertexIndex };
         const selected = sameVertex(selection, vertex);
@@ -412,6 +421,7 @@ export function SceneCanvas({ state, dispatch, frameUrl }: SceneCanvasProps) {
       aria-label="Frame de referencia con la escena"
       tabIndex={drawing !== null ? 0 : undefined}
       onClick={handleBackgroundClick}
+      onDoubleClick={() => { if (drawing !== null && drawing.element !== "entry_line" && drawing.points.length >= 3) dispatch({ type: "finishDrawing" }); }}
       onKeyDown={handleCanvasKeyDown}
       style={{
         display: "block",

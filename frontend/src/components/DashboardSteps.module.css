@@ -1,0 +1,12 @@
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; list-style: none; padding: 0; margin: 0 0 24px; }
+.steps li { position: relative; min-width: 0; }
+.card { display: flex; align-items: center; gap: 12px; width: 100%; height: 100%; min-height: 86px; padding: 18px; color: var(--fs-ink); background: var(--fs-surface); border: 1px solid var(--fs-line); border-radius: 9px; text-align: left; text-decoration: none; box-shadow: var(--fs-shadow); font-weight: 400; transition: border-color 150ms, background 150ms; }
+a.card:hover, button.card:hover:not(:disabled) { color: var(--fs-ink); border-color: var(--fs-accent); background: var(--fs-tint); }
+.badge { display: grid; place-items: center; width: 27px; height: 27px; flex-shrink: 0; border-radius: 50%; font-size: 12px; font-weight: 600; color: var(--fs-accent); background: var(--fs-tint); }
+.copy { min-width: 0; }
+.copy strong { display: block; font-weight: 600; font-size: 13px; }
+.copy small { display: block; font-size: 12px; margin-top: 3px; line-height: 1.4; }
+.icon { margin-left: auto; flex-shrink: 0; color: var(--fs-muted); opacity: .65; stroke-width: 1.4; }
+.arrow { position: absolute; right: -20px; top: calc(50% - 8px); color: var(--fs-muted); opacity: .5; }
+@media (max-width: 1100px) { .icon { width: 24px; height: 24px; } .card { gap: 10px; padding: 16px 12px; } }
+@media (max-width: 760px) { .steps { grid-template-columns: 1fr; gap: 12px; } .card { min-height: 72px; padding: 16px; } .arrow { display: none; } }

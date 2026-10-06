@@ -46,6 +46,24 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
+it("muestra estadías observadas y permite activar y apagar el mapa de calor", async () => {
+  vi.mocked(fetch).mockImplementation(async (url) => response(String(url).endsWith("/position-samples") ? {
+    job_id: "job-1", source_kind: "webcam", time_basis: "capture", availability: "available",
+    samples: [{ capture_timestamp_seconds: 1, foot: [.2, .8] }],
+  } : result) as Response);
+  await act(async () => root.render(<LiveAnalysisPage jobId="job-1" apiBaseUrl="http://api.test" />));
+  await act(async () => Socket.instances[0].message({ ...update(2, 5, 3, "eA=="),
+    zone_dwell: { "shop-1": { interior_average_seconds: 12.5, front_average_seconds: null,
+      interior_sample_count: 2, front_sample_count: 0 } } }));
+  expect(container.querySelector('[aria-label="Estadía promedio interna"]')?.textContent).toBe("12,5 s");
+  expect(container.querySelector('[aria-label="Estadía promedio externa"]')?.textContent).toBe("Sin datos");
+  const checkbox = byLabel(container, "Mostrar mapa de calor");
+  await click(checkbox);
+  expect(container.querySelector('svg[aria-label="Mapa de calor"]')).not.toBeNull();
+  await click(checkbox);
+  expect(container.querySelector('svg[aria-label="Mapa de calor"]')).toBeNull();
+});
+
 it("publica una sola medición después del pintado y declara reloj sin calibrar", async () => {
   const callbacks: FrameRequestCallback[] = [];
   vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => { callbacks.push(callback); return callbacks.length; }));

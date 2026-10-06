@@ -1,7 +1,9 @@
 .picker { min-width: 0; }
 .picker > label { display: block; margin-bottom: 0.35rem; }
 .picker > select { width: 100%; }
-.create { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.55rem; margin: 0.85rem 0 0; padding: 0.7rem; background: #f8fafb; }
+.disclosure { margin-top: .75rem; }
+.disclosure summary { cursor: pointer; color: var(--fs-accent); font-size: .8rem; }
+.create { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.55rem; margin: 0.85rem 0 0; padding: 0.7rem; background: var(--fs-raised); }
 .create label { grid-column: 1 / -1; }
 .create p { grid-column: 1 / -1; }
 @media (max-width: 480px) { .create { grid-template-columns: 1fr; } }

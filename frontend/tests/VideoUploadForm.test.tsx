@@ -3,7 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { VideoUploadForm } from "../src/components/VideoUploadForm";
-import { byLabel, changeValue, chooseFile, submit } from "./dom";
+import { byButton, byLabel, changeValue, chooseFile, click, submit } from "./dom";
 
 const API = "http://api.test";
 const camera = { id: "cam-1", name: "Cam 01", created_at: "2026-09-28T00:00:00Z" };
@@ -63,7 +63,7 @@ describe("VideoUploadForm", () => {
   async function fillForm(file: File) {
     await chooseFile(byLabel<HTMLInputElement>(container, "Archivo de video"), file);
     await changeValue(byLabel<HTMLInputElement>(container, "Nombre de la sesión"), "Sesión 1");
-    await changeValue(byLabel<HTMLSelectElement>(container, "Cámara"), "cam-1");
+    await changeValue(byLabel<HTMLSelectElement>(container, "Cámara asignada"), "cam-1");
   }
 
   async function sentRequest(): Promise<FakeXhr> {
@@ -83,6 +83,33 @@ describe("VideoUploadForm", () => {
     expect(byLabel<HTMLInputElement>(container, "Archivo de video").accept).toBe(
       ".mp4,.mpg,.mpeg,.avi,.mov,.mkv",
     );
+  });
+
+  it("muestra el archivo elegido, permite quitarlo y cancela sin iniciar la subida", async () => {
+    const cancel = vi.fn();
+    await act(async () => root.render(<VideoUploadForm apiBaseUrl={API} onRegistered={vi.fn()} onCancel={cancel} />));
+    await chooseFile(byLabel<HTMLInputElement>(container, "Archivo de video"), new File(["video"], "entrada.mp4"));
+    expect(container.textContent).toContain("entrada.mp4");
+    await click(byButton(container, "Quitar archivo"));
+    expect(container.textContent).not.toContain("entrada.mp4");
+    await click(byButton(container, "Cancelar"));
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(FakeXhr.instances).toHaveLength(0);
+  });
+
+  it("acepta un archivo arrastrado y conserva la petición de registro existente", async () => {
+    await act(async () => root.render(<VideoUploadForm apiBaseUrl={API} onRegistered={vi.fn()} />));
+    const file = new File(["video"], "arrastrado.mp4");
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, "dataTransfer", { value: { files: [file], types: ["Files"] } });
+    await act(async () => { container.querySelector('[aria-label="Soltar archivo de video"]')!.dispatchEvent(drop); });
+    expect(container.textContent).toContain("arrastrado.mp4");
+    await changeValue(byLabel<HTMLInputElement>(container, "Nombre de la sesión"), "Entrada");
+    await changeValue(byLabel<HTMLSelectElement>(container, "Cámara asignada"), "cam-1");
+    await submit(form());
+    const request = await sentRequest();
+    expect(new URL(request.url).searchParams.get("name")).toBe("Entrada");
+    expect(new URL(request.url).searchParams.get("filename")).toBe("arrastrado.mp4");
   });
 
   it("muestra el progreso de subida, luego el análisis, y entrega la sesión", async () => {

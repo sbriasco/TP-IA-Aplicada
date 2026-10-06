@@ -16,8 +16,9 @@ def bootstrap_worker() -> Settings:
     """Validate configuration before the worker accepts any job."""
 
     from flowsight.core.config import load_settings
+    from flowsight.core.local_webcam import configure_local_webcam
 
-    return load_settings()
+    return configure_local_webcam(load_settings())
 
 
 def run_worker() -> None:

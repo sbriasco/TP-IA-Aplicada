@@ -83,6 +83,13 @@ class LiveMinute(LiveModel):
         return self
 
 
+class LiveZoneDwell(LiveModel):
+    interior_average_seconds: FiniteSeconds | None
+    front_average_seconds: FiniteSeconds | None
+    interior_sample_count: Count
+    front_sample_count: Count
+
+
 class LiveUpdate(LiveModel):
     type: Literal["live.update"]
     schema_version: Literal["3"]
@@ -107,6 +114,8 @@ class LiveUpdate(LiveModel):
     coverage_complete: bool
     checkpoint_revision: Count
     checkpoint_at: datetime | None
+    capture_started_at: datetime | None = None
+    zone_dwell: dict[uuid.UUID, LiveZoneDwell] = Field(default_factory=dict, max_length=20)
 
     @model_validator(mode="after")
     def bounded_snapshot(self):
