@@ -1,0 +1,2 @@
+.toggle { display: grid; place-items: center; width: 34px; min-height: 34px; padding: 0; color: var(--fs-muted); border-color: transparent; background: transparent; }
+.toggle:hover:not(:disabled) { color: var(--fs-ink); background: var(--fs-tint); border-color: var(--fs-line); }

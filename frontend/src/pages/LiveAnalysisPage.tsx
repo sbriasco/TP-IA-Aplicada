@@ -6,6 +6,9 @@ import { acceptLiveUpdate, ClockCalibration, parseLiveMessage, type LiveReconnec
 import { AppShell } from "../components/AppShell";
 import { CrossingChart } from "../components/CrossingChart";
 import { Link } from "../components/Link";
+import { LiveDwellSummary } from "../components/LiveDwellSummary";
+import { PositionHeatmap } from "../components/PositionHeatmap";
+import { requestJson } from "../api/http";
 import type { LiveResults } from "../types/live";
 import styles from "./LiveAnalysisPage.module.css";
 
@@ -37,6 +40,37 @@ export function LiveAnalysisPage({ jobId, apiBaseUrl = API_BASE_URL }: { jobId: 
   const receivedAt = useRef(0);
   const selectId = useId();
   const confirmationId = useId();
+  const heatmapId = useId();
+  const [showHeatmap, setShowHeatmap] = useState(false);
+  const [samples, setSamples] = useState<{ capture_timestamp_seconds: number; foot: [number, number] }[]>([]);
+  const [sampleError, setSampleError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let disposed = false;
+    setSamples([]); setSampleError(null);
+    if (!showHeatmap) return;
+    async function refreshSamples() {
+      try {
+        const value = await requestJson<{ job_id: string; source_kind: string; time_basis: string;
+          samples: { capture_timestamp_seconds: number; foot: [number, number] }[] }>(
+          `${apiBaseUrl}/jobs/${encodeURIComponent(jobId)}/position-samples`);
+        if (value.job_id !== jobId || value.source_kind !== "webcam" || value.time_basis !== "capture" ||
+          !Array.isArray(value.samples) || value.samples.length > 2000 || value.samples.some((sample) =>
+            !Number.isFinite(sample.capture_timestamp_seconds) || sample.capture_timestamp_seconds < 0 ||
+            !Array.isArray(sample.foot) || sample.foot.length !== 2 || sample.foot.some((point) => !Number.isFinite(point) || point < 0 || point > 1))) {
+          throw new Error("Muestra de posiciones inválida");
+        }
+        if (!disposed) { setSamples(value.samples); setSampleError(null); }
+      } catch { if (!disposed) setSampleError("No se pudo actualizar el mapa de calor."); }
+    }
+    let timer: ReturnType<typeof setTimeout>;
+    async function poll() {
+      await refreshSamples();
+      if (!disposed) timer = setTimeout(() => void poll(), 2000);
+    }
+    void poll();
+    return () => { disposed = true; clearTimeout(timer); };
+  }, [apiBaseUrl, jobId, showHeatmap]);
 
   useEffect(() => {
     let disposed = false, ended = false, attempt = 0;
@@ -229,13 +263,22 @@ export function LiveAnalysisPage({ jobId, apiBaseUrl = API_BASE_URL }: { jobId: 
     <div className={styles.layout}><section aria-label="Vista de cámara">
       <div className={styles.camera}>{snapshot && finalStatus === null ?
         <img alt="Cámara en vivo" src={`data:image/jpeg;base64,${snapshot.image_base64}`} onLoad={() => imageLoaded(snapshot)} /> :
-        <p>{finalStatus ? "Captura terminada. El video no se graba." : "Esperando el primer frame analizado…"}</p>}</div>
+        <p>{finalStatus ? "Captura terminada. El video no se graba." : "Esperando el primer frame analizado…"}</p>}
+        {showHeatmap && snapshot && finalStatus === null && samples.length > 0 && <PositionHeatmap availability="available"
+          samples={samples.filter((sample) => sample.capture_timestamp_seconds <= snapshot.capture_timestamp_seconds)} />}
+      </div>
+      <div className={styles.heatmapControl}><input id={heatmapId} type="checkbox" checked={showHeatmap}
+        onChange={(event) => setShowHeatmap(event.target.checked)} /><label htmlFor={heatmapId}>Mostrar mapa de calor</label></div>
+      {showHeatmap && <p className={styles.diagnostics}>Densidad de posiciones observadas durante este análisis. No representa personas únicas.</p>}
+      {showHeatmap && samples.length === 0 && !sampleError && <p>Esperando posiciones guardadas…</p>}
+      {showHeatmap && sampleError && <p role="alert">{sampleError}</p>}
       {stale && <p className={styles.warning}>Imagen desactualizada · los contadores corresponden al último frame mostrado.</p>}
       <p className={styles.diagnostics}>Sin grabación · los cruces cuentan pasos por la línea, no personas únicas.</p>
       <p className={styles.diagnostics}>{paintLatency ? `Captura a pantalla: ${Math.round(paintLatency.estimated_ms)} ms (±${Math.ceil(paintLatency.uncertainty_ms)} ms)` : "Captura a pantalla: todavía sin muestra calibrada"}</p>
       <p className={styles.diagnostics}>{snapshot && <>Captura: {snapshot.capture_fps?.toFixed(1) ?? "—"} FPS · Análisis: {snapshot.analysis_fps?.toFixed(1) ?? "—"} FPS · </>}
         {age ? `Antigüedad estimada del frame: ${Math.round(age.estimated_ms)} ms (±${Math.ceil(age.uncertainty_ms)} ms)` : "Antigüedad del frame: esperando calibración del reloj"}</p>
     </section><aside className={styles.panel} aria-label="Estadísticas en vivo">
+      <LiveDwellSummary dwell={(snapshot?.zone_dwell ?? durable?.zone_dwell)?.[shopId]} />
       <label htmlFor={selectId}>Línea de conteo</label><select id={selectId} value={shopId} onChange={(event) => void selectShop(event.target.value)}>
         {shops.map((shop) => <option key={shop.shop_id} value={shop.shop_id}>{shop.shop_name}</option>)}
       </select>
@@ -243,7 +286,8 @@ export function LiveAnalysisPage({ jobId, apiBaseUrl = API_BASE_URL }: { jobId: 
         <div><dt>{labels[0]}</dt><dd aria-label={labels[0]}>{summary.label_mode === "access" ? summary.entry_count : summary.a_to_b_count}</dd></div>
         <div><dt>{labels[1]}</dt><dd aria-label={labels[1]}>{summary.label_mode === "access" ? summary.exit_count : summary.b_to_a_count}</dd></div>
         <div><dt>Total</dt><dd aria-label="Total de cruces">{summary.total_crossings}</dd></div>
-      </dl><CrossingChart minutes={minutes} summary={summary} /></> : <p>Configurá una línea para mostrar los cruces.</p>}
+      </dl><CrossingChart minutes={minutes} summary={summary}
+        captureStartedAt={snapshot?.capture_started_at ?? durable?.capture_started_at} /></> : <p>Configurá una línea para mostrar los cruces.</p>}
       {!(snapshot?.coverage_complete ?? durable?.coverage_complete ?? true) && <p className={styles.warning}>Cobertura incompleta: hubo intervalos sin analizar.</p>}
       <p className={styles.diagnostics}>Último guardado: {snapshot?.checkpoint_at ?? durable?.checkpoint_at ?? "Todavía no hay un checkpoint"}</p>
     </aside></div>

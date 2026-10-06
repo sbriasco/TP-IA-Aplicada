@@ -5,13 +5,13 @@ export const METRIC_NAME: Record<string, string> = {
 };
 
 export const METRIC_DESCRIPTION: Record<string, string> = {
-  traffic_total: "Tracks observados en la zona frontal",
-  store_pass: "Tracks que pasan frente al local",
-  entries: "Cruces confirmados hacia el local",
+  traffic_total: "Tracks observados en el área externa",
+  store_pass: "Tracks que pasan en el área externa",
+  entries: "Cruces confirmados hacia el área interna",
   exits: "Cruces confirmados hacia afuera",
-  entry_rate: "Entradas / pasos frente al local",
-  dwell_mean_seconds: "Tiempo medio observable en zona frontal",
-  dwell_median_seconds: "Tiempo mediano observable en zona frontal",
+  entry_rate: "Entradas / pasos en el área externa",
+  dwell_mean_seconds: "Tiempo medio observable en área externa",
+  dwell_median_seconds: "Tiempo mediano observable en área externa",
   visible_occupancy: "Ocupación observable en el último frame analizado",
 };
 
@@ -20,7 +20,7 @@ export const LABEL_TEXT: Record<string, string> = {
 };
 
 export const UNAVAILABLE_REASON: Record<string, string> = {
-  no_passes: "Sin pasos frente al local",
+  no_passes: "Sin pasos en el área externa",
   no_closed_dwells: "Sin permanencias completas observadas",
   scene_element_missing: "Falta configurar la zona o línea necesaria",
   metrics_not_generated: "Todavía no se generaron las métricas",
@@ -45,6 +45,6 @@ export function peakCaption(startSeconds: number, trackCount: number, durationSe
 }
 
 export const EVENT_NAME: Record<string, string> = {
-  zone_enter: "Ingreso a zona", zone_exit: "Salida de zona", store_pass: "Paso frente al local",
-  store_enter: "Entrada al local", store_exit: "Salida del local", dwell: "Permanencia observable",
+  zone_enter: "Ingreso a zona", zone_exit: "Salida de zona", store_pass: "Paso en el área externa",
+  store_enter: "Entrada a la zona", store_exit: "Salida de la zona", dwell: "Permanencia observable",
 };

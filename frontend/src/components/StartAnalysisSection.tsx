@@ -113,7 +113,7 @@ export function StartAnalysisSection({ apiBaseUrl, session, onConfigurationChang
             <strong>Configuración {version.version_number}</strong>
             {latest && <span className={styles.latest}>Más reciente</span>}
           </span>
-          <span className={styles.shopCount}>{version.shop_count === 1 ? "1 local definido" : `${version.shop_count} locales definidos`}</span>
+          <span className={styles.shopCount}>{version.shop_count === 1 ? "1 zona definida" : `${version.shop_count} zonas definidas`}</span>
           <span className={styles.savedAt}>Guardada el <time dateTime={version.created_at}>
             {new Date(version.created_at).toLocaleString("es-AR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })}
           </time></span>
@@ -136,7 +136,7 @@ export function StartAnalysisSection({ apiBaseUrl, session, onConfigurationChang
   } else if (versions.versions.length === 0) {
     body = <div className={styles.empty}>
       <strong>Primero, marcá qué querés medir</strong>
-      <p>La cámara {session.camera.name} no tiene ninguna configuración de escena. Dibujá los locales, zonas y accesos sobre la imagen del video.</p>
+      <p>La cámara {session.camera.name} no tiene ninguna configuración de escena. Dibujá los zonas de análisis y accesos sobre la imagen del video.</p>
       <Link className={styles.editorLink} href={editorHref}>Abrir el editor de escena</Link>
     </div>;
   } else {
@@ -154,7 +154,7 @@ export function StartAnalysisSection({ apiBaseUrl, session, onConfigurationChang
           <div className={styles.previousList}>{previous.map((version) => configurationOption(version, false))}</div>
         </details>}
       </fieldset>
-      <p className={styles.explanation} id="configuration-explanation">Cada configuración guarda los locales, zonas y líneas que dibujaste. Al guardar cambios se crea una nueva; los análisis anteriores conservan la que usaron.</p>
+      <p className={styles.explanation} id="configuration-explanation">Cada configuración guarda las zonas de análisis, sus áreas y líneas que dibujaste. Al guardar cambios se crea una nueva; los análisis anteriores conservan la que usaron.</p>
       <button className={styles.startButton} type="submit" disabled={submitting || removing || selectedId === ""}>
         {submitting ? "Iniciando…" : "Iniciar análisis"}
       </button>

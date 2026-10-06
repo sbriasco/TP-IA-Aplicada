@@ -23,7 +23,7 @@ function issue(overrides: Partial<SceneIssue>): SceneIssue {
     element: "zone:front",
     shop_index: 1,
     shop_name: "Local B",
-    message: "La zona frontal se cruza a sí misma.",
+    message: "El área externa se cruza a sí misma.",
     ...overrides,
   };
 }
@@ -89,8 +89,8 @@ describe("SceneIssues", () => {
     );
 
     expect(container.querySelector("h2")?.textContent).toBe("Errores");
-    const button = buttonContaining("La zona frontal se cruza a sí misma.");
-    expect(button.textContent).toBe("Local B · Zona frontal: La zona frontal se cruza a sí misma.");
+    const button = buttonContaining("El área externa se cruza a sí misma.");
+    expect(button.textContent).toBe("Local B · Área externa: El área externa se cruza a sí misma.");
     expect(container.textContent).toContain("Versión: Faltan locales.");
 
     await click(button);

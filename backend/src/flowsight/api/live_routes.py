@@ -34,7 +34,7 @@ router = APIRouter()
 
 _MESSAGES = {
     "not_found": "La sesión, cámara o trabajo no está disponible.",
-    "live_not_configured": "Configurá el equipo y el canal local para usar una webcam.",
+    "live_not_configured": "No se pudo iniciar la conexión local de webcam. Reiniciá la app.",
     "worker_unavailable": "El worker local no está disponible.",
     "machine_busy": "El equipo está analizando o comprobando otra fuente.",
     "device_unavailable": "No se pudo abrir la webcam. Revisá su conexión y permisos.",

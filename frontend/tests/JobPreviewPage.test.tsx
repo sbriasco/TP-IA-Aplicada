@@ -47,7 +47,7 @@ describe("JobPreviewPage", () => {
     expect(container.textContent).toContain("cancelled");
     expect(container.textContent).toContain("incompleto");
     expect(container.textContent).not.toContain("El análisis falló");
-    expect(container.querySelector("button")).toBeNull();
+    expect(container.querySelector<HTMLButtonElement>("main button")).toBeNull();
     expect(socket).not.toHaveBeenCalled();
   });
 
@@ -82,7 +82,7 @@ describe("JobPreviewPage", () => {
     vi.stubGlobal("WebSocket", FakeSocket);
 
     await act(async () => root.render(<JobPreviewPage jobId="job-1" />));
-    const button = container.querySelector("button");
+    const button = container.querySelector<HTMLButtonElement>("main button");
     expect(button?.textContent).toBe("Cancelar análisis");
 
     await act(async () => {
@@ -94,7 +94,7 @@ describe("JobPreviewPage", () => {
     });
     expect(container.textContent).toContain("incompleto");
     expect(container.textContent).not.toContain("El análisis falló");
-    expect(container.querySelector("button")).toBeNull();
+    expect(container.querySelector<HTMLButtonElement>("main button")).toBeNull();
   });
 
   it("muestra un fallo distinto de una cancelación", async () => {
@@ -111,7 +111,7 @@ describe("JobPreviewPage", () => {
 
     expect(container.textContent).toContain("El análisis falló");
     expect(container.textContent).not.toContain("incompleto");
-    expect(container.querySelector("button")).toBeNull();
+    expect(container.querySelector<HTMLButtonElement>("main button")).toBeNull();
   });
 
   it("muestra el instante del mensaje de video y no promete su velocidad", async () => {

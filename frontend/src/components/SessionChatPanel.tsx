@@ -61,12 +61,12 @@ export function SessionChatPanel({ apiBaseUrl, sessionId, shopId, shopName }: Se
         <span className={styles.avatar} aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 5h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-8l-5 3v-3H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" strokeWidth="1.6"/><circle cx="8" cy="11" r="1"/><circle cx="12" cy="11" r="1"/><circle cx="16" cy="11" r="1"/></svg></span>
         <div><h2>Agente FlowSight</h2><p>Asistente de IA · tus resultados</p></div>
       </header>
-      <div className={styles.context}>{shopName ?? "Local seleccionado"}<span> · Toda la sesión</span></div>
+      <div className={styles.context}>{shopName ?? "Zona seleccionada"}<span> · Toda la sesión</span></div>
       <div className={styles.conversation} role="log" aria-label="Conversación con el agente" ref={log} aria-busy={waiting}>
         {turns.length === 0 && <div className={styles.welcome}>
           <span className={styles.author}>Agente FlowSight</span>
           <p>Hola, puedo ayudarte a interpretar el tráfico, los ingresos y la permanencia de este análisis.</p>
-          <p className={styles.hint}>Cada pregunta consulta el local seleccionado. Incluí lo que querés comparar o medir.</p>
+          <p className={styles.hint}>Cada pregunta consulta la zona seleccionada. Incluí lo que querés comparar o medir.</p>
           <div className={styles.suggestions}>{SUGGESTIONS.map((text) => <button type="button" key={text} disabled={shopId === null} onClick={() => { setQuestion(text); input.current?.focus(); }}>{text}</button>)}</div>
         </div>}
         {turns.map((turn) => <div className={styles.turn} key={turn.id}>

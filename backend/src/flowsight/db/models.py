@@ -801,6 +801,7 @@ class LiveAnalysisState(_LiveJobColumns, Base):
     unconfirmed_crossings: Mapped[int] = mapped_column(Integer, default=0)
     sample_candidates_seen: Mapped[int] = mapped_column(BigInteger, default=0)
     sample_capacity: Mapped[int] = mapped_column(Integer, default=20000)
+    zone_dwell: Mapped[dict[str, object]] = mapped_column(JSONB, default=dict, server_default="{}")
 
 
 class LiveCaptureSegment(_LiveJobColumns, Base):

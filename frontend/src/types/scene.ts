@@ -47,7 +47,8 @@ export interface SceneVersionSummary {
 export interface SceneShop {
   shop_id: string;
   name: string;
-  zones: Zones;
+  /** La API devuelve null para las áreas que no fueron dibujadas. */
+  zones: Partial<Record<ZoneRole, Point[] | null>>;
   entry_line: EntryLine;
 }
 

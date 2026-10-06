@@ -172,15 +172,15 @@ export function SessionResultsPage({
           {row !== null && <Link href={`/?job=${encodeURIComponent(row.job_id)}`}>Ver avance del análisis →</Link>}
         </section>
       )}
-      {row?.result_complete === true && row.scene_version_id === null && <p className={styles.notice}>Esta sesión no tiene indicadores comerciales: el análisis sintético valida el procesamiento y la previsualización. Registrá un video y configurá su escena para consultar métricas por local.</p>}
+      {row?.result_complete === true && row.scene_version_id === null && <p className={styles.notice}>Esta sesión no tiene indicadores comerciales: el análisis sintético valida el procesamiento y la previsualización. Registrá un video y configurá su escena para consultar métricas por zona.</p>}
       {row?.result_complete === true && row.scene_version_id !== null && !finishedBadly && (
         <div className={styles.resultsWorkspace}>
         <div className={styles.analytics}>
           <section className={styles.overview} aria-label="Indicadores de la sesión">
             <div className={styles.sectionHeading}>
-              <div><h2>Indicadores del local</h2><p>Valores de toda la sesión. El tramo seleccionado no cambia estas cifras.</p></div>
-              {shops.length > 0 && <label className={styles.shop}>Local
-                <select aria-label="Local" value={shopId ?? ""} onChange={(event) => setShopId(event.target.value)}>
+              <div><h2>Indicadores de la zona</h2><p>Valores de toda la sesión. El tramo seleccionado no cambia estas cifras.</p></div>
+              {shops.length > 0 && <label className={styles.shop}>Zona
+                <select aria-label="Zona" value={shopId ?? ""} onChange={(event) => setShopId(event.target.value)}>
                   {shops.map((shop) => <option key={shop.shop_id} value={shop.shop_id}>{shop.name}</option>)}
                 </select>
               </label>}
@@ -193,7 +193,7 @@ export function SessionResultsPage({
           <div className={styles.analysisGrid}>
             <section className={styles.panel} aria-labelledby="flow-title">
               <h2 id="flow-title">Flujo temporal</h2>
-              <p className={styles.description}>Tracks en la zona frontal en cada segundo. Sube al entrar y baja al salir.</p>
+              <p className={styles.description}>Tracks en el área externa en cada segundo. Sube al entrar y baja al salir.</p>
               <VideoTimeRange
                 durationSeconds={durationSeconds}
                 fromSeconds={fromSeconds}
@@ -219,7 +219,7 @@ export function SessionResultsPage({
           </div>
           <details className={styles.eventPanel}>
             <summary id="events-title">Hechos del análisis <span className={styles.count}>{events.length} hechos</span></summary>
-            <p className={styles.description}>Eventos del local dentro del tramo seleccionado.</p>
+            <p className={styles.description}>Eventos de la zona dentro del tramo seleccionado.</p>
             {events.length === 0 && <p className={styles.description}>No hay hechos registrados en este tramo.</p>}
             <ul className={styles.events} aria-label="Hechos">{events.map((event, index) => (
               <li key={`${event.track_id}-${event.kind}-${event.video_timestamp_seconds}-${index}`}>

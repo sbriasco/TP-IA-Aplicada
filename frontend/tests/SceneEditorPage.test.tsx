@@ -173,15 +173,26 @@ describe("SceneEditorPage", () => {
 
     expect(fetchMock.mock.calls.map(([url]) => url)).toContain(`${API}/scene-versions/v-2`);
     expect(container.querySelector("h1")?.textContent).toBe("Mañana");
-    expect(container.querySelector("header")?.textContent).toContain("Editor");
+    expect(container.querySelector("header")?.textContent).not.toContain("Editor");
     expect(container.querySelector("image")?.getAttribute("href")).toBe(
       `${API}/sessions/s-1/reference-frame`,
     );
     expect(vertices()).toHaveLength(6);
-    expect(container.querySelector('[aria-label="Vértice 1 de zona frontal de Local A"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Vértice 1 de área externa de Local A"]')).not.toBeNull();
     expect(container.textContent).toContain("Editando la configuración 2.");
     expect(container.querySelector('[role="alert"]')).toBeNull();
     expect(Array.from(container.querySelectorAll('a[href="/sessions/s-1"]')).some((link) => link.textContent === "Volver a la sesión")).toBe(true);
+  });
+
+  it("edita nombres y oculta capas sin quitarlas del guardado", async () => {
+    await render({ versions: [summary(2)], version: fullVersion(2), save: { status: 201, body: { ...fullVersion(3), warnings: [] } } });
+    await click(byButton(container, "Local A"));
+    await changeValue(byLabel<HTMLInputElement>(container, "Nombre de la zona"), "Entrada");
+    expect(byLabel<HTMLInputElement>(container, "Nombre de la zona").value).toBe("Entrada");
+    await click(container.querySelector('[aria-label="Ocultar Área externa de Entrada"]')!);
+    expect(container.querySelector('polygon[data-role="front"]')).toBeNull();
+    await save();
+    expect(saveRequestBody().shops).toEqual([{ shop_id: "shop-a", name: "Entrada", zones: fullVersion(2).shops[0]!.zones, entry_line: fullVersion(2).shops[0]!.entry_line }]);
   });
 
   it("sin versiones abre un editor vacío", async () => {
@@ -189,8 +200,8 @@ describe("SceneEditorPage", () => {
 
     expect(container.querySelector("svg")).not.toBeNull();
     expect(vertices()).toHaveLength(0);
-    expect(container.textContent).toContain("Agregá un local para empezar");
-    expect(byButton(container, "Agregar local")).toBeDefined();
+    expect(container.textContent).toContain("Agregá una zona de análisis");
+    expect(byButton(container, "Agregar zona")).toBeDefined();
   });
 
   it("sin frame de referencia muestra un mensaje y no abre el editor", async () => {
@@ -222,8 +233,8 @@ describe("SceneEditorPage", () => {
     expect(vertices()).toHaveLength(6);
 
     // Sigue visible al editar: solo desaparece al guardar sobre este frame.
-    await changeValue(byLabel<HTMLSelectElement>(container, "Local en edición"), "0");
-    await changeValue(byLabel<HTMLInputElement>(container, "Nombre del local"), "Local A2");
+    await click(byButton(container, "Local A"));
+    await changeValue(byLabel<HTMLInputElement>(container, "Nombre de la zona"), "Local A2");
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("pueden verse deformadas");
   });
 
@@ -233,15 +244,15 @@ describe("SceneEditorPage", () => {
       element: "entry_line",
       shop_index: 0,
       shop_name: "Local A",
-      message: "La línea de entrada no toca la zona frontal ni la interior.",
+      message: "La línea de entrada no toca el área externa ni la interior.",
     };
     await render({
       versions: [summary(2)],
       version: fullVersion(2),
       save: { status: 201, body: { ...fullVersion(3, { reference_session_id: "s-1" }), warnings: [warning] } },
     });
-    await changeValue(byLabel<HTMLSelectElement>(container, "Local en edición"), "0");
-    await changeValue(byLabel<HTMLInputElement>(container, "Nombre del local"), "Local A2");
+    await click(byButton(container, "Local A"));
+    await changeValue(byLabel<HTMLInputElement>(container, "Nombre de la zona"), "Local A2");
 
     await save();
 
@@ -267,7 +278,7 @@ describe("SceneEditorPage", () => {
       element: "zone:front",
       shop_index: 0,
       shop_name: "Local A",
-      message: "La zona frontal se cruza a sí misma.",
+      message: "El área externa se cruza a sí misma.",
     };
     await render({
       versions: [summary(2)],
@@ -283,16 +294,16 @@ describe("SceneEditorPage", () => {
         },
       },
     });
-    await changeValue(byLabel<HTMLSelectElement>(container, "Local en edición"), "0");
-    await changeValue(byLabel<HTMLInputElement>(container, "Nombre del local"), "Local A2");
+    await click(byButton(container, "Local A"));
+    await changeValue(byLabel<HTMLInputElement>(container, "Nombre de la zona"), "Local A2");
 
     await save();
 
-    const zone = container.querySelector('g[role="group"][aria-label="Zona frontal de Local A2"]');
+    const zone = container.querySelector('g[role="group"][aria-label="Área externa de Local A2"]');
     expect(zone?.getAttribute("aria-invalid")).toBe("true");
     expect(zone?.textContent).toContain(error.message);
     expect(vertices()).toHaveLength(6);
-    expect(byLabel<HTMLInputElement>(container, "Nombre del local").value).toBe("Local A2");
+    expect(byLabel<HTMLInputElement>(container, "Nombre de la zona").value).toBe("Local A2");
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("No se guardó la configuración");
     expect(unloadPrevented()).toBe(true);
   });
@@ -314,10 +325,10 @@ describe("SceneEditorPage", () => {
     await render();
     expect(unloadPrevented()).toBe(false);
 
-    await click(byButton(container, "Agregar local"));
+    await click(byButton(container, "Agregar zona"));
     expect(unloadPrevented()).toBe(true);
 
-    await click(byButton(container, "Quitar local de esta versión"));
+    await click(container.querySelector<HTMLButtonElement>('[aria-label="Eliminar zona Zona 1"]')!);
     // Quitar también es un cambio: sigue sucio hasta guardar.
     expect(unloadPrevented()).toBe(true);
   });
@@ -333,7 +344,7 @@ describe("SceneEditorPage", () => {
     expect(window.location.pathname).toBe("/sessions/s-1");
     window.history.replaceState(null, "", "/sessions/s-1/editor");
 
-    await click(byButton(container, "Agregar local"));
+    await click(byButton(container, "Agregar zona"));
     await followLink(back);
     expect(confirm).toHaveBeenCalledTimes(1);
     expect(window.location.pathname).toBe("/sessions/s-1/editor");
@@ -346,7 +357,7 @@ describe("SceneEditorPage", () => {
 
   it("deja de advertir al desmontarse", async () => {
     await render();
-    await click(byButton(container, "Agregar local"));
+    await click(byButton(container, "Agregar zona"));
     expect(unloadPrevented()).toBe(true);
 
     await act(async () => root.unmount());

@@ -33,6 +33,7 @@ from flowsight.services.live_jobs import LiveMachineError
 from flowsight.services.live_results import mark_live_interrupted, persist_live_checkpoint
 from flowsight.vision.detector import Detection, build_detector
 from flowsight.vision.live_buckets import LiveBuckets
+from flowsight.vision.live_dwell import LiveDwellCounter
 from flowsight.vision.live_performance import LivePerformance
 from flowsight.vision.live_sampling import LivePositionSampler
 from flowsight.vision.live_spatial import LiveSpatialCounter
@@ -174,6 +175,7 @@ def process_live_analysis_job(
             return
         detector = detector_factory(settings)
         counter = LiveSpatialCounter(shops)
+        dwell = LiveDwellCounter(shops)
         buckets = LiveBuckets([shop.shop_id for shop in shops])
         sampler = LivePositionSampler()
         performance = LivePerformance()
@@ -214,6 +216,7 @@ def process_live_analysis_job(
                 bucket_rows=snapshot.buckets,
                 owner_epoch=owner_epoch,
                 machine_id=machine_id,
+                zone_dwell=metadata["zone_dwell"],
             )
 
         writer = LiveCheckpointWriter(save, on_failure=control.fail)
@@ -246,6 +249,7 @@ def process_live_analysis_job(
                     "missing": missing,
                     "candidates_seen": sampler.candidates_seen,
                     "discarded_crossings": counter.discarded_crossings,
+                    "zone_dwell": dwell.snapshot(),
                 },
                 facts=pending_facts,
                 slots=dirty_slots,
@@ -272,6 +276,7 @@ def process_live_analysis_job(
                 from flowsight.worker.live_recovery import recover_capture
 
                 counter.discontinue(horizon)
+                dwell.discontinue()
                 performance.reset()
                 sampler.discontinue()
                 reset = getattr(detector, "reset_tracking", None)
@@ -357,6 +362,14 @@ def process_live_analysis_job(
             frame = replace(frame, segment_index=segment_index)
             detections = detector.detect(frame.sequence, frame.width, frame.height, frame.image)
             new_facts = counter.observe(frame, detections)
+            dwell.observe(
+                frame.timestamp_seconds,
+                frame.segment_index,
+                {
+                    detection.track_id: normalized_foot(detection, frame.width, frame.height)
+                    for detection in detections
+                },
+            )
             pending_facts.extend(new_facts)
             buckets.observe(
                 frame.timestamp_seconds,
@@ -408,6 +421,8 @@ def process_live_analysis_job(
                     analyzed,
                     epoch_ns,
                     fps,
+                    started_at=started_at,
+                    zone_dwell=dwell.snapshot(),
                 )
                 last_publish = publication_ns
         control.stop_capture()
@@ -545,6 +560,9 @@ def _emit_update(
     analyzed,
     epoch_ns,
     fps=(None, None),
+    *,
+    started_at=None,
+    zone_dwell=None,
 ):
     scale = min(1.0, 960 / frame.width, 540 / frame.height)
     image = (
@@ -584,6 +602,8 @@ def _emit_update(
     message = LiveUpdate.model_validate(
         {
             "type": "live.update",
+            "capture_started_at": started_at,
+            "zone_dwell": zone_dwell or {},
             "schema_version": "3",
             "source_kind": "webcam",
             "session_id": str(session_id),

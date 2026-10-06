@@ -6,6 +6,7 @@ import { AppShell } from "../components/AppShell";
 import { CrossingChart } from "../components/CrossingChart";
 import { Link } from "../components/Link";
 import { PositionHeatmap } from "../components/PositionHeatmap";
+import { LiveDwellSummary } from "../components/LiveDwellSummary";
 import type { LiveResults } from "../types/live";
 import styles from "./LiveAnalysisPage.module.css";
 
@@ -77,6 +78,7 @@ export function LiveResultsPage({ jobId, apiBaseUrl = API_BASE_URL }: { jobId: s
     {!result && !error && <p role="status">Cargando resultados…</p>}
     {result && <>
       <p role="status">{result.result_complete ? "Análisis completo" : "Resultados parciales"}</p>
+      <LiveDwellSummary dwell={result.zone_dwell?.[result.selected_shop_id ?? ""]} />
       {!["completed", "failed", "cancelled"].includes(result.status) && <Link href={`/live/jobs/${encodeURIComponent(jobId)}`}>Volver al análisis en vivo</Link>}
       <p>Duración de captura guardada: {result.elapsed_capture_seconds.toFixed(1)} segundos · Observados: {result.observed_seconds.toFixed(1)} s · Sin cobertura: {result.missing_seconds.toFixed(1)} s</p>
       {!result.coverage_complete && <p className={styles.warning}>Cobertura incompleta: hay intervalos sin observaciones.</p>}
@@ -88,7 +90,7 @@ export function LiveResultsPage({ jobId, apiBaseUrl = API_BASE_URL }: { jobId: s
         <div><dt>{access ? "Entradas" : "A → B"}</dt><dd>{access ? summary.entry_count : summary.a_to_b_count}</dd></div>
         <div><dt>{access ? "Salidas" : "B → A"}</dt><dd>{access ? summary.exit_count : summary.b_to_a_count}</dd></div>
         <div><dt>Total</dt><dd aria-label="Total de cruces">{summary.total_crossings}</dd></div>
-      </dl><CrossingChart minutes={result.minutes} summary={summary} />
+      </dl><CrossingChart minutes={result.minutes} summary={summary} captureStartedAt={result.capture_started_at} />
         {result.next_bucket_cursor !== null && <button type="button" disabled={loadingMore} onClick={() => void moreMinutes()}>Cargar más minutos</button>}
       </section>}
       <section><h2>Interrupciones</h2>{result.interruptions.length === 0 ? <p>Sin interrupciones registradas.</p> :

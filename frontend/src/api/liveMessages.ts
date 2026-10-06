@@ -17,6 +17,10 @@ export interface LiveMinute {
   pending_count: number; is_open: boolean; coverage_incomplete: boolean;
   unknown_tail: boolean; revision: number;
 }
+export interface LiveZoneDwell {
+  interior_average_seconds: number | null; front_average_seconds: number | null;
+  interior_sample_count: number; front_sample_count: number;
+}
 export interface LiveUpdate {
   type: "live.update"; schema_version: "3"; source_kind: "webcam";
   job_id: string; session_id: string; revision: number; capture_sequence: number;
@@ -26,6 +30,8 @@ export interface LiveUpdate {
   capture_fps: number | null; analysis_fps: number | null; capture_to_publish_ms: number;
   shops: LiveShopSnapshot[]; minutes: LiveMinute[]; coverage_complete: boolean;
   checkpoint_revision: number; checkpoint_at: string | null;
+  capture_started_at?: string | null;
+  zone_dwell?: Record<string, LiveZoneDwell>;
 }
 export interface ClockPong {
   type: "clock.pong"; nonce: string; client_sent_ms: number;
@@ -82,6 +88,12 @@ export function parseLiveMessage(value: unknown): LiveUpdate | ClockPong | LiveR
     return value as unknown as LiveReconnectCheck;
   }
   if (value.type !== "live.update" || value.schema_version !== "3" || value.source_kind !== "webcam" || value.capture_status !== "connected") return null;
+  if (value.capture_started_at !== undefined && value.capture_started_at !== null &&
+    (typeof value.capture_started_at !== "string" || !Number.isFinite(Date.parse(value.capture_started_at)))) return null;
+  if (value.zone_dwell !== undefined && (!record(value.zone_dwell) || Object.keys(value.zone_dwell).length > 20 ||
+    Object.entries(value.zone_dwell).some(([key, item]) => !identifier(key) || !record(item) ||
+      ![item.interior_average_seconds, item.front_average_seconds].every((average) => average === null || finite(average)) ||
+      ![item.interior_sample_count, item.front_sample_count].every(integer)))) return null;
   if (!identifier(value.job_id) || !identifier(value.session_id)) return null;
   if (!["revision", "capture_sequence", "segment_index", "checkpoint_revision"].every((key) => integer(value[key]))) return null;
   if (!["capture_timestamp_seconds", "captured_monotonic_ms", "published_monotonic_ms", "capture_to_publish_ms"].every((key) => finite(value[key]))) return null;

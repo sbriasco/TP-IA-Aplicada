@@ -105,7 +105,7 @@
  *   `shopIndex = null` devuelve los errores de la versión; sin `element`, todos los de ese local.
  * - `hasIssue(state, shopIndex, element): boolean` — para resaltar un elemento en el canvas.
  * - `availableZoneRoles(state, shopIndex): ZoneRole[]` — roles sin zona en ese local, en el orden
- *   `front`, `interior`, `showcase` (para el `<select>` de "Crear zona").
+ *   `front`, `interior`, `showcase` (para el `<select>` de "Dibujar área").
  *
  * `toSceneVersionCreate` envía solo lo confirmado (nunca el dibujo en curso): `shop_id` (`null` si
  * es nuevo), `name`, las zonas presentes y `entry_line` (o `null`, que el backend rechaza con
@@ -205,7 +205,7 @@ function issue(overrides: Partial<SceneIssue>): SceneIssue {
     element: "zone:front",
     shop_index: 0,
     shop_name: "Local A",
-    message: "La zona frontal se cruza a sí misma.",
+    message: "El área externa se cruza a sí misma.",
     ...overrides,
   };
 }
@@ -239,6 +239,20 @@ describe("createEditorState", () => {
 });
 
 describe("loadVersion", () => {
+  it("carga áreas opcionales nulas sin perder polígonos ni línea y permite volver a guardar", () => {
+    const saved = version();
+    saved.shops[0].zones.showcase = null;
+    const state = editorReducer(emptyState(), { type: "loadVersion", version: saved });
+    expect(state.shops[0].zones.showcase).toBeUndefined();
+    expect(state.shops[0].zones.front).toHaveLength(4);
+    expect(state.shops[0].entry_line).not.toBeNull();
+    expect(availableZoneRoles(state, 0)).toContain("showcase");
+    const renamed = editorReducer(state, { type: "renameShop", shopIndex: 0, name: "Acceso" });
+    const payload = toSceneVersionCreate(renamed, "session", FRAME_W, FRAME_H);
+    expect(payload.shops[0].name).toBe("Acceso");
+    expect(payload.shops[0].zones.front).toEqual(saved.shops[0].zones.front);
+    expect(payload.shops[0].entry_line).toEqual(saved.shops[0].entry_line);
+  });
   it("convierte las coordenadas normalizadas a píxeles del frame de la sesión", () => {
     const state = loadedState();
 
@@ -395,7 +409,7 @@ describe("locales", () => {
     expect(state.shops[0]).toEqual(before.shops[1]);
   });
 
-  it("quitar el local seleccionado limpia la selección; quitar uno anterior corre el índice", () => {
+  it("quitar la zona seleccionada limpia la selección; quitar uno anterior corre el índice", () => {
     const selectedFirst = apply(loadedState(), {
       type: "select",
       selection: { shopIndex: 0, element: "zone:front", vertexIndex: null },

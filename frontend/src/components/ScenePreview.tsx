@@ -50,7 +50,7 @@ export function ScenePreview({ apiBaseUrl, versionId, frameUrl, width, height, l
       {compatible && version?.shops.map((shop) => <g key={shop.shop_id}>
         {ROLES.map((role) => {
           const points = shop.zones[role];
-          if (points === undefined || points.length === 0) return null;
+          if (points == null || points.length === 0) return null;
           const center = points.reduce<Point>((sum, point) => [sum[0] + point[0] * width / points.length, sum[1] + point[1] * height / points.length], [0, 0]);
           return <g key={role}>
             <polygon points={points.map((point) => pixels(point).join(",")).join(" ")} fill={COLORS[role]} fillOpacity="0.12" stroke={COLORS[role]} strokeWidth={unit * 0.4} strokeDasharray={role === "front" ? undefined : role === "interior" ? `${unit * 1.4} ${unit * 0.7}` : `${unit * 0.3} ${unit * 0.6}`}><title>{ZONE_ROLE_OPTION[role]} · {shop.name}</title></polygon>

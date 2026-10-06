@@ -3,7 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SessionsPage } from "../src/pages/SessionsPage";
-import { click } from "./dom";
+import { byButton, byLabel, changeValue, click } from "./dom";
 
 const API = "http://api.test";
 const camera = { id: "cam-1", name: "Cam 01", created_at: "2026-09-28T00:00:00Z" };
@@ -55,7 +55,7 @@ describe("SessionsPage", () => {
     const rows = Array.from(container.querySelectorAll("tbody tr")).map((row) =>
       Array.from(row.querySelectorAll("td"))
         .slice(0, 2)
-        .map((cell) => cell.textContent),
+        .map((cell, index) => index === 0 ? cell.querySelector("a")?.textContent : cell.textContent),
     );
     expect(rows).toEqual([
       ["Mañana", "Cam 01"],
@@ -74,6 +74,44 @@ describe("SessionsPage", () => {
 
     expect(container.textContent).toContain("Todavía no hay análisis.");
     expect(container.textContent).toContain("Nuevo análisis");
+  });
+
+  it("combina búsqueda por nombre o cámara con filtros de trabajos activos y completados", async () => {
+    vi.stubGlobal("fetch", vi.fn((url: string) => Promise.resolve(response(200,
+      url.endsWith("/processed-sessions") ? [
+        { session_id: "s-1", job_id: "j-1", status: "completed", result_complete: true },
+        { session_id: "s-2", job_id: "j-2", status: "processing", result_complete: false },
+      ] : [
+        { id: "s-1", name: "Entrada", source_kind: "webcam", camera, created_at: camera.created_at },
+        { id: "s-2", name: "Pasillo", source_kind: "video_file", camera: { ...camera, name: "Norte" }, created_at: camera.created_at },
+        { id: "s-3", name: "Pendiente", source_kind: "video_file", camera, created_at: camera.created_at },
+      ]))));
+    await act(async () => root.render(<SessionsPage apiBaseUrl={API} />));
+    await click(byButton(container, "Activos"));
+    expect(container.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(container.querySelector("tbody")?.textContent).toContain("Pasillo");
+    await changeValue(byLabel<HTMLInputElement>(container, "Buscar análisis"), "cam 01");
+    expect(container.querySelector("tbody")?.textContent).toContain("No hay análisis que coincidan");
+    await click(byButton(container, "Completados"));
+    expect(container.querySelector('a[href="/live/jobs/j-1/results"]')).not.toBeNull();
+    await changeValue(byLabel<HTMLInputElement>(container, "Buscar análisis"), "entrada");
+    expect(container.querySelector("tbody")?.textContent).toContain("Entrada");
+    await click(byButton(container, "Todos"));
+    await changeValue(byLabel<HTMLInputElement>(container, "Buscar análisis"), "");
+    expect(container.querySelectorAll("tbody tr")).toHaveLength(3);
+  });
+
+  it("muestra la duración guardada de webcam y distingue duración desconocida", async () => {
+    vi.stubGlobal("fetch", vi.fn((url: string) => Promise.resolve(response(200,
+      url.endsWith("/processed-sessions") ? [
+        { session_id: "live-1", job_id: "job-1", status: "completed", live_duration_seconds: 3661.9, result_complete: true },
+      ] : [
+        { id: "live-1", name: "Expo", source_kind: "webcam", camera, created_at: camera.created_at },
+        { id: "live-2", name: "Preparada", source_kind: "webcam", camera, created_at: camera.created_at },
+      ]))));
+    await act(async () => root.render(<SessionsPage apiBaseUrl={API} />));
+    expect(container.textContent).toContain("Tiempo analizado: 01:01:01");
+    expect(container.textContent).toContain("Tiempo analizado: Sin datos");
   });
 
   it("abre webcam activa y fallida en sus vistas y señala que no hay grabación", async () => {
@@ -107,7 +145,7 @@ describe("SessionsPage", () => {
     await act(async () => root.render(<SessionsPage apiBaseUrl={API} />));
     expect(container.querySelectorAll("tbody tr")).toHaveLength(1);
     expect(container.textContent).toContain("Resultados listos");
-    expect(container.querySelector('a[href="/sessions/s-1/results"]')?.textContent).toContain("Ver resultados");
+    expect(container.querySelector('tbody a[href="/sessions/s-1/results"]')?.textContent).toContain("Ver resultados");
     expect(container.querySelector('input[type="file"]')).toBeNull();
     const button = Array.from(container.querySelectorAll("button")).find((item) => item.textContent === "Nuevo análisis");
     await click(button as HTMLButtonElement);

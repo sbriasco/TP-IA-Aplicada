@@ -9,6 +9,10 @@ interface CameraPickerProps {
   apiBaseUrl: string;
   value: string;
   onChange: (cameraId: string) => void;
+  compact?: boolean;
+  terminology?: "camera" | "location";
+  label?: string;
+  createLegend?: string;
 }
 
 function errorMessage(error: unknown): string {
@@ -19,7 +23,8 @@ function byName(a: Camera, b: Camera): number {
   return a.name.localeCompare(b.name);
 }
 
-export function CameraPicker({ apiBaseUrl, value, onChange }: CameraPickerProps) {
+export function CameraPicker({ apiBaseUrl, value, onChange, compact = false, terminology = "camera", label, createLegend }: CameraPickerProps) {
+  const location = terminology === "location";
   const id = useId();
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,8 +66,8 @@ export function CameraPicker({ apiBaseUrl, value, onChange }: CameraPickerProps)
       setNewName("");
       setNotice(
         existed
-          ? `Ya existía la cámara «${camera.name}»; quedó seleccionada.`
-          : `Cámara «${camera.name}» creada y seleccionada.`,
+          ? `Ya existía la ${location ? "ubicación" : "cámara"} «${camera.name}»; quedó seleccionada.`
+          : `${location ? "Ubicación" : "Cámara"} «${camera.name}» creada y seleccionada.`,
       );
     } catch (error) {
       setCreateError(errorMessage(error));
@@ -71,9 +76,21 @@ export function CameraPicker({ apiBaseUrl, value, onChange }: CameraPickerProps)
     }
   }
 
+  const createFields = (
+      <fieldset className={styles.create}>
+        <legend>{createLegend ?? (location ? "Nueva ubicación" : "Nueva cámara")}</legend>
+        <label htmlFor={`${id}-new-camera`}>{location ? "Nombre de la ubicación" : "Nombre de la cámara"}</label>
+        <input id={`${id}-new-camera`} value={newName} maxLength={120} placeholder={location ? "Por ejemplo: Entrada principal" : undefined}
+          onChange={(event) => setNewName(event.target.value)}
+          onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void handleCreate(); } }} />
+        <button type="button" onClick={() => void handleCreate()} disabled={creating || newName.trim() === ""}>{location ? "Crear ubicación" : "Crear cámara"}</button>
+        {notice !== null && <p role="status">{notice}</p>}
+        {createError !== null && <p role="alert">{createError}</p>}
+      </fieldset>
+  );
   return (
     <div className={styles.picker}>
-      <label htmlFor={`${id}-camera`}>Cámara</label>
+      <label htmlFor={`${id}-camera`}>{label ?? (location ? "Ubicación del análisis" : "Cámara")}</label>
       <select
         id={`${id}-camera`}
         value={value}
@@ -81,7 +98,7 @@ export function CameraPicker({ apiBaseUrl, value, onChange }: CameraPickerProps)
         disabled={loading}
         required
       >
-        <option value="">{loading ? "Cargando cámaras…" : "Elegí una cámara"}</option>
+        <option value="">{loading ? (location ? "Cargando ubicaciones…" : "Cargando cámaras…") : (location ? "Elegí una ubicación" : "Elegí una cámara")}</option>
         {cameras.map((camera) => (
           <option key={camera.id} value={camera.id}>
             {camera.name}
@@ -90,31 +107,7 @@ export function CameraPicker({ apiBaseUrl, value, onChange }: CameraPickerProps)
       </select>
       {loadError !== null && <p role="alert">{loadError}</p>}
 
-      <fieldset className={styles.create}>
-        <legend>Nueva cámara</legend>
-        <label htmlFor={`${id}-new-camera`}>Nombre de la cámara</label>
-        <input
-          id={`${id}-new-camera`}
-          value={newName}
-          maxLength={120}
-          onChange={(event) => setNewName(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              void handleCreate();
-            }
-          }}
-        />
-        <button
-          type="button"
-          onClick={() => void handleCreate()}
-          disabled={creating || newName.trim() === ""}
-        >
-          Crear cámara
-        </button>
-        {notice !== null && <p role="status">{notice}</p>}
-        {createError !== null && <p role="alert">{createError}</p>}
-      </fieldset>
+      {compact ? <details className={styles.disclosure}><summary>{location ? "Agregar una ubicación" : "Agregar una cámara"}</summary>{createFields}</details> : createFields}
     </div>
   );
 }

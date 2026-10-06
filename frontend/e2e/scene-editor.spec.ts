@@ -40,8 +40,8 @@ async function clickFrame(page: Page, point: Point): Promise<void> {
 }
 
 async function drawZone(page: Page, role: "front" | "interior" | "showcase", points: Point[]): Promise<void> {
-  await page.getByLabel("Rol de la zona nueva").selectOption(role);
-  await page.getByRole("button", { name: "Crear zona" }).click();
+  await page.getByLabel("Tipo de área nueva").selectOption(role);
+  await page.getByRole("button", { name: "Dibujar área" }).click();
   for (const point of points) await clickFrame(page, point);
   await page.getByRole("button", { name: "Cerrar polígono" }).click();
 }
@@ -116,8 +116,9 @@ test("configura la escena de una sesión de video desde el editor", async ({ pag
   });
 
   await test.step("dibuja Local A con sus tres zonas y la línea de entrada", async () => {
-    await page.getByRole("button", { name: "Agregar local" }).click();
-    await page.getByLabel("Nombre del local").fill("Local A");
+    await page.getByRole("button", { name: "Agregar zona" }).click();
+    await page.getByLabel("Nombre de la zona").fill("Local A");
+    await page.getByText("Agregar áreas y accesos", { exact: true }).click();
     await drawZone(page, "front", [[200, 400], [500, 400], [500, 550], [200, 550]]);
     await drawZone(page, "interior", [[200, 100], [500, 100], [500, 380], [200, 380]]);
     await drawZone(page, "showcase", [[520, 400], [620, 400], [620, 550]]);
@@ -130,14 +131,14 @@ test("configura la escena de una sesión de video desde el editor", async ({ pag
     // Con la línea horizontal la flecha es vertical: su caja mide 0 de ancho y Playwright la
     // considera oculta aunque se ve; alcanza con que exista con el sentido correcto.
     await expect(page.getByRole("img", { name: "Flecha de entrada de Local A: de A a B" })).toBeAttached();
-    await page.getByText("Sentido de entrada", { exact: true }).click();
-    await page.getByLabel("B → A es entrada").check();
+    // El sentido de entrada está visible al seleccionar la línea.
+    await page.getByRole("button", { name: "B → A es entrada", exact: true }).click();
     await expect(page.getByRole("img", { name: "Flecha de entrada de Local A: de B a A" })).toBeAttached();
-    await page.getByLabel("A → B es entrada").check();
+    await page.getByRole("button", { name: "A → B es entrada", exact: true }).click();
     await expect(page.getByRole("img", { name: "Flecha de entrada de Local A: de A a B" })).toBeAttached();
   });
 
-  const firstVertex = page.getByRole("button", { name: "Vértice 1 de zona frontal de Local A" });
+  const firstVertex = page.getByRole("button", { name: "Vértice 1 de área externa de Local A" });
 
   await test.step("mueve un vértice con el teclado", async () => {
     const [x0, y0] = await vertexCenter(firstVertex);
@@ -183,9 +184,9 @@ test("configura la escena de una sesión de video desde el editor", async ({ pag
     expect(saved.shops).toHaveLength(1);
     const [shop] = saved.shops;
     expect(shop.name).toBe("Local A");
-    expectSamePoints(shop.zones.front, await drawnVertices(page, "zona frontal", "Local A"));
-    expectSamePoints(shop.zones.interior, await drawnVertices(page, "zona interior", "Local A"));
-    expectSamePoints(shop.zones.showcase, await drawnVertices(page, "zona de vidriera", "Local A"));
+    expectSamePoints(shop.zones.front, await drawnVertices(page, "área externa", "Local A"));
+    expectSamePoints(shop.zones.interior, await drawnVertices(page, "área interior", "Local A"));
+    expectSamePoints(shop.zones.showcase, await drawnVertices(page, "área de interés", "Local A"));
     expectSamePoints(
       [shop.entry_line.start, shop.entry_line.end],
       await drawnVertices(page, "línea de entrada", "Local A"),
@@ -194,8 +195,8 @@ test("configura la escena de una sesión de video desde el editor", async ({ pag
   });
 
   await test.step("marca un polígono autointersectado sin perder el dibujo", async () => {
-    await page.getByRole("button", { name: "Agregar local" }).click();
-    await page.getByLabel("Nombre del local").fill("Local B");
+    await page.getByRole("button", { name: "Agregar zona" }).click();
+    await page.getByLabel("Nombre de la zona").fill("Local B");
     await drawZone(page, "front", [[800, 100], [1000, 300], [1000, 100], [800, 300]]);
     await page.getByRole("button", { name: "Crear línea de entrada" }).click();
     await clickFrame(page, [800, 600]);
@@ -203,11 +204,11 @@ test("configura la escena de una sesión de video desde el editor", async ({ pag
     await page.getByRole("button", { name: "Guardar configuración" }).click();
 
     await expect(page.getByRole("alert").filter({ hasText: /No se guardó la configuración/ })).toBeVisible();
-    await expect(page.getByRole("group", { name: "Zona frontal de Local B" })).toHaveAttribute(
+    await expect(page.getByRole("group", { name: "Área externa de Local B" })).toHaveAttribute(
       "aria-invalid",
       "true",
     );
-    await expect(page.getByRole("button", { name: /^Vértice \d+ de zona frontal de Local B$/ })).toHaveCount(4);
+    await expect(page.getByRole("button", { name: /^Vértice \d+ de área externa de Local B$/ })).toHaveCount(4);
     const versions = (await (await request.get(`${API}/cameras/${cameraId}/scene-versions`)).json()) as unknown[];
     expect(versions).toHaveLength(1);
   });

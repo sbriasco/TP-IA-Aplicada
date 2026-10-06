@@ -106,7 +106,7 @@ describe("SessionResultsPage", () => {
       vi.fn((url: string) => {
         if (url.endsWith("/processed-sessions")) return Promise.resolve(json([completedRow({ video_availability: "missing" })]));
         if (url.endsWith("/sessions/s-1")) return Promise.resolve(json(detail("missing")));
-        if (url.includes("/scene-versions/")) return Promise.resolve(json({ shops: [{ shop_id: "shop-1", name: "Local" }] }));
+        if (url.includes("/scene-versions/")) return Promise.resolve(json({ shops: [{ shop_id: "shop-1", name: "Zona" }] }));
         if (url.includes("/metrics")) return Promise.resolve(json(metrics));
         if (url.includes("/events")) return Promise.resolve(json([]));
         if (url.includes("/position-samples")) {
@@ -134,7 +134,7 @@ describe("SessionResultsPage", () => {
         calls.push(url);
         if (url.endsWith("/processed-sessions")) return Promise.resolve(json([completedRow()]));
         if (url.endsWith("/sessions/s-1")) return Promise.resolve(json(detail("available")));
-        if (url.includes("/scene-versions/")) return Promise.resolve(json({ shops: [{ shop_id: "shop-1", name: "Local" }] }));
+        if (url.includes("/scene-versions/")) return Promise.resolve(json({ shops: [{ shop_id: "shop-1", name: "Zona" }] }));
         if (url.includes("/metrics")) return Promise.resolve(json(metrics));
         if (url.includes("/events")) return Promise.resolve(json([{ kind: "store_pass", zone_role: "front", track_id: 1, shop_id: "shop-1", video_timestamp_seconds: 10, duration_seconds: null }]));
         if (url.includes("/position-samples")) {
@@ -188,9 +188,9 @@ describe("SessionResultsPage", () => {
         if (url.includes("/measures")) {
           return Promise.resolve(
             json([
-              { shop_id: "shop-1", shop_name: "Local", code: "entries", value: 1, availability: "available", partial: true },
-              { shop_id: "shop-1", shop_name: "Local", code: "exits", value: 0, availability: "available", partial: true },
-              { shop_id: "shop-1", shop_name: "Local", code: "visible_occupancy", value: 1, availability: "available", partial: true },
+              { shop_id: "shop-1", shop_name: "Zona", code: "entries", value: 1, availability: "available", partial: true },
+              { shop_id: "shop-1", shop_name: "Zona", code: "exits", value: 0, availability: "available", partial: true },
+              { shop_id: "shop-1", shop_name: "Zona", code: "visible_occupancy", value: 1, availability: "available", partial: true },
             ]),
           );
         }
@@ -249,7 +249,7 @@ describe("SessionResultsPage", () => {
               message: `Respuesta de ${payload.session_id}`,
               session_id: payload.session_id,
               shop_id: "shop-1",
-              shop_name: "Local",
+              shop_name: "Zona",
               scope: "whole_session",
               figures: [],
               model_calls: 1,
@@ -265,7 +265,7 @@ describe("SessionResultsPage", () => {
           const sessionId = url.endsWith("/sessions/s-2") ? "s-2" : "s-1";
           return Promise.resolve(json({ ...detail("available"), id: sessionId }));
         }
-        if (url.includes("/scene-versions/")) return Promise.resolve(json({ shops: [{ shop_id: "shop-1", name: "Local" }] }));
+        if (url.includes("/scene-versions/")) return Promise.resolve(json({ shops: [{ shop_id: "shop-1", name: "Zona" }] }));
         if (url.includes("/metrics")) return Promise.resolve(json(metrics));
         if (url.includes("/events")) return Promise.resolve(json([]));
         if (url.includes("/position-samples")) {
@@ -317,7 +317,7 @@ describe("SessionResultsPage", () => {
         }
         if (url.endsWith("/processed-sessions")) return Promise.resolve(json([completedRow()]));
         if (url.endsWith("/sessions/s-1")) return Promise.resolve(json(detail("available")));
-        if (url.includes("/scene-versions/")) return Promise.resolve(json({ shops: [{ shop_id: "shop-1", name: "Local" }] }));
+        if (url.includes("/scene-versions/")) return Promise.resolve(json({ shops: [{ shop_id: "shop-1", name: "Zona" }] }));
         if (url.includes("/metrics")) return Promise.resolve(json(metrics));
         if (url.includes("/events")) return Promise.resolve(json([]));
         if (url.includes("/position-samples")) {

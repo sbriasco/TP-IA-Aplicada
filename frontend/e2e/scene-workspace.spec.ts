@@ -1,0 +1,72 @@
+import { expect, test } from "@playwright/test";
+import type { SceneVersion, SceneVersionCreate } from "../src/types/scene";
+
+test("editor: capas, arrastre completo, sentidos, guardado y ambos temas", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.emulateMedia({ colorScheme: "light" });
+  const camera = { id: "cam-1", name: "Entrada principal", created_at: "2026-10-05T00:00:00Z" };
+  let version: SceneVersion = { id: "v-1", camera_id: camera.id, version_number: 1, reference_session_id: "s-1", frame_width: 1280, frame_height: 720, created_by_machine_id: null, created_at: camera.created_at, shop_count: 1, shops: [{ shop_id: "zone-1", name: "Acceso central", zones: { front: [[.15, .4], [.45, .4], [.45, .8], [.15, .8]], interior: [[.5, .3], [.8, .3], [.8, .8], [.5, .8]] }, entry_line: { start: [.15, .85], end: [.45, .85], entry_direction: "a_to_b" } }] };
+  let payload: SceneVersionCreate | undefined;
+  await page.route("**/sessions/s-1", route => route.fulfill({ json: { id: "s-1", name: "Entrada · Mañana", source_kind: "video_file", camera, created_at: camera.created_at, video: null, reference_frame: { frame_index: 0, video_timestamp_seconds: 0, width: 1280, height: 720, url: "/sessions/s-1/reference-frame" }, duplicate_session_ids: [] } }));
+  await page.route("**/sessions/s-1/reference-frame", route => route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><rect width="1280" height="720" fill="#343b40"/><path d="M0 560L450 200H830L1280 560" fill="#4f595d"/><rect x="480" y="150" width="320" height="370" rx="8" fill="#627478"/><path d="M640 150V520M480 340H800" stroke="#9cabad" stroke-width="8"/><text x="60" y="660" fill="#c4cdcf" font-family="Arial" font-size="24">Frame de referencia · Acceso central</text></svg>' }));
+  await page.route("**/cameras/cam-1/scene-versions", async route => {
+    if (route.request().method() === "POST") {
+      payload = route.request().postDataJSON() as SceneVersionCreate;
+      version = { ...version, id: "v-2", version_number: 2, shops: payload.shops.map(shop => ({ ...shop, shop_id: shop.shop_id ?? "zone-1", entry_line: shop.entry_line! })) };
+      await route.fulfill({ json: { ...version, warnings: [] } });
+    } else await route.fulfill({ json: [version] });
+  });
+  await page.route("**/scene-versions/*", route => route.fulfill({ json: version }));
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto("/sessions/s-1/editor");
+  const canvas = page.getByRole("group", { name: "Frame de referencia con la escena" });
+  await expect(canvas).toBeVisible();
+  await expect(page.getByLabel("Zona en edición", { exact: true })).toHaveCount(0);
+  for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }]) {
+    await page.setViewportSize(viewport);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight)).toBe(true);
+    await expect(page.getByRole("button", { name: "Guardar configuración", exact: true })).toBeInViewport();
+  }
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await expect(page.getByRole("toolbar", { name: "Herramientas de escena" })).toHaveCount(0);
+  await expect(page.locator("header [data-context]")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Volver a la sesión", exact: true })).toHaveCSS("border-radius", "8px");
+  await page.getByLabel("Título de la configuración", { exact: true }).fill("Acceso · turno mañana");
+  const canvasBox = (await page.getByRole("region", { name: "Definí tu escena" }).boundingBox())!;
+  const sideBox = (await page.getByRole("complementary", { name: "Capas y propiedades" }).boundingBox())!;
+  expect(canvasBox.width / sideBox.width).toBeGreaterThan(2);
+  expect(canvasBox.width / sideBox.width).toBeLessThan(2.6);
+  await page.getByRole("button", { name: "Área externa", exact: true }).click();
+  const vertex = page.getByRole("button", { name: "Vértice 1 de área externa de Acceso central" });
+  const before = Number(await vertex.getAttribute("cx"));
+  const box = (await vertex.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 25, box.y + box.height / 2 + 15, { steps: 20 });
+  await page.mouse.up();
+  expect(Number(await vertex.getAttribute("cx"))).toBeGreaterThan(before);
+  await page.getByRole("button", { name: "Ocultar Área externa de Acceso central" }).click();
+  await expect(canvas.locator('polygon[data-role="front"]')).toHaveCount(0);
+  await page.getByRole("button", { name: "Mostrar Área externa de Acceso central" }).click();
+  await page.getByRole("button", { name: "Línea de entrada", exact: true }).click();
+  await page.getByRole("button", { name: "B → A es entrada", exact: true }).click();
+  await page.getByRole("button", { name: "Guardar configuración", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Se guardó la configuración 2.");
+  expect(payload?.shops[0]?.entry_line?.entry_direction).toBe("b_to_a");
+  expect(payload?.shops[0]?.zones.front).toHaveLength(4);
+  expect(Object.keys(payload!)).toEqual(["reference_session_id", "base_version_id", "shops"]);
+  await page.getByRole("complementary", { name: "Capas y propiedades" }).evaluate(element => { element.scrollTop = 0; });
+  await page.screenshot({ path: "test-results/scene-workspace-light.png", fullPage: true });
+  await page.getByRole("button", { name: "Activar modo oscuro" }).click();
+  await page.screenshot({ path: "test-results/scene-workspace-dark.png", fullPage: true });
+  await page.reload();
+  await expect(page.getByLabel("Título de la configuración", { exact: true })).toHaveValue("Acceso · turno mañana");
+  await expect(page.getByRole("button", { name: "Vértice 1 de área externa de Acceso central" })).toBeVisible();
+  await page.getByRole("button", { name: "Línea de entrada", exact: true }).click();
+  await expect(page.getByRole("button", { name: "B → A es entrada", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: "test-results/scene-workspace-mobile.png", fullPage: true });
+  expect(errors).toEqual([]);
+});

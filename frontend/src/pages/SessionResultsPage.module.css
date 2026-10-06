@@ -1,6 +1,6 @@
 .summary { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin: -6px 0 14px; color: var(--fs-muted); font-size: 12px; }
 .summary p { margin: 0; overflow-wrap: anywhere; }
-.summary > span, .count { background: #f4f6f8; border-radius: 4px; padding: 3px 6px; font-size: 11px; }
+.summary > span, .count { background: var(--fs-raised); border-radius: 4px; padding: 3px 6px; font-size: 11px; }
 .resultsWorkspace { display: grid; grid-template-columns: minmax(0, 1fr) 320px; align-items: start; gap: 16px; }
 .analytics { min-width: 0; }
 .panel { min-width: 0; background: var(--fs-surface); border: 1px solid var(--fs-line); border-radius: 8px; padding: 14px; margin-bottom: 12px; }

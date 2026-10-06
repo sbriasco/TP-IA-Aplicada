@@ -38,6 +38,8 @@ export interface LiveResults {
   capture_status: string; result_complete: boolean; coverage_complete: boolean;
   unknown_tail: boolean; elapsed_capture_seconds: number; revision: number;
   checkpoint_at: string | null; selected_shop_id: string | null;
+  capture_started_at?: string | null;
+  zone_dwell?: Record<string, import("../api/liveMessages").LiveZoneDwell>;
   shops: { shop_id: string; shop_name: string }[];
   summary: import("../api/liveMessages").LiveShopSnapshot | null;
   minutes: import("../api/liveMessages").LiveMinute[];
