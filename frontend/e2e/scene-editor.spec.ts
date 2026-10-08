@@ -111,7 +111,7 @@ test("configura la escena de una sesión de video desde el editor", async ({ pag
     await expect(frame).toBeVisible();
     await expect(frame.locator("image")).toHaveAttribute("href", `${API}/sessions/${sessionId}/reference-frame`);
     expect((await request.get(`${API}/sessions/${sessionId}/reference-frame`)).ok()).toBeTruthy();
-    await page.getByRole("link", { name: "Editar escena" }).click();
+    await page.getByRole("link", { name: "Editar en canvas", exact: true }).click();
     await page.waitForURL(/\/editor$/);
     await expect(frameCanvas(page)).toBeVisible();
   });
@@ -230,7 +230,7 @@ test("configura la escena de una sesión de video desde el editor", async ({ pag
   await test.step("muestra la configuración guardada sobre el frame y permite retirarla", async () => {
     const preview = page.getByRole("img", { name: `Frame de referencia de ${sessionName}` });
     await expect(preview.locator("polygon")).toHaveCount(3);
-    await expect(preview).toContainText("Frontal · Local A");
+    await expect(preview).toContainText("Externa · Local A");
     const versions = (await (await request.get(`${API}/cameras/${cameraId}/scene-versions`)).json()) as SceneVersionSummary[];
     await page.getByRole("button", { name: "Eliminar configuración 1", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Eliminar configuración" });
