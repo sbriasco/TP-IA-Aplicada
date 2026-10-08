@@ -7,6 +7,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SceneEditorPage } from "../src/pages/SceneEditorPage";
+import type { ProcessedSession } from "../src/api/processedSessions";
 import type { SceneIssue, SceneVersion, SceneVersionSummary } from "../src/types/scene";
 import type { SessionDetail } from "../src/types/session";
 import { byButton, byLabel, changeValue, click } from "./dom";
@@ -106,13 +107,18 @@ describe("SceneEditorPage", () => {
     versions = [],
     version,
     save,
+    jobs = [],
+    jobsReply,
   }: {
     detail?: SessionDetail;
     versions?: SceneVersionSummary[];
     version?: SceneVersion;
     save?: Reply;
+    jobs?: ProcessedSession[];
+    jobsReply?: Reply;
   } = {}) {
     fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === `${API}/processed-sessions`) return response(jobsReply?.status ?? 200, jobsReply?.body ?? jobs);
       if (url === `${API}/sessions/s-1`) return response(200, detail);
       if (url === `${API}/cameras/cam-1/scene-versions`) {
         if (init?.method === "POST") {
@@ -136,10 +142,78 @@ describe("SceneEditorPage", () => {
     return container.querySelectorAll<SVGCircleElement>('circle[role="button"]');
   }
 
+  it("respeta las etiquetas Entrada/Salida de webcam al editar e invertir la línea", async () => {
+    await render({ detail: session({ source_kind: "webcam", live_source: {
+      machine_id: "local", device_index: 0, capture_backend: "fake", width: 1280, height: 720,
+      reported_fps: 30, label_mode: "access", prepared_at: camera.created_at, frame_checked_at: null,
+    } }), versions: [summary(1)], version: fullVersion(1) });
+    const sideA = container.querySelector('[aria-label="Lado de salida de Local A"]');
+    const sideB = container.querySelector('[aria-label="Lado de entrada de Local A"]');
+    expect(sideA?.textContent).toBe("Salida");
+    expect(sideB?.textContent).toBe("Entrada");
+    await click(byButton(container, "Línea de entrada"));
+    await click(byButton(container, "Invertir entrada y salida"));
+    expect(sideA?.textContent).toBe("Entrada");
+    expect(sideB?.textContent).toBe("Salida");
+  });
+
+  function job(overrides: Partial<ProcessedSession> = {}): ProcessedSession {
+    return { session_id: "s-1", name: "Mañana", video_filename: "video.mp4",
+      video_availability: "available", job_id: "job-1", status: "completed",
+      finished_at: "2026-10-06T10:00:00Z", failure_code: null, failure_message: null,
+      scene_version_id: "v-1", version_number: 1, result_complete: true, ...overrides };
+  }
+
+  it.each([
+    { name: "video con resultados", jobs: [job()], source: "video_file" as const, href: "/sessions/s-1/results" },
+    { name: "video sin análisis", jobs: [], source: "video_file" as const, href: "/sessions/s-1" },
+    { name: "video incompleto", jobs: [job({ result_complete: false })], source: "video_file" as const, href: "/sessions/s-1" },
+    { name: "video procesándose", jobs: [job({ status: "processing", result_complete: false })], source: "video_file" as const, href: "/sessions/s-1" },
+    { name: "resultados de otra sesión", jobs: [job({ session_id: "s-2" })], source: "video_file" as const, href: "/sessions/s-1" },
+    { name: "webcam finalizada", jobs: [job({ source_kind: "webcam" })], source: "webcam" as const, href: "/live/jobs/job-1/results" },
+    { name: "webcam sin análisis", jobs: [], source: "webcam" as const, href: "/sessions/s-1/live" },
+  ])("continúa al destino correcto: $name", async ({ jobs, source, href }) => {
+    await render({ detail: session({ source_kind: source }), versions: [summary(1)], version: fullVersion(1), jobs });
+    const link = Array.from(container.querySelectorAll("a")).find(element => element.textContent?.includes("Continuar a resultados"));
+    expect(link?.getAttribute("href")).toBe(href);
+    await followLink(link!);
+    expect(window.location.pathname).toBe(href);
+  });
+
+  it("permite reintentar la consulta de resultados sin bloquear el editor", async () => {
+    const reply: Reply = { status: 503, body: { detail: { code: "unavailable", message: "No disponible." } } };
+    await render({ versions: [summary(1)], version: fullVersion(1), jobsReply: reply });
+    expect(byButton(container, "Continuar a resultados").disabled).toBe(true);
+    expect(vertices()).toHaveLength(6);
+    reply.status = 200;
+    reply.body = [job()];
+    await click(byButton(container, "Reintentar"));
+    await act(async () => { await vi.waitFor(() => expect(container.querySelector('a[href="/sessions/s-1/results"]')).not.toBeNull()); });
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    await click(byButton(container, "Agregar zona"));
+    expect(byButton(container, "Continuar a resultados").disabled).toBe(true);
+  });
+
   function saveRequestBody(): Record<string, unknown> {
     const call = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === "POST");
     return JSON.parse((call?.[1] as RequestInit).body as string) as Record<string, unknown>;
   }
+
+  it("no guarda si no hay cambios, incluso al editar y restaurar el nombre", async () => {
+    await render({ versions: [summary(2)], version: fullVersion(2) });
+    const button = byButton(container, "Guardar configuración");
+    expect(button.disabled).toBe(true);
+    await click(byButton(container, "Local A"));
+    await changeValue(byLabel<HTMLInputElement>(container, "Nombre de la zona"), "Modificado");
+    expect(button.disabled).toBe(false);
+    await changeValue(byLabel<HTMLInputElement>(container, "Nombre de la zona"), "Local A");
+    expect(button.disabled).toBe(true);
+    await changeValue(byLabel<HTMLInputElement>(container, "Título de la configuración"), "Otro título local");
+    expect(button.disabled).toBe(true);
+    await click(button);
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+    expect(unloadPrevented()).toBe(false);
+  });
 
   /** Clic cancelable, como el de un navegador: `Link` lo cancela y navega con `navigate`. */
   async function followLink(link: HTMLAnchorElement) {
@@ -164,7 +238,7 @@ describe("SceneEditorPage", () => {
       );
     });
     await act(async () => {
-      await vi.waitFor(() => expect(byButton(container, "Guardar configuración").disabled).toBe(false));
+      await vi.waitFor(() => expect(Array.from(container.querySelectorAll("button")).some(button => button.textContent === "Guardando…")).toBe(false));
     });
   }
 
@@ -270,6 +344,7 @@ describe("SceneEditorPage", () => {
     expect(container.querySelector('[role="status"]')?.textContent).toBe("Se guardó la configuración 3.");
     expect(container.textContent).toContain(warning.message);
     expect(unloadPrevented()).toBe(false);
+    expect(byButton(container, "Guardar configuración").disabled).toBe(true);
   });
 
   it("ante un 422 marca el elemento y conserva el dibujo", async () => {
@@ -315,6 +390,8 @@ describe("SceneEditorPage", () => {
       save: { status: 409, body: { detail: { code: "conflict", message: "La cámara cambió." } } },
     });
 
+    await click(byButton(container, "Local A"));
+    await changeValue(byLabel<HTMLInputElement>(container, "Nombre de la zona"), "Local A2");
     await save();
 
     expect(container.querySelector('[role="alert"]')?.textContent).toBe("La cámara cambió.");
@@ -329,8 +406,8 @@ describe("SceneEditorPage", () => {
     expect(unloadPrevented()).toBe(true);
 
     await click(container.querySelector<HTMLButtonElement>('[aria-label="Eliminar zona Zona 1"]')!);
-    // Quitar también es un cambio: sigue sucio hasta guardar.
-    expect(unloadPrevented()).toBe(true);
+    // Agregar y quitar la misma zona restaura la configuración vacía original.
+    expect(unloadPrevented()).toBe(false);
   });
 
   it("pide confirmación al navegar dentro de la app con cambios sin guardar", async () => {

@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 
+import { Layers, ChevronDown } from "lucide-react";
+import type { SceneVersionSummary } from "../types/scene";
+
 import { API_BASE_URL } from "../api/config";
 import { ApiRequestError } from "../api/http";
 import { getSession, referenceFrameUrl } from "../api/sessions";
@@ -15,7 +18,7 @@ import { LivePreparationPage } from "./LivePreparationPage";
 
 const AVAILABILITY_TEXT: Record<VideoAvailability, string> = {
   available: "Video disponible en este equipo",
-  missing: "Video no disponible en este equipo",
+  missing: "Archivo no encontrado en el almacenamiento local.",
   mismatch: "El archivo de este equipo no coincide con el video registrado",
   not_configured: "Este equipo no tiene configurada la carpeta de videos (FLOWSIGHT_VIDEOS_DIR)",
 };
@@ -52,10 +55,6 @@ function VideoMetadata({ video }: { video: VideoSource }) {
       <dd>{video.frame_count}</dd>
       <dt>Equipo de origen</dt>
       <dd>{video.origin_machine_id}</dd>
-      <dt>SHA-256</dt>
-      <dd>
-        <code>{video.sha256}</code>
-      </dd>
       <dt>Archivo original</dt>
       <dd>{video.original_filename}</dd>
     </dl>
@@ -65,6 +64,7 @@ function VideoMetadata({ video }: { video: VideoSource }) {
 export function SessionDetailPage({ sessionId, apiBaseUrl = API_BASE_URL }: SessionDetailPageProps) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [notice, setNotice] = useState<string | null>(null);
+  const [selectedVersion, setSelectedVersion] = useState<SceneVersionSummary | undefined>();
   const [selectedConfigurationId, setSelectedConfigurationId] = useState("");
 
   useEffect(() => {
@@ -116,91 +116,56 @@ export function SessionDetailPage({ sessionId, apiBaseUrl = API_BASE_URL }: Sess
   return (
     <AppShell title={session.name} context="Detalle" sessionId={session.id} canEdit={session.reference_frame !== null}>
       {backLink}
-      <p className={styles.description}>Definí qué espacios querés medir y elegí una configuración para analizar este video.</p>
-      <div className={frame === null ? styles.detailsOnly : styles.layout}>
-      <div className={styles.workspace}>
+
+      <div className={frame === null ? styles.detailsOnly : `${styles.layout} grid grid-cols-1 lg:grid-cols-12 gap-6 items-start`}>
+      <div className={`${styles.workspace} lg:col-span-7`}>
 
       {frame !== null && (
         <section className={styles.panel} aria-labelledby="frame-title">
           <div className={styles.frameHeading}>
-            <div><h2 id="frame-title">Tu espacio</h2><p>Las zonas y líneas muestran qué medirá la configuración seleccionada.</p></div>
-            <Link className={styles.editAction} href={`/sessions/${encodeURIComponent(session.id)}/editor`}>Editar escena</Link>
+            <div className={styles.previewTitle}><h2 id="frame-title">Escena y zonas configuradas</h2>{selectedVersion && <span className={styles.badge} aria-label="Configuración activa">Configuración {selectedVersion.version_number}</span>}</div>
+            <Link className={styles.editAction} href={`/sessions/${encodeURIComponent(session.id)}/editor`}><Layers size={15} aria-hidden="true" />Editar en canvas</Link>
           </div>
-          <div className={styles.frameSurface}>
+          <div className={styles.frameSurface} style={{ aspectRatio: `${frame.width} / ${frame.height}` }}>
           <ScenePreview
             apiBaseUrl={apiBaseUrl}
             versionId={selectedConfigurationId}
+            showConfigurationBadge={false}
             frameUrl={referenceFrameUrl(apiBaseUrl, frame)}
             label={`Frame de referencia de ${session.name}`}
             width={frame.width}
             height={frame.height}
           />
           </div>
-          <div className={styles.frameCaption}><span>Imagen de referencia · {formatSeconds(frame.video_timestamp_seconds)} del video</span><span>{session.camera.name} · {frame.width} × {frame.height}</span></div>
+          <div className={styles.frameCaption}><span>Frame {Math.floor(frame.video_timestamp_seconds / 60)}:{String(Math.floor(frame.video_timestamp_seconds % 60)).padStart(2, "0")} · Cámara: {session.camera.name} · {frame.width}x{frame.height}</span></div>
         </section>
       )}
 
 
       </div>
-      <div className={styles.information}>
-      {session.source_kind === "video_file" && <div className={styles.panel}>
-        <StartAnalysisSection apiBaseUrl={apiBaseUrl} session={session} onConfigurationChange={setSelectedConfigurationId} />
-      </div>}
-      <section className={styles.panel} aria-label="Información de la sesión"><details className={styles.sessionInfo}><summary>Información de la sesión</summary>
-      <dl className={styles.rows}>
-        <dt>Cámara</dt>
-        <dd>{session.camera.name}</dd>
-        <dt>Tipo</dt>
-        <dd>{session.source_kind === "video_file" ? "Video" : "Sintética"}</dd>
-        <dt>Creada</dt>
-        <dd>
-          <time dateTime={session.created_at}>{new Date(session.created_at).toLocaleString()}</time>
-        </dd>
-      </dl>
-      </details>
-      </section>
+      <div className={`${styles.information} lg:col-span-5`}>
+        <section className={`${styles.panel} ${styles.console}`} aria-label="Consola de inferencia">
+          {video && (video.availability === "missing" || video.availability === "mismatch") && <VideoRelinkForm
+            compact availabilityText={AVAILABILITY_TEXT[video.availability]} apiBaseUrl={apiBaseUrl} sessionId={session.id}
+            onRelinked={updated => { setState({ kind: "loaded", session: updated }); setNotice("El video se volvió a cargar en este equipo."); }} />}
+          {video?.availability === "not_configured" && <p role="alert" data-availability="not_configured">{AVAILABILITY_TEXT.not_configured}</p>}
+          {notice !== null && <p role="status">{notice}</p>}
+          {session.source_kind === "video_file" && <StartAnalysisSection apiBaseUrl={apiBaseUrl} session={session}
+            onConfigurationChange={setSelectedConfigurationId} onVersionChange={setSelectedVersion} />}
+          {video?.appears_incomplete && <p role="status">{`El archivo parece incompleto: se leyeron ${video.frame_count} de ${video.declared_frame_count} frames declarados.`}</p>}
+          <details className={styles.sessionInfo} aria-label="Detalles del archivo y sesión">
+            <summary>Detalles del archivo y sesión<ChevronDown size={16} aria-hidden="true" /></summary>
+            <dl className={styles.rows}>
+              <dt>Cámara</dt><dd>{session.camera.name}</dd>
+              <dt>Tipo</dt><dd>{session.source_kind === "video_file" ? "Video" : "Sintética"}</dd>
+              <dt>Creada</dt><dd><time dateTime={session.created_at}>{new Date(session.created_at).toLocaleString("es-AR")}</time></dd>
+              {video && <><dt>Disponibilidad</dt><dd data-availability={video.availability}>{AVAILABILITY_TEXT[video.availability]}</dd></>}
+            </dl>
+            {video ? <VideoMetadata video={video} /> : <p>Esta sesión es sintética: no tiene video ni frame de referencia.</p>}
+            {session.duplicate_session_ids.length > 0 && <div><h3>Video repetido</h3><ul>{session.duplicate_session_ids.map(id => <li key={id}><Link href={`/sessions/${encodeURIComponent(id)}`}>Sesión {id}</Link></li>)}</ul></div>}
+          </details>
+        </section>
 
-      {video === null ? (
-        <p>Esta sesión es sintética: no tiene video ni frame de referencia.</p>
-      ) : (
-        <>
-          <section className={`${styles.panel} ${styles.videoPanel}`} aria-labelledby="video-title">
-            <h2 id="video-title">Video</h2>
-            <p data-availability={video.availability}>{AVAILABILITY_TEXT[video.availability]}</p>
-            {notice !== null && <p role="status">{notice}</p>}
-            {(video.availability === "missing" || video.availability === "mismatch") && (
-              <VideoRelinkForm
-                apiBaseUrl={apiBaseUrl}
-                sessionId={session.id}
-                onRelinked={(updated) => {
-                  setState({ kind: "loaded", session: updated });
-                  setNotice("El video se volvió a cargar en este equipo.");
-                }}
-              />
-            )}
-            {video.appears_incomplete && (
-              <p role="status">
-                {`El archivo parece incompleto: se leyeron ${video.frame_count} de ${video.declared_frame_count} frames declarados.`}
-              </p>
-            )}
-            <details><summary>Detalles del archivo</summary><VideoMetadata video={video} /></details>
-          </section>
-
-          {session.duplicate_session_ids.length > 0 && (
-            <section className={styles.panel} aria-labelledby="duplicates-title">
-              <h2 id="duplicates-title">Video repetido</h2>
-              <p>El mismo video también está registrado en estas sesiones:</p>
-              <ul>
-                {session.duplicate_session_ids.map((id) => (
-                  <li key={id}>
-                    <Link href={`/sessions/${encodeURIComponent(id)}`}>Sesión {id}</Link>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-        </>
-      )}
       </div>
       </div>
     </AppShell>

@@ -100,8 +100,6 @@ async def preview_live_job(websocket, job_id: uuid.UUID, session_id: uuid.UUID):
                 message = await asyncio.wait_for(subscription.receive(), 0.2)
             except TimeoutError:
                 message = None
-            if message is not None:
-                await asyncio.wait_for(send(message), 1)
             state = await run_in_threadpool(read_state)
             if state is None:
                 await websocket.close(code=4404)
@@ -110,6 +108,17 @@ async def preview_live_job(websocket, job_id: uuid.UUID, session_id: uuid.UUID):
                 broker.status(job_id, state, terminal=True)
                 await asyncio.wait_for(send(state), 1)
                 return
+            if message is not None:
+                # A cached JPEG cannot override a durable pause acknowledgement.
+                if message.get("type") == "live.update" and (
+                    state["capture_status"] != "connected"
+                    or message.get("revision", -1) < state["revision"]
+                ):
+                    message = None
+                elif message.get("revision", -1) < state["revision"]:
+                    message = None
+                else:
+                    await asyncio.wait_for(send(message), 1)
             if message is None and state != last_status:
                 await asyncio.wait_for(send(state), 1)
                 last_status = state

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Bot } from "lucide-react";
 import { postChat, type ChatResponse } from "../api/chat";
 import { ApiRequestError } from "../api/http";
 import { AgentAnswer } from "./AgentAnswer";
@@ -58,8 +59,8 @@ export function SessionChatPanel({ apiBaseUrl, sessionId, shopId, shopName }: Se
   return (
     <aside className={styles.panel} aria-label="Chat de la sesión">
       <header className={styles.heading}>
-        <span className={styles.avatar} aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 5h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-8l-5 3v-3H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" strokeWidth="1.6"/><circle cx="8" cy="11" r="1"/><circle cx="12" cy="11" r="1"/><circle cx="16" cy="11" r="1"/></svg></span>
-        <div><h2>Agente FlowSight</h2><p>Asistente de IA · tus resultados</p></div>
+        <span className={styles.avatar} aria-hidden="true"><Bot size={23} /></span>
+        <div><h2>Agente FlowSight</h2><p>Consultas sobre este análisis</p></div>
       </header>
       <div className={styles.context}>{shopName ?? "Zona seleccionada"}<span> · Toda la sesión</span></div>
       <div className={styles.conversation} role="log" aria-label="Conversación con el agente" ref={log} aria-busy={waiting}>

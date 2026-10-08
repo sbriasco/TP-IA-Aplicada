@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionDetailPage } from "../src/pages/SessionDetailPage";
 import type { SceneVersionSummary } from "../src/types/scene";
 import type { SessionDetail, VideoAvailability } from "../src/types/session";
-import { byButton, byLabel, chooseFile, click, submit } from "./dom";
+import { byButton, byLabel, chooseFile, click } from "./dom";
 
 const API = "http://api.test";
 const camera = { id: "cam-1", name: "Cam 01", created_at: "2026-09-28T00:00:00Z" };
@@ -159,7 +159,7 @@ describe("SessionDetailPage", () => {
   }
 
   async function startAnalysis(): Promise<void> {
-    await click(byButton(analysisSection(), "Iniciar análisis"));
+    await click(byButton(analysisSection(), "Iniciar análisis de video"));
     await act(async () => {
       await vi.waitFor(() =>
         expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/jobs"))).toBe(true),
@@ -172,18 +172,41 @@ describe("SessionDetailPage", () => {
     return JSON.parse((call?.[1] as RequestInit).body as string);
   }
 
-  function configurationRadio(number: number): HTMLInputElement {
-    const input = analysisSection().querySelector<HTMLInputElement>(
-      `input[type="radio"][aria-label="Configuración ${number}"]`,
-    );
-    if (input === null) throw new Error(`No se encontró la configuración ${number}.`);
-    return input;
+  function configurationSelected(number: number): boolean {
+    return byLabel<HTMLButtonElement>(container, "Configuración de escena").textContent?.includes(`Configuración ${number}`) ?? false;
+  }
+  async function chooseConfiguration(number: number) {
+    await click(byLabel<HTMLButtonElement>(container, "Configuración de escena"));
+    await click(document.querySelector(`[role="option"][aria-label="Configuración ${number}"]`)!);
   }
 
   function definition(term: string): string | null | undefined {
     const dt = Array.from(container.querySelectorAll("dt")).find((item) => item.textContent === term);
     return dt?.nextElementSibling?.textContent;
   }
+
+  it("abre una lista accesible y confirma una configuración con teclado", async () => {
+    await render(videoSession("available"), { versions: [sceneVersion(4), sceneVersion(1)] });
+    const control = container.querySelector<HTMLElement>('[role="combobox"]')!;
+    expect(control).not.toBeNull();
+    await act(async () => control.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })));
+    expect(document.querySelector('[role="listbox"]')).not.toBeNull();
+    await act(async () => control.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true })));
+    await act(async () => control.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+    expect(container.querySelector('[aria-label="Configuración activa"]')?.textContent).toBe("Configuración 1");
+    expect(document.querySelector('[role="listbox"]')).toBeNull();
+    await act(async () => window.dispatchEvent(new Event("resize")));
+    expect(document.querySelector('[role="listbox"]')).toBeNull();
+  });
+
+  it("sincroniza selector, badge y resumen sin abrir metadatos", async () => {
+    await render(videoSession("available"), { versions: [sceneVersion(4), sceneVersion(1)] });
+    expect(configurationSelected(4)).toBe(true);
+    await chooseConfiguration(1);
+    expect(container.querySelector('[aria-label="Configuración activa"]')?.textContent).toBe("Configuración 1");
+    expect(container.textContent).toContain("1 zona de interés");
+    expect(container.querySelector<HTMLDetailsElement>('details[aria-label="Detalles del archivo y sesión"]')?.open).toBe(false);
+  });
 
   it("muestra metadatos, frame de referencia y enlace al editor", async () => {
     await render(videoSession("available"));
@@ -196,12 +219,13 @@ describe("SessionDetailPage", () => {
     expect(definition("Duración")).toBe("2.00 s");
     expect(definition("Frames")).toBe("50");
     expect(definition("Equipo de origen")).toBe("pc-lab-01");
-    expect(definition("SHA-256")).toBe("a".repeat(64));
+    expect(container.textContent).not.toContain("SHA-256");
+    expect(container.textContent).not.toContain("a".repeat(64));
     expect(definition("Archivo original")).toBe("entrada.mp4");
 
     expect(container.querySelector("image")?.getAttribute("href")).toBe(`${API}/sessions/s-1/reference-frame`);
     expect(container.querySelector('svg[role="img"]')?.getAttribute("aria-label")).toBe("Frame de referencia de Mañana");
-    expect(Array.from(container.querySelectorAll('a[href="/sessions/s-1/editor"]')).some((link) => link.textContent === "Editar escena")).toBe(true);
+    expect(Array.from(container.querySelectorAll('a[href="/sessions/s-1/editor"]')).some((link) => link.textContent === "Editar en canvas")).toBe(true);
     expect(container.textContent).toContain("Video disponible en este equipo");
     expect(container.textContent).not.toContain("Volver a cargar el video");
   });
@@ -216,7 +240,7 @@ describe("SessionDetailPage", () => {
     };
     await render(session);
 
-    const notice = container.querySelector('section[aria-labelledby="video-title"] [role="status"]');
+    const notice = container.querySelector('section[aria-label="Consola de inferencia"] > [role="status"]');
     expect(notice?.textContent).toBe(
       "El archivo parece incompleto: se leyeron 45 de 50 frames declarados.",
     );
@@ -245,14 +269,14 @@ describe("SessionDetailPage", () => {
   });
 
   it.each([
-    ["missing", "Video no disponible en este equipo", true],
+    ["missing", "Archivo no encontrado en el almacenamiento local.", true],
     ["mismatch", "El archivo de este equipo no coincide con el video registrado", true],
     ["not_configured", "Este equipo no tiene configurada la carpeta de videos", false],
   ] as const)("informa la disponibilidad %s", async (availability, text, canRelink) => {
     await render(videoSession(availability));
 
     expect(container.querySelector("[data-availability]")?.textContent).toContain(text);
-    expect(container.textContent?.includes("Volver a cargar el video")).toBe(canRelink);
+    expect(container.textContent?.includes("Re-vincular video")).toBe(canRelink);
     expect(container.querySelector('svg[role="img"]')).not.toBeNull();
   });
 
@@ -264,9 +288,8 @@ describe("SessionDetailPage", () => {
 
   it("vuelve a cargar el video y muestra hash_mismatch tal cual", async () => {
     await render(videoSession("missing"));
-    const form = container.querySelector("section form") as HTMLFormElement;
-    await chooseFile(byLabel<HTMLInputElement>(form, "Archivo de video"), new File(["x"], "otro.mp4"));
-    await submit(form);
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    await chooseFile(input, new File(["x"], "otro.mp4"));
     await act(async () => {
       await vi.waitFor(() => expect(FakeXhr.instances).toHaveLength(1));
     });
@@ -286,7 +309,7 @@ describe("SessionDetailPage", () => {
       "El archivo no es el que se registró. Elegí el mismo archivo que se registró originalmente.",
     );
 
-    await submit(form);
+    await chooseFile(input, new File(["x"], "entrada.mp4"));
     await act(async () => {
       await vi.waitFor(() => expect(FakeXhr.instances).toHaveLength(2));
     });
@@ -319,9 +342,7 @@ describe("SessionDetailPage", () => {
       await render(videoSession("available"), { versions: [sceneVersion(2), sceneVersion(1)] });
       const canvas = container.querySelector('svg[role="img"]')!;
       expect(canvas.textContent).toContain("Local de configuración 2");
-      const previous = analysisSection().querySelector("details")!;
-      previous.open = true;
-      await click(configurationRadio(1));
+      await chooseConfiguration(1);
       expect(canvas.textContent).toContain("Local de configuración 1");
       expect(canvas.textContent).not.toContain("Local de configuración 2");
       const firstPoint = canvas.querySelector("polygon")?.getAttribute("points")?.split(" ")[0];
@@ -333,8 +354,8 @@ describe("SessionDetailPage", () => {
       await click(analysisSection().querySelector<HTMLButtonElement>('[aria-label="Eliminar configuración 2"]')!);
       await click(byButton(container.querySelector("dialog")!, "Eliminar configuración"));
       expect(fetchMock).toHaveBeenCalledWith(`${API}/scene-versions/v-2`, { method: "DELETE" });
-      expect(configurationRadio(1).checked).toBe(true);
-      expect(analysisSection().querySelector('[aria-label="Configuración 2"]')).toBeNull();
+      expect(configurationSelected(1)).toBe(true);
+      expect(analysisSection().querySelector('option[value="v-2"]')).toBeNull();
       expect(container.querySelector('svg[role="img"]')?.textContent).toContain("Local de configuración 1");
     });
 
@@ -342,7 +363,7 @@ describe("SessionDetailPage", () => {
       await render(videoSession("available"), { versions: [sceneVersion(2)], removal: { status: 409, body: { detail: { code: "scene_version_has_active_jobs", message: "El análisis sigue activo." } } } });
       await click(analysisSection().querySelector<HTMLButtonElement>('[aria-label="Eliminar configuración 2"]')!);
       await click(byButton(container.querySelector("dialog")!, "Eliminar configuración"));
-      expect(configurationRadio(2).checked).toBe(true);
+      expect(configurationSelected(2)).toBe(true);
       expect(container.querySelector('dialog [role="alert"]')?.textContent).toBe("El análisis sigue activo.");
     });
 
@@ -352,10 +373,10 @@ describe("SessionDetailPage", () => {
       });
 
       expect(fetchMock).toHaveBeenCalledWith(`${API}/cameras/cam-1/scene-versions`, undefined);
-      expect(configurationRadio(3).checked).toBe(true);
-      expect(configurationRadio(2).checked).toBe(false);
-      expect(configurationRadio(1).checked).toBe(false);
-      expect(byButton(analysisSection(), "Iniciar análisis").disabled).toBe(false);
+      expect(configurationSelected(3)).toBe(true);
+      expect(configurationSelected(2)).toBe(false);
+      expect(configurationSelected(1)).toBe(false);
+      expect(byButton(analysisSection(), "Iniciar análisis de video").disabled).toBe(false);
     });
 
     it("crea el trabajo con la configuración anterior elegida y enlaza a su avance", async () => {
@@ -374,11 +395,7 @@ describe("SessionDetailPage", () => {
         },
       });
 
-      const previous = analysisSection().querySelector("details");
-      if (previous === null) throw new Error("No se encontró el historial de configuraciones.");
-      await click(previous.querySelector("summary")!);
-      await click(configurationRadio(1));
-      await click(previous.querySelector("summary")!);
+      await chooseConfiguration(1);
       await startAnalysis();
 
       expect(jobRequestBody()).toEqual({ kind: "video_analysis", scene_version_id: "v-1" });

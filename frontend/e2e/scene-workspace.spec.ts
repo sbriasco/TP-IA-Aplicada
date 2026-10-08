@@ -8,10 +8,17 @@ test("editor: capas, arrastre completo, sentidos, guardado y ambos temas", async
   const camera = { id: "cam-1", name: "Entrada principal", created_at: "2026-10-05T00:00:00Z" };
   let version: SceneVersion = { id: "v-1", camera_id: camera.id, version_number: 1, reference_session_id: "s-1", frame_width: 1280, frame_height: 720, created_by_machine_id: null, created_at: camera.created_at, shop_count: 1, shops: [{ shop_id: "zone-1", name: "Acceso central", zones: { front: [[.15, .4], [.45, .4], [.45, .8], [.15, .8]], interior: [[.5, .3], [.8, .3], [.8, .8], [.5, .8]] }, entry_line: { start: [.15, .85], end: [.45, .85], entry_direction: "a_to_b" } }] };
   let payload: SceneVersionCreate | undefined;
+  let saves = 0;
+  let resultsAvailable = false;
+  await page.route("**/processed-sessions", route => route.fulfill({ json: resultsAvailable ? [{
+    session_id: "s-1", job_id: "job-1", status: "completed", result_complete: true,
+    scene_version_id: "v-1", version_number: 1,
+  }] : [] }));
   await page.route("**/sessions/s-1", route => route.fulfill({ json: { id: "s-1", name: "Entrada · Mañana", source_kind: "video_file", camera, created_at: camera.created_at, video: null, reference_frame: { frame_index: 0, video_timestamp_seconds: 0, width: 1280, height: 720, url: "/sessions/s-1/reference-frame" }, duplicate_session_ids: [] } }));
   await page.route("**/sessions/s-1/reference-frame", route => route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><rect width="1280" height="720" fill="#343b40"/><path d="M0 560L450 200H830L1280 560" fill="#4f595d"/><rect x="480" y="150" width="320" height="370" rx="8" fill="#627478"/><path d="M640 150V520M480 340H800" stroke="#9cabad" stroke-width="8"/><text x="60" y="660" fill="#c4cdcf" font-family="Arial" font-size="24">Frame de referencia · Acceso central</text></svg>' }));
   await page.route("**/cameras/cam-1/scene-versions", async route => {
     if (route.request().method() === "POST") {
+      saves += 1;
       payload = route.request().postDataJSON() as SceneVersionCreate;
       version = { ...version, id: "v-2", version_number: 2, shops: payload.shops.map(shop => ({ ...shop, shop_id: shop.shop_id ?? "zone-1", entry_line: shop.entry_line! })) };
       await route.fulfill({ json: { ...version, warnings: [] } });
@@ -22,6 +29,9 @@ test("editor: capas, arrastre completo, sentidos, guardado y ambos temas", async
   await page.goto("/sessions/s-1/editor");
   const canvas = page.getByRole("group", { name: "Frame de referencia con la escena" });
   await expect(canvas).toBeVisible();
+  const saveButton = page.getByRole("button", { name: "Guardar configuración", exact: true });
+  await expect(saveButton).toBeDisabled();
+  await expect(page.getByRole("link", { name: "Continuar a resultados" })).toHaveAttribute("href", "/sessions/s-1");
   await expect(page.getByLabel("Zona en edición", { exact: true })).toHaveCount(0);
   for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }]) {
     await page.setViewportSize(viewport);
@@ -33,6 +43,13 @@ test("editor: capas, arrastre completo, sentidos, guardado y ambos temas", async
   await expect(page.locator("header [data-context]")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Volver a la sesión", exact: true })).toHaveCSS("border-radius", "8px");
   await page.getByLabel("Título de la configuración", { exact: true }).fill("Acceso · turno mañana");
+  await expect(saveButton).toBeDisabled();
+  await page.getByRole("button", { name: "Acceso central", exact: true }).click();
+  await page.getByLabel("Nombre de la zona", { exact: true }).fill("Nombre temporal");
+  await expect(saveButton).toBeEnabled();
+  await page.getByLabel("Nombre de la zona", { exact: true }).fill("Acceso central");
+  await expect(saveButton).toBeDisabled();
+  expect(saves).toBe(0);
   const canvasBox = (await page.getByRole("region", { name: "Definí tu escena" }).boundingBox())!;
   const sideBox = (await page.getByRole("complementary", { name: "Capas y propiedades" }).boundingBox())!;
   expect(canvasBox.width / sideBox.width).toBeGreaterThan(2);
@@ -53,6 +70,8 @@ test("editor: capas, arrastre completo, sentidos, guardado y ambos temas", async
   await page.getByRole("button", { name: "B → A es entrada", exact: true }).click();
   await page.getByRole("button", { name: "Guardar configuración", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Se guardó la configuración 2.");
+  await expect(saveButton).toBeDisabled();
+  expect(saves).toBe(1);
   expect(payload?.shops[0]?.entry_line?.entry_direction).toBe("b_to_a");
   expect(payload?.shops[0]?.zones.front).toHaveLength(4);
   expect(Object.keys(payload!)).toEqual(["reference_session_id", "base_version_id", "shops"]);
@@ -69,4 +88,9 @@ test("editor: capas, arrastre completo, sentidos, guardado y ambos temas", async
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: "test-results/scene-workspace-mobile.png", fullPage: true });
   expect(errors).toEqual([]);
+  resultsAvailable = true;
+  await page.reload();
+  await expect(page.getByRole("link", { name: "Continuar a resultados" })).toHaveAttribute("href", "/sessions/s-1/results");
+  await page.getByRole("link", { name: "Continuar a resultados" }).click();
+  await expect(page).toHaveURL(/\/sessions\/s-1\/results$/);
 });

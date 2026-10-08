@@ -49,6 +49,8 @@ class LiveStopControl:
     def __init__(self, factory, job_id, source, *, clock=time.monotonic_ns, health=None) -> None:
         self.factory, self.job_id, self.source = factory, job_id, source
         self.stopping = threading.Event()
+        self.pause_pending = threading.Event()
+        self.pause_capture_ns: int | None = None
         self.closed = threading.Event()
         self.error: str | None = None
         self.clock, self.health = clock, health
@@ -69,9 +71,12 @@ class LiveStopControl:
                         or state.stop_requested_at is not None
                         or state.capture_status == "ended"
                     )
+                    pause = state is not None and state.capture_status == "pausing"
                 if stop:
                     self.stop_capture()
                     return
+                if pause:
+                    self.pause_capture()
                 self._database_failure_since = None
             except (CaptureError, LiveMachineError) as error:
                 self.fail(error.code)
@@ -88,6 +93,18 @@ class LiveStopControl:
             self.stopping.set()
         with self._source_lock:
             self.source.stop()
+
+    def pause_capture(self):
+        with self._source_lock:
+            if not self.pause_pending.is_set() and not self.stopping.is_set():
+                self.pause_capture_ns = self.clock()
+                self.pause_pending.set()
+                self.source.stop()
+
+    def acknowledge_pause(self):
+        with self._source_lock:
+            self.pause_pending.clear()
+            self.pause_capture_ns = None
 
     def replace_source(self, source):
         with self._source_lock:
@@ -229,7 +246,13 @@ def process_live_analysis_job(
         control.health = check_health
         writer.start()
 
-        def submit(frame, checkpoint_revision, *, ending_capture_seconds=None):
+        def submit(
+            frame,
+            checkpoint_revision,
+            *,
+            ending_capture_seconds=None,
+            checkpoint_capture_seconds=None,
+        ):
             writer.submit(
                 {
                     "segment_id": segment_id,
@@ -242,6 +265,7 @@ def process_live_analysis_job(
                         segment_start_seconds=segment_start,
                         segment_reason=segment_reason,
                         ending_capture_seconds=ending_capture_seconds,
+                        checkpoint_capture_seconds=checkpoint_capture_seconds,
                     ),
                     "analyzed": analyzed,
                     "revision": checkpoint_revision,
@@ -267,12 +291,19 @@ def process_live_analysis_job(
             if control.stopping.is_set():
                 break
             try:
+                if control.pause_pending.is_set():
+                    raise CaptureError("capture_paused")
                 frame = source.read_latest(max(sequence, minimum_read_sequence), 0.05)
             except CaptureError:
                 if control.stopping.is_set() and control.error is None:
                     break
+                manual_pause = control.pause_pending.is_set()
                 if last_frame is None:
                     raise
+                from flowsight.worker.live_pause import (
+                    acknowledge_live_pause,
+                    wait_for_live_continue,
+                )
                 from flowsight.worker.live_recovery import recover_capture
 
                 counter.discontinue(horizon)
@@ -290,8 +321,42 @@ def process_live_analysis_job(
                     revision=revision + 1,
                 )
                 revision += 1
-                submit(last_frame, revision)
+                if manual_pause:
+                    pause_boundary = max(
+                        horizon, Decimal(control.pause_capture_ns - epoch_ns) / Decimal(10**9)
+                    )
+                    if pause_boundary > horizon:
+                        missing += pause_boundary - horizon
+                        buckets.observe(
+                            pause_boundary,
+                            facts=[],
+                            pending=counter.pending_candidates,
+                            interval=(horizon, pause_boundary, False),
+                            revision=revision,
+                        )
+                    horizon = pause_boundary
+                submit(last_frame, revision, checkpoint_capture_seconds=horizon)
                 writer.flush()
+                if manual_pause:
+                    revision = acknowledge_live_pause(
+                        factory,
+                        job_id,
+                        boundary_seconds=last_frame.timestamp_seconds,
+                        now=now(),
+                        owner_guard=lambda database: _owns_machine(
+                            database, machine_id, owner_epoch
+                        ),
+                    )
+                    if not wait_for_live_continue(
+                        factory,
+                        job_id,
+                        control=control,
+                        owner_guard=lambda database: _owns_machine(
+                            database, machine_id, owner_epoch
+                        ),
+                    ):
+                        break
+                    control.acknowledge_pause()
                 resumed = recover_capture(
                     factory,
                     job_id,
@@ -304,6 +369,8 @@ def process_live_analysis_job(
                     segment_index=segment_index + 1,
                     emit=emit,
                     owner_guard=lambda database: _owns_machine(database, machine_id, owner_epoch),
+                    interruption_reason="operator_pause" if manual_pause else "capture_lost",
+                    interruption_registered=manual_pause,
                 )
                 if resumed is None:
                     with factory() as database:
@@ -314,11 +381,13 @@ def process_live_analysis_job(
                 revision = resumed.revision
                 segment_id = uuid.uuid4()
                 segment_index += 1
-                segment_reason = "reconnected"
+                segment_reason = "operator_resume" if manual_pause else "reconnected"
                 resumed_pending = True
                 continue
             if frame is None:
                 time.sleep(0.005)
+                continue
+            if control.pause_pending.is_set():
                 continue
             if (frame.width, frame.height) != (
                 capture_settings.requested_width,
@@ -460,7 +529,7 @@ def process_live_analysis_job(
                     horizon, Decimal(max(0, control.capture_stopped_ns - epoch_ns)) / Decimal(10**9)
                 )
             segment = database.get(LiveCaptureSegment, segment_id)
-            if segment is not None:
+            if segment is not None and segment.ended_capture_seconds is None:
                 segment.ended_capture_seconds = horizon
                 segment.last_sequence = sequence
             transition_job(database, job_id=job_id, target=JobStatus.COMPLETED, occurred_at=now())

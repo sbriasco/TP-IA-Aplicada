@@ -302,6 +302,31 @@ def test_public_observer_receives_calibrated_clock_and_no_reference_as_live(prod
         assert message["server_sent_monotonic_ms"] >= message["server_received_monotonic_ms"]
 
 
+def test_public_observer_does_not_receive_old_frame_while_paused(producer_app):
+    from flowsight.db.models import LiveAnalysisState
+    from flowsight.worker.lifecycle import claim_next_job
+
+    app, lease = producer_app
+    job_id, session_id = prepared_job(app, lease)
+    with app.state.session_factory.begin() as database:
+        claim_next_job(
+            database,
+            lease.worker_id,
+            datetime.now(UTC),
+            machine_id=lease.machine_id,
+            owner_epoch=lease.owner_epoch,
+        )
+        state = database.get(LiveAnalysisState, job_id)
+        state.capture_status = "paused"
+        state.revision = 5
+    payload = {**update(job_id, 4, 2), "session_id": str(session_id)}
+    app.state.live_broker.publish(LiveUpdate.model_validate(payload))
+    with TestClient(app) as client, client.websocket_connect(f"/ws/jobs/{job_id}/preview") as ws:
+        message = ws.receive_json()
+        assert message["type"] == "live.status" and message["capture_status"] == "paused"
+        assert message["revision"] == 5 and "image_base64" not in message
+
+
 def test_producer_reconnect_frame_gets_a_job_bound_nonce_without_advancing_metrics(producer_app):
     import time
 

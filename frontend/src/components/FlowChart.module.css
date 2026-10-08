@@ -1,2 +1,4 @@
-.chart { height: 160px; width: 100%; min-width: 0; }
+.chart { height: 260px; width: 100%; min-width: 0; }
 .empty { color: var(--fs-muted); padding: 20px 0; font-size: 12px; }
+@media (max-width: 600px) { .chart { height: 220px; } }
+@media (min-width: 1281px) { .fit { flex: 1; min-height: 70px; height: auto; } }

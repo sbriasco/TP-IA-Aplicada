@@ -29,12 +29,12 @@ test(`webcam fake: preparación, editor, vivo, ${recover ? "recuperación confir
     const camera = await created.json() as { id: string };
     await page.goto("/live");
     await page.getByLabel("Nombre de la sesión").fill("Expo webcam");
-    await page.getByLabel("Cámara", { exact: true }).selectOption(camera.id);
+    await page.getByLabel("Ubicación asignada", { exact: true }).selectOption(camera.id);
     await expect(page.getByLabel("Webcam", { exact: true }).getByRole("option", { name: "Webcam simulada (prueba)", exact: true })).toHaveCount(1);
-    await page.getByRole("button", { name: "Actualizar cámaras", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Preparar webcam", exact: true })).toBeEnabled();
+    await page.getByRole("button", { name: "Actualizar dispositivos", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Preparar webcam y continuar", exact: true })).toBeEnabled();
     const preparedResponse = page.waitForResponse((response) => response.url().endsWith("/live/sessions") && response.request().method() === "POST");
-    await page.getByRole("button", { name: "Preparar webcam", exact: true }).click();
+    await page.getByRole("button", { name: "Preparar webcam y continuar", exact: true }).click();
     expect((await preparedResponse).status()).toBe(201);
     await page.waitForURL(/\/sessions\/[^/]+\/live$/);
     const sessionId = new URL(page.url()).pathname.split("/")[2];
@@ -42,6 +42,7 @@ test(`webcam fake: preparación, editor, vivo, ${recover ? "recuperación confir
     await expect(page.getByRole("group", { name: "Frame de referencia con la escena" })).toBeVisible();
     await page.getByRole("button", { name: "Agregar zona" }).click();
     await page.getByLabel("Nombre de la zona").fill("Paso expo");
+    await page.getByText("Agregar áreas y accesos", { exact: true }).click();
     await page.getByLabel("Tipo de área nueva").selectOption("front");
     await page.getByRole("button", { name: "Dibujar área", exact: true }).click();
     for (const [x, y] of [[100, 100], [1100, 100], [1100, 650], [100, 650]]) await point(page, x, y);
@@ -88,12 +89,13 @@ test(`webcam fake: preparación, editor, vivo, ${recover ? "recuperación confir
     await expect(page.getByRole("status")).toHaveText("Análisis finalizado", { timeout: 15000 });
     const job = await request.get(`${API}/jobs/${jobId}`);
     expect((await job.json()) as { status: string }).toMatchObject({ status: "completed", result_complete: true });
-    await page.getByRole("link", { name: "Ver resultados guardados" }).click();
-    await expect(page.getByRole("heading", { name: "Resultados de webcam" })).toBeVisible();
-    await expect(page.getByText(/Sin grabación/).first()).toBeVisible();
-    await expect(page.getByRole("img", { name: "Mapa de calor" })).toBeVisible();
+    await page.getByRole("link", { name: "Ver reporte completo", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Reporte de análisis · Webcam en vivo" })).toBeVisible();
+    await expect(page.getByText("Sin grabación local", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Mapa de posiciones" })).toBeVisible();
     await expect(page.locator("video")).toHaveCount(0);
-    await expect(page.getByText("El chat no está disponible para las sesiones de webcam.")).toBeVisible();
+    await page.getByText("Diagnóstico técnico de la captura (Interrupciones y descarte)", { exact: true }).click();
+    await expect(page.getByText("Asistente analítico no disponible para sesiones en tiempo real.")).toBeVisible();
     expect(errors).toEqual([]);
   } finally { stopWorker(worker); }
 });

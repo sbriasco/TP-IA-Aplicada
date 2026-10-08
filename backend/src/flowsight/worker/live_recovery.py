@@ -44,6 +44,8 @@ def recover_capture(
     delays=(1, 2, 5),
     confirmation_timeout_s=60,
     clock=time.monotonic,
+    interruption_reason="capture_lost",
+    interruption_registered=False,
 ):
     """Three bounded opens per cycle; exhausted/expired cycles wait for manual retry."""
     if (
@@ -94,18 +96,19 @@ def recover_capture(
                 LiveCaptureSegment.segment_index == segment_index - 1,
             )
         )
-        if previous is not None:
+        if previous is not None and not interruption_registered:
             previous.ended_capture_seconds = state.elapsed_capture_seconds
             previous.last_sequence = state.last_analyzed_sequence
-        database.add(
-            LiveInterruption(
-                job_id=job_id,
-                session_id=session_id,
-                start_seconds=state.elapsed_capture_seconds,
-                end_known=False,
-                reason="capture_lost",
+        if not interruption_registered:
+            database.add(
+                LiveInterruption(
+                    job_id=job_id,
+                    session_id=session_id,
+                    start_seconds=state.elapsed_capture_seconds,
+                    end_known=False,
+                    reason=interruption_reason,
+                )
             )
-        )
 
     while not control.stopping.is_set():
         restart = False

@@ -37,6 +37,12 @@ export interface ClockPong {
   type: "clock.pong"; nonce: string; client_sent_ms: number;
   server_received_monotonic_ms: number; server_sent_monotonic_ms: number;
 }
+export interface LiveStatus {
+  type: "live.status"; schema_version: "3"; source_kind: "webcam";
+  job_id: string; session_id: string; revision: number; status: string;
+  capture_status: "starting" | "connected" | "pausing" | "paused" | "interrupted" | "awaiting_confirmation" | "stopping" | "ended";
+  capture_timestamp_seconds: number; coverage_complete: boolean; unknown_tail: boolean;
+}
 export interface LiveReconnectCheck {
   type: "live.reconnect-check"; schema_version: "3"; source_kind: "webcam";
   job_id: string; session_id: string; revision: number; segment_index: number;
@@ -65,8 +71,17 @@ function minute(value: unknown): value is LiveMinute {
     ["is_open", "coverage_incomplete", "unknown_tail"].every((key) => typeof value[key] === "boolean");
 }
 
-export function parseLiveMessage(value: unknown): LiveUpdate | ClockPong | LiveReconnectCheck | null {
+export function parseLiveMessage(value: unknown): LiveUpdate | ClockPong | LiveReconnectCheck | LiveStatus | null {
   if (!record(value)) return null;
+  if (value.type === "live.status") {
+    if (value.schema_version !== "3" || value.source_kind !== "webcam" ||
+      !identifier(value.job_id) || !identifier(value.session_id) || !integer(value.revision) ||
+      !["pending", "processing", "completed", "failed", "cancelled"].includes(String(value.status)) ||
+      !["starting", "connected", "pausing", "paused", "interrupted", "awaiting_confirmation", "stopping", "ended"].includes(String(value.capture_status)) ||
+      !finite(value.capture_timestamp_seconds) || typeof value.coverage_complete !== "boolean" ||
+      typeof value.unknown_tail !== "boolean") return null;
+    return value as unknown as LiveStatus;
+  }
   if (value.type === "clock.pong") {
     if (!identifier(value.nonce) || !["client_sent_ms", "server_received_monotonic_ms", "server_sent_monotonic_ms"].every((key) => finite(value[key]))) return null;
     if (Number(value.server_sent_monotonic_ms) < Number(value.server_received_monotonic_ms)) return null;
