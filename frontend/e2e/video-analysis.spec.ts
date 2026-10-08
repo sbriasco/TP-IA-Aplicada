@@ -89,9 +89,10 @@ test("la vista de un video muestra el fotograma y el instante del mensaje", asyn
     };
   });
 
+  await page.goto(`/?job=${job.id}`);
+  await expect(page.getByRole("status")).toHaveText("Previsualización conectada");
   const worker = startWorker(root);
   try {
-    await page.goto(`/?job=${job.id}`);
     await expect(page.getByRole("img", { name: /Previsualización del frame/ })).toBeVisible({
       timeout: 30_000,
     });

@@ -91,10 +91,11 @@ test("configura la escena de una sesión de video desde el editor", async ({ pag
   await test.step("registra el clip desde la pantalla de sesiones", async () => {
     await page.goto("/");
     await page.getByRole("button", { name: "Nuevo análisis", exact: true }).click();
-    await page.getByLabel("Archivo de video").setInputFiles(clipPath);
-    await page.getByLabel("Nombre de la sesión").fill(sessionName);
-    await page.getByLabel("Nombre de la cámara").fill(cameraName);
-    await page.getByRole("button", { name: "Crear cámara" }).click();
+    const dialog = page.getByRole("dialog", { name: "Nuevo análisis" });
+    await dialog.getByLabel("Archivo de video", { exact: true }).setInputFiles(clipPath);
+    await dialog.getByLabel("Nombre de la sesión").fill(sessionName);
+    await dialog.getByLabel("Nombre de la cámara").fill(cameraName);
+    await dialog.getByRole("button", { name: "Crear cámara" }).click();
     await expect(page.getByRole("status").filter({ hasText: cameraName })).toBeVisible();
     await page.getByRole("button", { name: "Registrar video" }).click();
     await page.waitForURL(/\/sessions\/[^/]+$/);

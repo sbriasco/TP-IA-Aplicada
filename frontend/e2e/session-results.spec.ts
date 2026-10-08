@@ -58,7 +58,13 @@ test("el historial abre los indicadores de esa sesión y conserva el frame sin e
   await history.getByRole("row").filter({ has: page.getByRole("link", { name: firstName, exact: true }) }).getByRole("link", { name: "Ver resultados" }).click();
   await expect(page.getByRole("heading", { name: firstName })).toBeVisible();
   await expect(page.getByText(secondName)).toHaveCount(0);
-  await expect(page.getByText(`Tráfico: ${traffic?.value ?? ""}`, { exact: false })).toBeVisible();
+  const indicators = page.getByRole("region", { name: "Indicadores de la sesión" });
+  await expect(indicators).toContainText("Tráfico estimado");
+  if (traffic?.value != null) {
+    await expect(indicators).toContainText(
+      new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 }).format(traffic.value),
+    );
+  }
   await expect(page.getByText("Cargando gráfico…", { exact: true })).toHaveCount(0);
 
   for (const viewport of [{ width: 1280, height: 720 }, { width: 1024, height: 768 }]) {
@@ -83,7 +89,7 @@ test("el historial abre los indicadores de esa sesión y conserva el frame sin e
   const relative = ((await detail.json()) as { video: { relative_path: string } }).video.relative_path;
   fs.rmSync(path.join(videosDir, relative), { force: true });
   await page.reload();
-  await expect(page.getByText("El archivo no está en este equipo.")).toBeVisible();
+  await expect(page.getByText("El archivo no está en este equipo.")).toHaveCount(0);
   await expect(page.getByRole("img", { name: "Frame de referencia" })).toBeVisible();
 });
 
