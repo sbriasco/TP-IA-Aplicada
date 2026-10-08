@@ -10,7 +10,14 @@ from decimal import Decimal
 
 from flowsight.capture.contracts import CapturedFrame
 from flowsight.vision.detector import Detection
-from flowsight.vision.spatial import Direction, ShopGeometry, _crossing_sense, normalized_foot
+from flowsight.vision.spatial import (
+    Direction,
+    ShopGeometry,
+    Side,
+    crossing_sense,
+    foot_side,
+    normalized_foot,
+)
 
 
 @dataclass(frozen=True)
@@ -38,6 +45,7 @@ class LiveShopCounts:
 class _Track:
     timestamp: Decimal
     foot: tuple[float, float]
+    side: Side | None
     pending: LiveCrossingFact | None = None
 
 
@@ -127,8 +135,14 @@ class LiveSpatialCounter:
                 key = (shop.shop_id, track_id)
                 previous = self._tracks.get(key)
                 pending = previous.pending if previous else None
+                side = foot_side(shop.line_start, shop.line_end, foot)
+                if previous is not None and side is None:
+                    self._tracks[key] = _Track(timestamp, previous.foot, previous.side, pending)
+                    continue
                 sense = (
-                    _crossing_sense(previous.foot, foot, shop.line_start, shop.line_end)
+                    crossing_sense(
+                        previous.side, previous.foot, side, foot, shop.line_start, shop.line_end
+                    )
                     if previous is not None
                     else None
                 )
@@ -156,7 +170,7 @@ class LiveSpatialCounter:
                     evicted = self._tracks.pop(oldest)
                     self.discarded_crossings += int(evicted.pending is not None)
                     self.evicted_tracks += 1
-                self._tracks[key] = _Track(timestamp, foot, pending)
+                self._tracks[key] = _Track(timestamp, foot, side, pending)
         return facts
 
     def advance(self, timestamp_s: Decimal) -> list[LiveCrossingFact]:

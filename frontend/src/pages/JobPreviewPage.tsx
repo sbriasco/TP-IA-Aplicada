@@ -36,11 +36,14 @@ export function JobPreviewPage({
         const current = await getJob(apiBaseUrl, jobId);
         if (!active) return;
         setJob(current);
+        const replayPreview =
+          current.kind === "video_analysis" &&
+          (current.status === "completed" || current.status === "cancelled");
         if (current.status === "failed") {
           setConnection("El análisis falló");
           return;
         }
-        if (current.status === "completed" || current.status === "cancelled") {
+        if ((current.status === "completed" || current.status === "cancelled") && !replayPreview) {
           setConnection("Trabajo finalizado");
           return;
         }

@@ -10,13 +10,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from alembic.config import Config
-from conftest import destructive_database_url
+from conftest import prepare_empty_schema
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 
-from alembic import command
 from flowsight.api.main import create_app
 from flowsight.api.schemas import JobResponse
 from flowsight.core.config import Settings
@@ -61,21 +59,17 @@ FIXTURE_PATH = ROOT_DIR / "fixtures" / "synthetic" / "base-flow.json"
 
 @pytest.fixture()
 def session_factory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    database_url = destructive_database_url()
+    database_url = prepare_empty_schema()
     monkeypatch.setenv("FLOWSIGHT_DATABASE_URL", database_url)
     monkeypatch.setenv("FLOWSIGHT_ENV", "test")
     monkeypatch.setenv("FLOWSIGHT_WORKER_ID", "worker-video")
     monkeypatch.setenv("FLOWSIGHT_DETECTOR", "fake")
     monkeypatch.setenv("FLOWSIGHT_VIDEOS_DIR", str(tmp_path))
     monkeypatch.setenv("FLOWSIGHT_YOLO_WEIGHTS", str(tmp_path / "missing-yolov8n.pt"))
-    config = Config(BACKEND_DIR / "alembic.ini")
-    command.downgrade(config, "base")
-    command.upgrade(config, "head")
     engine = create_engine(database_url)
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     yield factory
     engine.dispose()
-    command.downgrade(config, "base")
 
 
 def _register_video_job(

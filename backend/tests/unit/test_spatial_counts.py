@@ -118,3 +118,76 @@ def test_visible_occupancy_is_the_last_frame_front_zone_only() -> None:
     assert occupancy["value"] == 2
     assert occupancy["partial"] is True
     assert occupancy["availability"] == "available"
+
+
+def test_path_that_steps_on_the_line_still_counts_one_crossing() -> None:
+    counter = SpatialCounter([_shop()])
+    _observe(counter, 0, _detection(1, 50, 80))
+    _observe(counter, 1, _detection(1, 50, 50))
+    _observe(counter, 2, _detection(1, 50, 20))
+    for frame_index in range(3, 14):
+        _observe(counter, frame_index, _detection(1, 50, 20))
+
+    assert counter.counts()[0].entries == 1
+    assert counter.finish() == []
+
+
+def test_feet_inside_the_line_band_do_not_flip_side() -> None:
+    counter = SpatialCounter([_shop()])
+    _observe(counter, 0, _detection(1, 50, 80))
+    _observe(counter, 1, _detection(1, 50, 50.2))
+    _observe(counter, 2, _detection(1, 50, 80))
+    assert counter.finish() == []
+    assert counter.counts()[0].entries == 0
+
+
+def test_reappearance_after_one_second_does_not_invent_a_crossing() -> None:
+    jumped = SpatialCounter([_shop()], fps=30)
+    _observe(jumped, 0, _detection(1, 50, 80))
+    _observe(jumped, 40, _detection(1, 50, 20))
+    assert jumped.counts()[0].entries == 0
+    assert jumped.finish() == []
+
+    lost = SpatialCounter([_shop()], fps=30)
+    _observe(lost, 0, _detection(1, 50, 80))
+    _observe(lost, 1, _detection(1, 50, 20))
+    _observe(lost, 40, _detection(1, 50, 20))
+    assert lost.counts()[0].entries == 0
+    assert lost.finish() == []
+
+
+def test_short_detection_gap_still_counts_the_crossing() -> None:
+    counter = SpatialCounter([_shop()], fps=30)
+    _observe(counter, 0, _detection(1, 50, 80))
+    _observe(counter, 5, _detection(1, 50, 20))
+    counter.finish()
+
+    assert counter.counts()[0].entries == 1
+
+
+def test_stable_frames_confirm_before_the_file_ends() -> None:
+    counter = SpatialCounter([_shop()], fps=30)
+    _observe(counter, 0, _detection(1, 50, 80))
+    first = counter.observe(1, [_detection(1, 50, 20)], width=WIDTH, height=HEIGHT)
+    assert first == []
+    assert counter.counts()[0].entries == 0
+    confirmed = counter.observe(12, [_detection(1, 50, 20)], width=WIDTH, height=HEIGHT)
+
+    assert [fact.disposition for fact in confirmed] == ["confirmed"]
+    assert counter.counts()[0].entries == 1
+    assert counter.finish() == []
+
+
+def test_confirmation_window_follows_video_time() -> None:
+    slow = SpatialCounter([_shop()], fps=10)
+    _observe(slow, 0, _detection(1, 50, 80))
+    _observe(slow, 1, _detection(1, 50, 20))
+    _observe(slow, 5, _detection(1, 50, 20))
+    assert slow.counts()[0].entries == 1
+
+    fast = SpatialCounter([_shop()], fps=60)
+    _observe(fast, 0, _detection(1, 50, 80))
+    _observe(fast, 1, _detection(1, 50, 20))
+    returned = fast.observe(11, [_detection(1, 50, 80)], width=WIDTH, height=HEIGHT)
+    assert [fact.disposition for fact in returned] == ["oscillation", "oscillation"]
+    assert fast.counts()[0].entries == 0

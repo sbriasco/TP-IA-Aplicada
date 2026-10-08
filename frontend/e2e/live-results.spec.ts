@@ -36,7 +36,9 @@ test("reporte webcam: paleta uniforme, KPIs, diagnóstico y diseño responsive",
   await expect(page.getByText("06/10/2026, 17:21", { exact: true })).toBeVisible();
   await expect(page.getByText("Captura finalizada", { exact: true })).toBeVisible();
   await expect(page.getByText("Cobertura parcial (7.0s / 16.0s observados)")).toHaveAttribute("title", /interrupciones/);
-  await expect(page.getByLabel("Calidad de captura", { exact: true })).toHaveText("43,8 %");
+  await expect(page.getByLabel("Cobertura del análisis", { exact: true })).toHaveText("43,8 %");
+  await expect(page.getByText("9,0 s sin analizar", { exact: true })).toBeVisible();
+  await expect(page.getByText("Sin estadía calculada", { exact: true })).toHaveCount(2);
   await expect(page.getByLabel("Estadía promedio interna", { exact: true })).toHaveText("--");
   await expect(page.getByRole("heading", { name: "Sin muestra de posiciones", exact: true })).toBeVisible();
   await expect(page.locator("body")).toHaveCSS("background-color", "rgb(247, 248, 249)");
@@ -60,7 +62,7 @@ test("reporte webcam: paleta uniforme, KPIs, diagnóstico y diseño responsive",
   await expect(page.getByText("analysis_gap", { exact: false })).toBeVisible();
   await expect(page.getByText("0 cruces individuales", { exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "Cobertura por minuto" }).getByRole("rowheader", { name: "17:21" })).toBeVisible();
-  await page.getByRole("combobox", { name: "Línea:" }).selectOption("line-2");
+  await page.getByRole("combobox", { name: "Zona" }).selectOption("line-2");
   await expect(page.getByText("Entradas: 0 · Salidas: 0", { exact: true })).toBeVisible();
   await expect(page.locator("details")).not.toHaveAttribute("open");
   await page.setViewportSize({ width: 390, height: 844 });

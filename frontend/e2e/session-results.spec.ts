@@ -60,11 +60,7 @@ test("el historial abre los indicadores de esa sesión y conserva el frame sin e
   await expect(page.getByText(secondName)).toHaveCount(0);
   const indicators = page.getByRole("region", { name: "Indicadores de la sesión" });
   await expect(indicators).toContainText("Tráfico estimado");
-  if (traffic?.value != null) {
-    await expect(indicators).toContainText(
-      new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 }).format(traffic.value),
-    );
-  }
+  await expect(indicators.getByText(`Tráfico: ${traffic?.value ?? 0}`, { exact: true })).toBeVisible();
   await expect(page.getByText("Cargando gráfico…", { exact: true })).toHaveCount(0);
 
   for (const viewport of [{ width: 1280, height: 720 }, { width: 1024, height: 768 }]) {

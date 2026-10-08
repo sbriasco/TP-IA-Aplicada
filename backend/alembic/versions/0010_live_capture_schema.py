@@ -361,10 +361,55 @@ def downgrade() -> None:
         op.execute(f"DROP FUNCTION flowsight_live_{name}()")
     op.drop_table("worker_machines")
     op.drop_constraint("ck_processing_jobs_video_analysis_scene", "processing_jobs", type_="check")
+    _restore_video_scene_check()
+    op.drop_column("processing_jobs", "target_machine_id")
+
+
+def _restore_video_scene_check() -> None:
+    """Restore the check that allows a scene only on video-analysis jobs.
+
+    Live jobs created while the widened check was in force keep both references.
+    Clearing them preserves the job. A video-analysis job that still lacks a
+    scene is reported instead of receiving an invented one.
+    """
+
+    op.execute(
+        sa.text(
+            """
+            UPDATE processing_jobs
+            SET scene_version_id = NULL,
+                registered_camera_id = NULL
+            WHERE kind IS DISTINCT FROM 'video_analysis'
+              AND scene_version_id IS NOT NULL
+              AND registered_camera_id IS NOT NULL
+            """
+        )
+    )
+    invalid_count = (
+        op.get_bind()
+        .execute(
+            sa.text(
+                """
+                SELECT count(*)
+                FROM processing_jobs
+                WHERE (kind = 'video_analysis')
+                  IS DISTINCT FROM (
+                        scene_version_id IS NOT NULL
+                    AND registered_camera_id IS NOT NULL
+                  )
+                """
+            )
+        )
+        .scalar_one()
+    )
+    if invalid_count:
+        raise RuntimeError(
+            "Cannot restore ck_processing_jobs_video_analysis_scene: "
+            f"{invalid_count} video-analysis job(s) have no resolvable scene"
+        )
     op.create_check_constraint(
         "ck_processing_jobs_video_analysis_scene",
         "processing_jobs",
         "(kind = 'video_analysis') = "
         "(scene_version_id IS NOT NULL AND registered_camera_id IS NOT NULL)",
     )
-    op.drop_column("processing_jobs", "target_machine_id")

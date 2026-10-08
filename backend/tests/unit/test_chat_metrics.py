@@ -9,10 +9,8 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from alembic.config import Config
-from conftest import destructive_database_url
+from conftest import prepare_empty_schema
 
-from alembic import command
 from flowsight.api.main import create_app
 from flowsight.db.models import (
     JobKind,
@@ -47,7 +45,7 @@ CHAT_CODES = {
 
 @pytest.fixture()
 def database():
-    database_url = destructive_database_url()
+    database_url = prepare_empty_schema()
     os.environ.update(
         {
             "FLOWSIGHT_ENV": "test",
@@ -59,13 +57,9 @@ def database():
             "FLOWSIGHT_DETECTOR": "fake",
         }
     )
-    config = Config(BACKEND_DIR / "alembic.ini")
-    command.downgrade(config, "base")
-    command.upgrade(config, "head")
     application = create_app()
     yield application
     application.state.engine.dispose()
-    command.downgrade(config, "base")
 
 
 def test_five_figures_match_the_stored_session_and_ignore_a_stretch(database) -> None:

@@ -99,6 +99,59 @@ def test_database_rejects_cross_session_frame_reference(migrated_database) -> No
     assert count == 0
 
 
+def test_downgrade_clears_scene_on_live_jobs_before_restoring_the_check(
+    database_url: str, migrated_database
+) -> None:
+    session_id = uuid4()
+    job_id = uuid4()
+    camera_id = uuid4()
+    version_id = uuid4()
+    with migrated_database.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO cameras (id, name, name_key) VALUES (:id, 'En vivo', 'en vivo')"
+            ),
+            {"id": camera_id},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO sessions (id, name, camera_id, registered_camera_id, source_kind) "
+                "VALUES (:id, 'Webcam', 'En vivo', :camera, 'webcam')"
+            ),
+            {"id": session_id, "camera": camera_id},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO scene_versions (id, camera_id, version_number, reference_session_id, "
+                "frame_width, frame_height) "
+                "VALUES (:id, :camera, 1, :session, 640, 480)"
+            ),
+            {"id": version_id, "camera": camera_id, "session": session_id},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO processing_jobs "
+                "(id, session_id, kind, status, scene_version_id, registered_camera_id) "
+                "VALUES (:id, :session, 'live_analysis', 'pending', :version, :camera)"
+            ),
+            {"id": job_id, "session": session_id, "version": version_id, "camera": camera_id},
+        )
+
+    config = Config(BACKEND_DIR / "alembic.ini")
+    os.environ["FLOWSIGHT_DATABASE_URL"] = database_url
+    command.downgrade(config, "0009_live_capture")
+
+    with migrated_database.connect() as connection:
+        stored = connection.execute(
+            text(
+                "SELECT kind::text, scene_version_id, registered_camera_id "
+                "FROM processing_jobs WHERE id = :id"
+            ),
+            {"id": job_id},
+        ).one()
+    assert stored == ("live_analysis", None, None)
+
+
 def test_orm_enums_match_database_values(migrated_database) -> None:
     session_id = uuid4()
     job_id = uuid4()

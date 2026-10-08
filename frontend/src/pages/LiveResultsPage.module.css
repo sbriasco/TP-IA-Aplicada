@@ -7,9 +7,10 @@
 .titleRow h1 { margin: 0; font-size: 24px; line-height: 1.3; letter-spacing: -.5px; }
 .titleRow time { flex-shrink: 0; color: var(--fs-muted); font-size: 13px; }
 .badges { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; }
-.success, .warning, .neutral { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--fs-line); line-height: 1.4; }
+.success, .warning, .neutral, .failed, .cancelled { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--fs-line); line-height: 1.4; }
 .success { color: var(--fs-success); background: var(--fs-success-bg); border-color: var(--fs-success-line); }
-.warning { color: var(--fs-warning); background: var(--fs-warning-bg); border-color: color-mix(in srgb, var(--fs-warning) 25%, transparent); }
+.warning, .cancelled { color: var(--fs-warning); background: var(--fs-warning-bg); border-color: color-mix(in srgb, var(--fs-warning) 25%, transparent); }
+.failed { color: var(--fs-danger); background: var(--fs-danger-bg); border-color: color-mix(in srgb, var(--fs-danger) 25%, transparent); }
 .neutral { color: var(--fs-muted); background: var(--fs-surface); }
 .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; margin: 0; }
 .metric, .panel, .diagnostics { background: var(--fs-surface); border: 1px solid var(--fs-line); border-radius: 12px; min-width: 0; }

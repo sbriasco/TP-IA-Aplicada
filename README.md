@@ -189,6 +189,8 @@ npm run test:e2e
 Pop-Location
 ```
 
+`pytest` deja afuera la marca `gpu` y las migraciones históricas 0002–0005. Esas últimas se corren con `pytest -m historical_migration`. `npm run test:e2e` recorre la API, el worker y Chromium. Las pantallas que solo mockean la red están en `npm run test:e2e:ui` y no vuelven a correr dentro del e2e integrado.
+
 `pytest` nunca corre contra la base compartida de Azure: las pruebas que hacen `downgrade`, `TRUNCATE` o insertan datos usan el helper `destructive_database_url()` (`backend/tests/conftest.py`), que toma `FLOWSIGHT_TEST_DATABASE_URL` si está definida y, si falta, acepta `FLOWSIGHT_DATABASE_URL` solo cuando el host es `localhost`, `127.0.0.1` o `::1`. Un host `*.postgres.database.azure.com` se rechaza siempre, aunque venga en `FLOWSIGHT_TEST_DATABASE_URL`. Si tu `FLOWSIGHT_DATABASE_URL` apunta a Azure, definí `FLOWSIGHT_TEST_DATABASE_URL` con un PostgreSQL local (en la terminal o en `.env`, ver `.env.example`) para poder correr esas pruebas.
 
 `test:e2e` aplica las migraciones, inicia temporalmente API y frontend, crea una sesión y un

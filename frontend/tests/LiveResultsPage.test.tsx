@@ -47,6 +47,8 @@ it("muestra cruces, cobertura y muestra acotada sin reproducción ni chat", asyn
 });
 it("conserva la duración del último checkpoint y hace visible el final desconocido", async () => {
   mockApi("failed"); await act(async () => root.render(<LiveResultsPage jobId="job-1" apiBaseUrl="http://api.test" />));
+  expect(container.textContent).toContain("Captura fallida");
+  expect(container.textContent).not.toContain("Captura finalizada");
   expect(container.textContent).toContain("Resultados parciales");
   expect(container.textContent).toContain("Final desconocido");
   expect(container.textContent).toContain("61");
@@ -58,7 +60,9 @@ it("resume cobertura real y oculta la auditoría hasta expandirla", async () => 
   await act(async () => root.render(<LiveResultsPage jobId="job-1" apiBaseUrl="http://api.test" />));
   expect(container.querySelector('h1')?.textContent).toBe("Reporte de análisis · Webcam en vivo");
   expect(container.textContent).toContain("Cobertura parcial (7.0s / 16.0s observados)");
-  expect(container.querySelector('[aria-label="Calidad de captura"]')?.textContent).toBe("43,8 %");
+  expect(container.querySelector('[aria-label="Cobertura del análisis"]')?.textContent).toBe("43,8 %");
+  expect(container.textContent).toContain("9,0 s sin analizar");
+  expect(container.textContent).toContain("Sin estadía calculada");
   expect(container.querySelector('[aria-label="Estadía promedio interna"]')?.textContent).toBe("--");
   expect(container.textContent).toContain("Sin muestra de posiciones");
   const diagnosis = Array.from(container.querySelectorAll('details')).find(element => element.querySelector('summary')?.textContent?.includes("Diagnóstico técnico"));
@@ -72,7 +76,17 @@ it("no inventa un porcentaje sin duración y conserva la estadía observada", as
     zone_dwell: { "shop-1": { interior_average_seconds: 12.5, interior_sample_count: 3,
       front_average_seconds: 7, front_sample_count: 2 } } });
   await act(async () => root.render(<LiveResultsPage jobId="job-1" apiBaseUrl="http://api.test" />));
-  expect(container.querySelector('[aria-label="Calidad de captura"]')?.textContent).toBe("--");
+  expect(container.querySelector('[aria-label="Cobertura del análisis"]')?.textContent).toBe("--");
+  expect(container.textContent).toContain("3 visitas observadas");
   expect(container.querySelector('[aria-label="Estadía promedio interna"]')?.textContent).toBe("12,5 s");
   expect(container.querySelector('[aria-label="Estadía promedio externa"]')?.textContent).toBe("7 s");
+});
+it("distingue una captura cancelada y una estadía sin duración suficiente", async () => {
+  mockApi("cancelled", { zone_dwell: { "shop-1": { interior_average_seconds: null, interior_sample_count: 0,
+    front_average_seconds: null, front_sample_count: 0 } } });
+  await act(async () => root.render(<LiveResultsPage jobId="job-1" apiBaseUrl="http://api.test" />));
+  expect(container.textContent).toContain("Captura cancelada");
+  expect(container.textContent).not.toContain("Captura finalizada");
+  expect(container.textContent).toContain("Sin visitas con duración suficiente");
+  expect(container.textContent).not.toContain("Sin tracks observados");
 });

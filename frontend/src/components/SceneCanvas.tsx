@@ -7,7 +7,7 @@ import {
   type PointerEvent,
 } from "react";
 
-import { entryArrow, lineSideLabelPositions, screenToFrame } from "../editor/coordinates";
+import { clampToFrame, entryArrow, lineSideLabelPositions, screenToFrame } from "../editor/coordinates";
 import { ENTRY_LINE_COLOR, ZONE_COLORS } from "../editor/colors";
 import {
   hasIssue,
@@ -30,6 +30,7 @@ interface SceneCanvasProps {
   hidden?: ReadonlySet<string>;
   onGestureStart?: () => void;
   onGestureEnd?: () => void;
+  probe?: { points: Point[]; onPlace: (point: Point) => void } | null;
 }
 
 /**
@@ -80,7 +81,7 @@ function sameVertex(a: EditorSelection | VertexRef | null, b: VertexRef): boolea
   );
 }
 
-export function SceneCanvas({ state, dispatch, frameUrl, hidden, onGestureStart, onGestureEnd, labelMode = "directions" }: SceneCanvasProps) {
+export function SceneCanvas({ state, dispatch, frameUrl, hidden, onGestureStart, onGestureEnd, labelMode = "directions", probe = null }: SceneCanvasProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<VertexRef | null>(null);
   const markerId = `entry-arrow-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
@@ -422,7 +423,7 @@ export function SceneCanvas({ state, dispatch, frameUrl, hidden, onGestureStart,
       role="group"
       aria-label="Frame de referencia con la escena"
       tabIndex={drawing !== null ? 0 : undefined}
-      onClick={handleBackgroundClick}
+      onClick={probe === null ? handleBackgroundClick : undefined}
       onDoubleClick={() => { if (drawing !== null && drawing.element !== "entry_line" && drawing.points.length >= 3) dispatch({ type: "finishDrawing" }); }}
       onKeyDown={handleCanvasKeyDown}
       style={{
@@ -453,6 +454,15 @@ export function SceneCanvas({ state, dispatch, frameUrl, hidden, onGestureStart,
       {shapes}
       {preview}
       {vertices}
+      {probe !== null && <g aria-hidden="true">
+        {probe.points.length === 2 && <line x1={probe.points[0][0]} y1={probe.points[0][1]} x2={probe.points[1][0]} y2={probe.points[1][1]} stroke="#f5d76e" strokeWidth={unit * 0.35} />}
+        {probe.points.map((point, index) => <circle key={index} cx={point[0]} cy={point[1]} r={radius} fill="#f5d76e" stroke={HALO} strokeWidth={unit * 0.2} />)}
+        <rect width={width} height={height} fill="transparent" style={{ cursor: "crosshair" }} onClick={(event) => {
+          event.stopPropagation();
+          const point = toFrame(event.clientX, event.clientY);
+          if (point !== null) probe.onPlace(clampToFrame(point, width, height));
+        }} />
+      </g>}
     </svg>
   );
 }

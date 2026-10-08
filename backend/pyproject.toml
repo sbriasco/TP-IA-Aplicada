@@ -35,11 +35,12 @@ dev = [
 where = ["src"]
 
 [tool.pytest.ini_options]
-addopts = "-ra --basetemp=.pytest-tmp -m \"not gpu\""
+addopts = "-ra --basetemp=.pytest-tmp -m \"not gpu and not historical_migration\""
 pythonpath = ["src"]
 testpaths = ["tests"]
 markers = [
     "gpu: ejecución real en el equipo de referencia; queda fuera de la suite y de CI",
+    "historical_migration: migraciones 0002 a 0005, ya aplicadas; pytest -m historical_migration",
 ]
 filterwarnings = [
     "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",

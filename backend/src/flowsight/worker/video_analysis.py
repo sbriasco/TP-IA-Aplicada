@@ -148,7 +148,7 @@ def _run(
         tracker_name=detector.tracker_name,
         tracker_version=detector.tracker_version,
     )
-    counter = SpatialCounter(shops)
+    counter = SpatialCounter(shops, fps=float(fps))
     recorder = SceneEventRecorder(shops, fps=float(fps))
     frame_index = 0
     cancelled = False

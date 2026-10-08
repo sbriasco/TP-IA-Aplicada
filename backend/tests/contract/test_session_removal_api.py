@@ -10,13 +10,11 @@ from pathlib import Path
 from threading import Event
 
 import pytest
-from alembic.config import Config
-from conftest import destructive_database_url
+from conftest import prepare_empty_schema
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 from starlette.websockets import WebSocketDisconnect
 
-from alembic import command
 from flowsight.api.main import create_app
 from flowsight.db.models import (
     JobKind,
@@ -35,7 +33,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 @pytest.fixture()
 def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[TestClient]:
-    url = destructive_database_url()
+    url = prepare_empty_schema()
     for key, value in {
         "FLOWSIGHT_ENV": "test",
         "FLOWSIGHT_DATABASE_URL": url,
@@ -45,16 +43,12 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[TestClie
         "FLOWSIGHT_MACHINE_ID": "removal-tests",
     }.items():
         monkeypatch.setenv(key, value)
-    config = Config(BACKEND_DIR / "alembic.ini")
-    command.downgrade(config, "base")
-    command.upgrade(config, "head")
     application = create_app()
     try:
         with TestClient(application) as test_client:
             yield test_client
     finally:
         application.state.engine.dispose()
-        command.downgrade(config, "base")
 
 
 def _synthetic(client: TestClient) -> str:

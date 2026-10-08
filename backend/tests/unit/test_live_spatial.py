@@ -114,6 +114,25 @@ def test_active_state_is_bounded_even_for_many_new_ids() -> None:
     assert counter.evicted_tracks == 18
 
 
+def test_crossing_through_the_line_keeps_the_last_valid_side() -> None:
+    counter = LiveSpatialCounter([shop()])
+    observe(counter, 1, "0", 80.0)
+    observe(counter, 2, "0.1", 50.0)
+    assert observe(counter, 3, "0.2", 20.0) == []
+    facts = observe(counter, 4, "0.6", 20.0)
+    assert [fact.direction for fact in facts] == ["entry"]
+    assert counter.counts()[0].entries == 1
+
+
+def test_feet_inside_the_line_band_do_not_change_side() -> None:
+    counter = LiveSpatialCounter([shop()])
+    observe(counter, 1, "0", 80.0)
+    observe(counter, 2, ".1", 50.2)
+    observe(counter, 3, ".2", 80.0)
+    assert observe(counter, 4, ".7", 80.0) == []
+    assert counter.counts()[0].entries == 0
+
+
 def test_opposite_at_exact_window_boundary_is_still_oscillation() -> None:
     counter = LiveSpatialCounter([shop()], window_s=Decimal(".3"))
     observe(counter, 0, "0", 80.0)

@@ -92,7 +92,7 @@ test("configura la escena de una sesión de video desde el editor", async ({ pag
     await page.goto("/");
     await page.getByRole("button", { name: "Nuevo análisis", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Nuevo análisis" });
-    await dialog.getByLabel("Archivo de video", { exact: true }).setInputFiles(clipPath);
+    await dialog.getByLabel("Archivo de video").setInputFiles(clipPath);
     await dialog.getByLabel("Nombre de la sesión").fill(sessionName);
     await dialog.getByLabel("Nombre de la cámara").fill(cameraName);
     await dialog.getByRole("button", { name: "Crear cámara" }).click();
