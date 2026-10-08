@@ -2,7 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: ["live-statistics.spec.ts", "dashboard.spec.ts", "upload-modal.spec.ts", "scene-workspace.spec.ts"],
+  testMatch: ["live-results.spec.ts", "live-statistics.spec.ts", "dashboard.spec.ts", "upload-modal.spec.ts", "scene-workspace.spec.ts", "video-preparation.spec.ts", "results-dashboard.spec.ts"],
   workers: 1,
   reporter: "list",
   use: {

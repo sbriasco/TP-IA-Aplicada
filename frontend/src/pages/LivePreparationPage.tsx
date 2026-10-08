@@ -57,8 +57,14 @@ export function LivePreparationPage({ sessionId, apiBaseUrl = API_BASE_URL }: Pr
   }
   const selectedVersion = versions.find(version => version.id === versionId);
   const frameSize = check ?? session?.reference_frame;
-  return <AppShell title={session?.name ?? "Preparar webcam"} sessionId={sessionId} context="Detalle" subtitle={session?.camera.name} viewport={Boolean(sessionId)}>
-    <Link href="/" className={styles.back}><ArrowLeft size={14} aria-hidden="true" />Volver a las sesiones</Link>
+  return <AppShell title={session?.name ?? "Preparar webcam"} sessionId={sessionId} context="Detalle" subtitle={session?.camera.name} viewport={Boolean(sessionId)}
+    mainClassName={sessionId === undefined ? styles.webcamMain : undefined}
+    pageHeader={sessionId === undefined ? <header className={styles.webcamHeader}>
+      <Link href="/" className={styles.back}><ArrowLeft size={14} aria-hidden="true" />Volver a las sesiones</Link>
+      <div className={styles.webcamTitle}><h1 className="text-2xl font-bold">Preparar webcam</h1><span className={styles.badge}>1. Preparar análisis (Webcam)</span></div>
+      <p>Elegí el dispositivo de captura y configurá la sesión en vivo. No se almacenará video grabado.</p>
+    </header> : undefined}>
+    {sessionId !== undefined && <Link href="/" className={styles.back}><ArrowLeft size={14} aria-hidden="true" />Volver a las sesiones</Link>}
     {sessionId === undefined ? <WebcamPreparationForm apiBaseUrl={apiBaseUrl} onPrepared={id => navigate(`/sessions/${encodeURIComponent(id)}/live`)} /> :
       session && <div className={styles.preparation}>
         <section className={styles.preview} aria-labelledby={id + "preview-title"}>
@@ -82,9 +88,9 @@ export function LivePreparationPage({ sessionId, apiBaseUrl = API_BASE_URL }: Pr
         </div>
         <div className={styles.step}><h3>Comprobación de encuadre</h3>
         <button type="button" disabled={busy} onClick={() => void checkFrame()}><Camera size={17} aria-hidden="true" />{busy ? "Procesando…" : "Comprobar encuadre"}</button>
-        {check && <div className={styles.confirm}>
-          <input id={id + "confirm"} type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} /><label htmlFor={id + "confirm"}>Confirmo que este es el encuadre actual</label>
-        </div>}
+        {check && <label className={styles.confirm} htmlFor={id + "confirm"}>
+          <input id={id + "confirm"} type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} /><span>Confirmo que este es el encuadre actual</span>
+        </label>}
         </div>
         <div className={styles.start}>
         <button type="button" data-primary className="flex items-center justify-center gap-2 rounded-lg py-3 font-semibold shadow-md" disabled={busy || !check || !confirmed || !versionId} onClick={() => void start()}><Play size={18} aria-hidden="true" />Iniciar análisis en vivo</button>

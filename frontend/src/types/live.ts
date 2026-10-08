@@ -36,6 +36,7 @@ export interface LiveResults {
   job_id: string; session_id: string; source_kind: "webcam";
   status: "pending" | "processing" | "completed" | "failed" | "cancelled";
   capture_status: string; result_complete: boolean; coverage_complete: boolean;
+  resume_requested?: boolean;
   unknown_tail: boolean; elapsed_capture_seconds: number; revision: number;
   checkpoint_at: string | null; selected_shop_id: string | null;
   capture_started_at?: string | null;

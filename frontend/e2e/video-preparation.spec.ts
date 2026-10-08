@@ -1,0 +1,95 @@
+import { expect, test } from "@playwright/test";
+
+test("preparación de video: consola, configuración, re-vinculación y layout responsive", async ({ page }) => {
+  const camera = { id: "cam-1", name: "CamaraDePawn", created_at: "2026-10-06T00:00:00Z" };
+  const session = { id: "s-1", name: "Dentro", camera, source_kind: "video_file", created_at: camera.created_at,
+    video: { original_filename: "entrada.mp4", width: 1280, height: 720, fps: 25, fps_is_estimated: false, duration_seconds: 2, frame_count: 50, declared_frame_count: 50, appears_incomplete: false, sha256: "a".repeat(64), origin_machine_id: "pc-1", availability: "missing", size_bytes: 10, relative_path: "s-1.mp4", registered_at: camera.created_at },
+    reference_frame: { width: 1280, height: 720, video_timestamp_seconds: 0, frame_index: 0, url: "/sessions/s-1/reference-frame" }, duplicate_session_ids: [] };
+  const version = { id: "v-4", camera_id: camera.id, version_number: 4, reference_session_id: session.id, frame_width: 1280, frame_height: 720, shop_count: 1, created_at: camera.created_at, created_by_machine_id: "pc-1",
+    shops: [{ shop_id: "zone-1", name: "Acceso", zones: { front: [[.1, .2], [.5, .2], [.5, .8], [.1, .8]] }, entry_line: { start: [.1, .8], end: [.5, .8], entry_direction: "a_to_b" } }] };
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.route("**/sessions/s-1", route => route.request().resourceType() === "document" ? route.continue() : route.fulfill({ json: session }));
+  await page.route("**/sessions/s-1/reference-frame", route => route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><rect width="1280" height="720" fill="#334155"/></svg>' }));
+  await page.route("**/cameras/cam-1/scene-versions", route => route.fulfill({ json: [version, { ...version, id: "v-1", version_number: 1 }] }));
+  await page.route("**/scene-versions/*", route => route.fulfill({ json: { ...version, version_number: route.request().url().endsWith("v-1") ? 1 : 4 } }));
+  await page.route("**/sessions/s-1/video", route => route.fulfill({ json: { ...session, video: { ...session.video, availability: "available" } } }));
+  let submitted: unknown;
+  await page.route("**/sessions/s-1/jobs", async route => {
+    submitted = route.request().postDataJSON();
+    await route.fulfill({ status: 201, json: { id: "job-1", session_id: "s-1", kind: "video_analysis", scene_version_id: "v-1", status: "pending", created_at: camera.created_at } });
+  });
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/sessions/s-1");
+  const preview = page.getByRole("region", { name: "Escena y zonas configuradas" });
+  const console = page.getByRole("region", { name: "Consola de inferencia" });
+  await expect(page.getByLabel("Configuración activa")).toHaveText("Configuración 4");
+  await expect(console).toHaveCSS("background-color", "rgb(29, 30, 34)");
+  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(20, 24, 27)");
+  await page.getByRole("button", { name: "Activar modo claro" }).click();
+  await expect(console).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await page.getByRole("button", { name: "Activar modo oscuro" }).click();
+  const chooserControl = page.getByRole("combobox", { name: "Configuración de escena" });
+  await chooserControl.click();
+  await expect(page.getByRole("option", { name: "Configuración 4", exact: true })).toHaveAttribute("aria-selected", "true");
+  await page.screenshot({ path: "test-results/video-configuration-dropdown-dark.png", fullPage: true });
+  await chooserControl.press("End");
+  await chooserControl.press("Escape");
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+  await expect(page.getByLabel("Configuración activa")).toHaveText("Configuración 4");
+  await chooserControl.press("ArrowDown");
+  await chooserControl.press("End");
+  await chooserControl.press("Enter");
+  await expect(page.getByLabel("Configuración activa")).toHaveText("Configuración 1");
+  await page.getByRole("button", { name: "Activar modo claro" }).click();
+  await chooserControl.click();
+  await expect(page.getByRole("listbox")).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await page.screenshot({ path: "test-results/video-configuration-dropdown-light.png", fullPage: true });
+  await page.getByRole("heading", { name: "Dentro", exact: true }).click();
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+  await page.getByRole("button", { name: "Activar modo oscuro" }).click();
+  const left = (await preview.boundingBox())!;
+  const right = (await console.boundingBox())!;
+  expect(Math.abs(left.y - right.y)).toBeLessThan(2);
+  expect(Math.abs(left.height - right.height)).toBeLessThan(2);
+  expect(left.width / right.width).toBeCloseTo(7 / 5, 1);
+  await expect(page.getByLabel("Detalles del archivo y sesión")).not.toHaveAttribute("open");
+  for (const width of [1024, 1280, 1920]) {
+    await page.setViewportSize({ width, height: 1080 });
+    expect(Math.abs((await preview.boundingBox())!.height - (await console.boundingBox())!.height)).toBeLessThan(2);
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByRole("combobox", { name: "Configuración de escena" }).click();
+  await page.getByRole("option", { name: "Configuración 1", exact: true }).click();
+  await expect(page.getByLabel("Configuración activa")).toHaveText("Configuración 1");
+  await expect(preview.locator("polygon")).toHaveCount(1);
+  await page.screenshot({ path: "test-results/video-preparation-desktop.png", fullPage: true });
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Re-vincular video", exact: true }).click();
+  await (await chooser).setFiles({ name: "entrada.mp4", mimeType: "video/mp4", buffer: Buffer.from("test-video") });
+  await expect(page.getByRole("button", { name: "Re-vincular video", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Iniciar análisis de video", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Ver avance del análisis" })).toBeVisible();
+  expect(submitted).toEqual({ kind: "video_analysis", scene_version_id: "v-1" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect((await console.boundingBox())!.y).toBeGreaterThan((await preview.boundingBox())!.y);
+  await chooserControl.scrollIntoViewIfNeeded();
+  await chooserControl.click();
+  await expect(page.getByRole("listbox")).toBeVisible();
+  await page.screenshot({ path: "test-results/video-configuration-dropdown-mobile.png" });
+  await expect(page.getByRole("listbox")).toBeVisible();
+  await chooserControl.press("Escape");
+  await page.screenshot({ path: "test-results/video-preparation-mobile.png", fullPage: true });
+  await page.route("**/scene-versions/v-4", route => route.fulfill({ status: 500, json: { detail: { code: "internal_error", message: "No disponible" } } }));
+  await page.getByRole("combobox", { name: "Configuración de escena" }).click();
+  await page.getByRole("option", { name: "Configuración 4", exact: true }).click();
+  const warning = preview.getByRole("alert");
+  await expect(warning).toContainText("No se pudieron cargar las zonas");
+  await expect(warning).toHaveCSS("background-color", "rgb(29, 30, 34)");
+  await page.getByRole("combobox", { name: "Configuración de escena" }).click();
+  await page.getByRole("option", { name: "Configuración 1", exact: true }).click();
+  await expect(preview.locator("polygon")).toHaveCount(1);
+  expect(errors).toEqual([]);
+});

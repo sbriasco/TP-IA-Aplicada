@@ -8,6 +8,7 @@ import {
 } from "react";
 
 import { entryArrow, lineSideLabelPositions, screenToFrame } from "../editor/coordinates";
+import { ENTRY_LINE_COLOR, ZONE_COLORS } from "../editor/colors";
 import {
   hasIssue,
   issuesFor,
@@ -21,6 +22,7 @@ import { elementName, elementTitle, shopDisplayName, ZONE_ROLE_OPTION } from "..
 import type { Point, ZoneRole } from "../types/scene";
 
 interface SceneCanvasProps {
+  labelMode?: "directions" | "access";
   state: EditorState;
   dispatch: Dispatch<EditorAction>;
   /** URL absoluta del frame de referencia de la sesión. */
@@ -37,11 +39,11 @@ interface SceneCanvasProps {
 
 // Además del color, cada rol tiene su propio trazo (sólido, rayado, punteado) y su nombre escrito.
 const ROLE_STYLE: Record<ZoneRole, { color: string; dash: (unit: number) => string | undefined }> = {
-  front: { color: "#1565c0", dash: () => undefined },
-  interior: { color: "#2e7d32", dash: (unit) => `${unit * 1.4} ${unit * 0.7}` },
-  showcase: { color: "#16a34a", dash: (unit) => `${unit * 0.3} ${unit * 0.6}` },
+  front: { color: ZONE_COLORS.front, dash: () => undefined },
+  interior: { color: ZONE_COLORS.interior, dash: (unit) => `${unit * 1.4} ${unit * 0.7}` },
+  showcase: { color: ZONE_COLORS.showcase, dash: (unit) => `${unit * 0.3} ${unit * 0.6}` },
 };
-const LINE_COLOR = "#6a1b9a";
+const LINE_COLOR = ENTRY_LINE_COLOR;
 const ERROR_COLOR = "#c62828";
 const HALO = "#ffffff";
 /** Largo máximo del mensaje de error visible dentro del frame; el completo va en `<title>`. */
@@ -78,7 +80,7 @@ function sameVertex(a: EditorSelection | VertexRef | null, b: VertexRef): boolea
   );
 }
 
-export function SceneCanvas({ state, dispatch, frameUrl, hidden, onGestureStart, onGestureEnd }: SceneCanvasProps) {
+export function SceneCanvas({ state, dispatch, frameUrl, hidden, onGestureStart, onGestureEnd, labelMode = "directions" }: SceneCanvasProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<VertexRef | null>(null);
   const markerId = `entry-arrow-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
@@ -265,7 +267,7 @@ export function SceneCanvas({ state, dispatch, frameUrl, hidden, onGestureStart,
     if (line !== null && !hidden?.has(`${shop.key}/entry_line`)) {
       const invalid = hasIssue(state, shopIndex, "entry_line");
       const selected = isSelected(shopIndex, "entry_line");
-      const labels = lineSideLabelPositions(line.start, line.end);
+      const labels = lineSideLabelPositions(line.start, line.end, labelMode === "access" ? fontSize * 4 : 20);
       const arrow = entryArrow(line.start, line.end, line.entry_direction);
       const labelProps = {
         role: "img",
@@ -308,11 +310,11 @@ export function SceneCanvas({ state, dispatch, frameUrl, hidden, onGestureStart,
           />
           {labels !== null && (
             <>
-              <text {...labelProps} x={labels.A[0]} y={labels.A[1]} aria-label={`Lado A de ${shopName}`}>
-                A
+              <text {...labelProps} x={labels.A[0]} y={labels.A[1]} aria-label={labelMode === "access" ? `Lado de ${line.entry_direction === "a_to_b" ? "salida" : "entrada"} de ${shopName}` : `Lado A de ${shopName}`}>
+                {labelMode === "access" ? line.entry_direction === "a_to_b" ? "Salida" : "Entrada" : "A"}
               </text>
-              <text {...labelProps} x={labels.B[0]} y={labels.B[1]} aria-label={`Lado B de ${shopName}`}>
-                B
+              <text {...labelProps} x={labels.B[0]} y={labels.B[1]} aria-label={labelMode === "access" ? `Lado de ${line.entry_direction === "a_to_b" ? "entrada" : "salida"} de ${shopName}` : `Lado B de ${shopName}`}>
+                {labelMode === "access" ? line.entry_direction === "a_to_b" ? "Entrada" : "Salida" : "B"}
               </text>
             </>
           )}
@@ -320,7 +322,7 @@ export function SceneCanvas({ state, dispatch, frameUrl, hidden, onGestureStart,
             <g
               role="img"
               aria-label={`Flecha de entrada de ${shopName}: ${
-                line.entry_direction === "a_to_b" ? "de A a B" : "de B a A"
+                labelMode === "access" ? "hacia el lado de entrada" : line.entry_direction === "a_to_b" ? "de A a B" : "de B a A"
               }`}
               transform={arrowShift(line.start, line.end)}
             >

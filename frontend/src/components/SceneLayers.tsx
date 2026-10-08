@@ -3,9 +3,11 @@ import { Eye, EyeOff, Trash2, Plus, Layers } from "lucide-react";
 import { availableZoneRoles, type EditorAction, type EditorElement, type EditorState } from "../editor/editorState";
 import { elementTitle, shopDisplayName, ZONE_ROLE_OPTION } from "../editor/labels";
 import { MAX_SHOPS_PER_VERSION, type ZoneRole } from "../types/scene";
+import { ENTRY_LINE_COLOR, ZONE_COLORS } from "../editor/colors";
 import { EntryLineControls } from "./EntryLineControls";
 
 interface SceneLayersProps {
+  labelMode?: "directions" | "access";
   state: EditorState;
   dispatch: Dispatch<EditorAction>;
   hidden: ReadonlySet<string>;
@@ -16,7 +18,7 @@ interface SceneLayersProps {
 const ROLES: readonly ZoneRole[] = ["front", "interior", "showcase"];
 const field = "grid gap-2 text-xs";
 
-export function SceneLayers({ state, dispatch, hidden, toggleVisibility, onGestureStart, onGestureEnd }: SceneLayersProps) {
+export function SceneLayers({ state, dispatch, hidden, toggleVisibility, onGestureStart, onGestureEnd, labelMode = "directions" }: SceneLayersProps) {
   const id = useId();
   const [newRole, setNewRole] = useState<ZoneRole>("front");
   const index = state.selection?.shopIndex;
@@ -40,7 +42,7 @@ export function SceneLayers({ state, dispatch, hidden, toggleVisibility, onGestu
           <div className="flex min-w-0 items-center gap-2"><span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" /><button type="button" className="!min-h-8 !border-0 !bg-transparent !p-1 min-w-0 flex-1 !text-left !text-xs truncate" aria-pressed={index === shopIndex} onClick={() => select(shopIndex)}>{shopDisplayName(item.name, shopIndex)}</button><button type="button" className="!min-h-8 !p-1.5" disabled={elementsOf(shopIndex).length === 0} aria-label={`${elementsOf(shopIndex).every(layer => hidden.has(`${item.key}/${layer}`)) ? "Mostrar" : "Ocultar"} zona ${shopDisplayName(item.name, shopIndex)}`} onClick={() => { const allHidden = elementsOf(shopIndex).every(layer => hidden.has(`${item.key}/${layer}`)); elementsOf(shopIndex).forEach(layer => { const key = `${item.key}/${layer}`; if (hidden.has(key) === allHidden) toggleVisibility(key); }); }}>{elementsOf(shopIndex).length > 0 && elementsOf(shopIndex).every(layer => hidden.has(`${item.key}/${layer}`)) ? <EyeOff size={14} aria-hidden="true" /> : <Eye size={14} aria-hidden="true" />}</button><button type="button" className="!min-h-8 !p-1.5" aria-label={`Eliminar zona ${shopDisplayName(item.name, shopIndex)}`} onClick={() => dispatch({ type: "removeShop", shopIndex })}><Trash2 size={14} aria-hidden="true" /></button></div>
           {elementsOf(shopIndex).map(layer => {
             const key = `${item.key}/${layer}`;
-            return <div key={layer} className="mt-1 flex items-center gap-1 pl-3"><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${layer === "entry_line" ? "bg-fuchsia-500" : layer === "zone:front" ? "bg-blue-500" : "bg-emerald-500"}`} aria-hidden="true" /><button type="button" className="!min-h-7 !border-0 !bg-transparent !p-1 flex-1 !text-left !text-xs" aria-pressed={index === shopIndex && element === layer} onClick={() => select(shopIndex, layer)}>{elementTitle(layer)}</button><button type="button" className="!min-h-7 !p-1" aria-label={`${hidden.has(key) ? "Mostrar" : "Ocultar"} ${elementTitle(layer)} de ${item.name}`} aria-pressed={!hidden.has(key)} onClick={() => toggleVisibility(key)}>{hidden.has(key) ? <EyeOff size={14} aria-hidden="true" /> : <Eye size={14} aria-hidden="true" />}</button><button type="button" className="!min-h-7 !p-1" aria-label={`Eliminar ${elementTitle(layer)} de ${item.name}`} onClick={() => dispatch({ type: "deleteElement", shopIndex, element: layer })}><Trash2 size={13} aria-hidden="true" /></button></div>;
+            return <div key={layer} className="mt-1 flex items-center gap-1 pl-3"><span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: layer === "entry_line" ? ENTRY_LINE_COLOR : ZONE_COLORS[layer.slice("zone:".length) as ZoneRole] }} aria-hidden="true" /><button type="button" className="!min-h-7 !border-0 !bg-transparent !p-1 flex-1 !text-left !text-xs" aria-pressed={index === shopIndex && element === layer} onClick={() => select(shopIndex, layer)}>{elementTitle(layer)}</button><button type="button" className="!min-h-7 !p-1" aria-label={`${hidden.has(key) ? "Mostrar" : "Ocultar"} ${elementTitle(layer)} de ${item.name}`} aria-pressed={!hidden.has(key)} onClick={() => toggleVisibility(key)}>{hidden.has(key) ? <EyeOff size={14} aria-hidden="true" /> : <Eye size={14} aria-hidden="true" />}</button><button type="button" className="!min-h-7 !p-1" aria-label={`Eliminar ${elementTitle(layer)} de ${item.name}`} onClick={() => dispatch({ type: "deleteElement", shopIndex, element: layer })}><Trash2 size={13} aria-hidden="true" /></button></div>;
           })}
           {elementsOf(shopIndex).length === 0 && <p className="!my-1 pl-5 text-xs text-[var(--fs-muted)]">Sin áreas ni líneas dibujadas</p>}
         </div>)}
@@ -57,7 +59,7 @@ export function SceneLayers({ state, dispatch, hidden, toggleVisibility, onGestu
           else { const existing = elementsOf(index).find(candidate => candidate !== "entry_line"); if (existing) select(index, existing); else if (roles[0]) dispatch({ type: "startDrawing", shopIndex: index, element: `zone:${roles[0]}` }); }
         }}><option value="area">Área de interés</option><option value="line">Línea de cruce</option></select></div>
         {element?.startsWith("zone:") && <div className={field}><label htmlFor={`${id}-role`}>Uso del área</label><select id={`${id}-role`} value={element.slice(5)} onChange={event => dispatch({ type: "setZoneRole", shopIndex: index, from: element.slice(5) as ZoneRole, to: event.target.value as ZoneRole })}>{ROLES.filter(role => element === `zone:${role}` || roles.includes(role)).map(role => <option key={role} value={role}>{ZONE_ROLE_OPTION[role]}</option>)}</select></div>}
-        {element === "entry_line" && <EntryLineControls state={state} dispatch={dispatch} compact />}
+        {element === "entry_line" && <EntryLineControls labelMode={labelMode} state={state} dispatch={dispatch} compact />}
         {element && <div className={field}><label htmlFor={`${id}-associated`}>Elemento asociado</label><select id={`${id}-associated`} value={index} onChange={event => dispatch({ type: "moveElementToShop", from: index, element, to: Number(event.target.value) })}>{state.shops.map((item, i) => <option key={item.key} value={i} disabled={i !== index && elementsOf(i).includes(element)}>{shopDisplayName(item.name, i)}</option>)}</select></div>}
         <details><summary className="cursor-pointer text-xs text-[var(--fs-accent)]">Agregar áreas y accesos</summary><div className="mt-2 grid gap-2"><label htmlFor={`${id}-new-role`}>Tipo de área nueva</label><select id={`${id}-new-role`} value={chosenRole ?? ""} disabled={roles.length === 0} onChange={event => setNewRole(event.target.value as ZoneRole)}>{roles.map(role => <option key={role} value={role}>{ZONE_ROLE_OPTION[role]}</option>)}</select><button type="button" disabled={!chosenRole} onClick={() => { if (chosenRole) dispatch({ type: "startDrawing", shopIndex: index, element: `zone:${chosenRole}` }); }}>Dibujar área</button><button type="button" disabled={shop.entry_line !== null} onClick={() => dispatch({ type: "startDrawing", shopIndex: index, element: "entry_line" })}>Crear línea de entrada</button></div></details>
       </div> : <p className="text-xs leading-5 text-[var(--fs-muted)]">Seleccioná una zona en la lista o creá una nueva</p>}

@@ -2,7 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { LiveAnalysisPage } from "../src/pages/LiveAnalysisPage";
-import { byButton, byLabel, click } from "./dom";
+import { byButton, byLabel, changeValue, click } from "./dom";
 
 vi.mock("../src/components/CrossingChart", () => ({ CrossingChart: () => <p>Gráfico de cruces</p> }));
 class Socket {
@@ -37,6 +37,12 @@ function update(revision: number, sequence: number, total: number, image: string
 }
 let root: Root, container: HTMLDivElement;
 const response = (value: unknown) => ({ ok: true, status: 200, text: async () => JSON.stringify(value) });
+
+function status(capture_status: string, revision: number) {
+  return { type: "live.status", schema_version: "3", source_kind: "webcam",
+    job_id: "job-1", session_id: "session-1", status: "processing", revision,
+    capture_status, capture_timestamp_seconds: 5, coverage_complete: false, unknown_tail: false };
+}
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); vi.stubGlobal("WebSocket", Socket);
   Socket.instances = []; container = document.createElement("div"); document.body.append(container);
@@ -45,6 +51,79 @@ beforeEach(() => {
     { id: "job-1", session_id: "session-1", status: "processing", kind: "live_analysis" } : result)));
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+it("espera el acuse de pausa y conserva conteos ante un frame atrasado", async () => {
+  await act(async () => root.render(<LiveAnalysisPage jobId="job-1" apiBaseUrl="http://api.test" />));
+  const socket = Socket.instances[0];
+  await act(async () => socket.message(update(2, 5, 3, "eA==")));
+  await click(byButton(container, "Pausar análisis"));
+  expect(container.textContent).toContain("Pausando");
+  expect(container.querySelector('button')?.textContent).not.toBe("Retomar análisis");
+  await act(async () => socket.message(status("paused", 4)));
+  expect(byButton(container, "Retomar análisis").disabled).toBe(false);
+  await act(async () => socket.message(update(3, 6, 99, "eQ==")));
+  expect(container.querySelector('[aria-label="Total de cruces"]')?.textContent).toBe("3");
+  expect(container.textContent).toContain("Análisis pausado");
+  expect(byButton(container, "Detener análisis").disabled).toBe(false);
+});
+
+it("recupera una pausa al recargar y exige un encuadre nuevo para retomar", async () => {
+  vi.mocked(fetch).mockImplementation(async (url) => response(String(url).endsWith("/live/continue") ?
+    { job_id: "job-1", resume_requested: true } : { ...result, capture_status: "paused", revision: 5 }) as Response);
+  await act(async () => root.render(<LiveAnalysisPage jobId="job-1" apiBaseUrl="http://api.test" />));
+  await click(byButton(container, "Retomar análisis"));
+  expect(byButton(container, "Retomar análisis").disabled).toBe(true);
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith("/live/continue"))).toHaveLength(1);
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith("/live/confirm-resume"))).toBe(false);
+});
+
+it("muestra el checkpoint final de pausa aunque el último frame no llegue", async () => {
+  let paused = false;
+  vi.mocked(fetch).mockImplementation(async () => response(paused ? { ...result,
+    capture_status: "paused", revision: 4, coverage_complete: false,
+    summary: { ...result.summary, entry_count: 6, a_to_b_count: 6, total_crossings: 6 },
+    zone_dwell: { "shop-1": { front_average_seconds: 1.5, front_sample_count: 1,
+      interior_average_seconds: null, interior_sample_count: 0 } },
+  } : result) as Response);
+  await act(async () => root.render(<LiveAnalysisPage jobId="job-1" apiBaseUrl="http://api.test" />));
+  await act(async () => Socket.instances[0].message(update(2, 5, 3, "eA==")));
+  paused = true;
+  await act(async () => Socket.instances[0].message(status("paused", 4)));
+  expect(container.querySelector('[aria-label="Total de cruces"]')?.textContent).toBe("6");
+  expect(container.querySelector('[aria-label="Estadía promedio externa"]')?.textContent).toBe("1,5 s");
+  expect(container.textContent).toContain("Cobertura incompleta");
+});
+
+it("consulta el checkpoint de pausa de la línea seleccionada", async () => {
+  const second = { ...result.summary, shop_id: "shop-2", shop_name: "Segundo", entry_count: 6,
+    a_to_b_count: 6, total_crossings: 6 };
+  let paused = false;
+  vi.mocked(fetch).mockImplementation(async (url) => response({ ...result,
+    shops: [...result.shops, { shop_id: "shop-2", shop_name: "Segundo" }],
+    capture_status: paused ? "paused" : "connected", revision: paused ? 4 : 0,
+    selected_shop_id: String(url).includes("shop_id=shop-2") ? "shop-2" : "shop-1",
+    summary: String(url).includes("shop_id=shop-2") ? second : result.summary,
+  }) as Response);
+  await act(async () => root.render(<LiveAnalysisPage jobId="job-1" apiBaseUrl="http://api.test" />));
+  await act(async () => Socket.instances[0].message({ ...update(2, 5, 3, "eA=="), shops: [
+    update(2, 5, 3, "eA==").shops[0], { ...second, entry_count: 5, a_to_b_count: 5, total_crossings: 5 },
+  ] }));
+  await changeValue(container.querySelector("select")!, "shop-2");
+  paused = true;
+  await act(async () => Socket.instances[0].message(status("paused", 4)));
+  expect(container.querySelector('[aria-label="Total de cruces"]')?.textContent).toBe("6");
+});
+
+it("respeta Entrada/Salida en el vivo aunque entrada sea B a A", async () => {
+  await act(async () => root.render(<LiveAnalysisPage jobId="job-1" apiBaseUrl="http://api.test" />));
+  const frame = update(1, 1, 3, "eA==");
+  await act(async () => Socket.instances[0].message({ ...frame, shops: [{ ...frame.shops[0],
+    label_mode: "access", entry_direction: "b_to_a", entry_count: 2, exit_count: 1,
+    a_to_b_count: 1, b_to_a_count: 2, total_crossings: 3 }] }));
+  expect(container.querySelector('[aria-label="Entradas"]')?.textContent).toBe("2");
+  expect(container.querySelector('[aria-label="Salidas"]')?.textContent).toBe("1");
+  expect(container.querySelector('[aria-label="A → B"]')).toBeNull();
+});
 
 it("muestra estadías observadas y permite activar y apagar el mapa de calor", async () => {
   vi.mocked(fetch).mockImplementation(async (url) => response(String(url).endsWith("/position-samples") ? {
@@ -56,8 +135,8 @@ it("muestra estadías observadas y permite activar y apagar el mapa de calor", a
     zone_dwell: { "shop-1": { interior_average_seconds: 12.5, front_average_seconds: null,
       interior_sample_count: 2, front_sample_count: 0 } } }));
   expect(container.querySelector('[aria-label="Estadía promedio interna"]')?.textContent).toBe("12,5 s");
-  expect(container.querySelector('[aria-label="Estadía promedio externa"]')?.textContent).toBe("Sin datos");
-  const checkbox = byLabel(container, "Mostrar mapa de calor");
+  expect(container.querySelector('[aria-label="Estadía promedio externa"]')?.textContent).toBe("--");
+  const checkbox = byLabel(container, "Superponer mapa de calor");
   await click(checkbox);
   expect(container.querySelector('svg[aria-label="Mapa de calor"]')).not.toBeNull();
   await click(checkbox);

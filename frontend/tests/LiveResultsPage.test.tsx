@@ -20,17 +20,25 @@ function result(status = "completed") {
     observed_seconds: 60, missing_seconds: 1, unconfirmed_crossings: 1,
     sampling: { time_basis: "capture", sample_count: 20000, candidate_count: 90000, capacity: 20000 } };
 }
-function mockApi(status = "completed") {
+function mockApi(status = "completed", overrides = {}, emptySamples = false) {
   vi.stubGlobal("fetch", vi.fn(async (url: string) => ({ ok: true, status: 200, text: async () => JSON.stringify(
     url.includes("position-samples") ? { job_id: "job-1", source_kind: "webcam", time_basis: "capture",
       availability: "available", sample_count: 20000, returned_count: 1, candidate_count: 90000,
-      capacity: 20000, samples: [{ capture_timestamp_seconds: 5, foot: [0.5, 0.4] }] } :
-    url.includes("live-events") ? { events: [], next_cursor: null } : result(status)) })));
+      capacity: 20000, samples: emptySamples ? [] : [{ capture_timestamp_seconds: 5, foot: [0.5, 0.4] }] } :
+    url.includes("live-events") ? { events: [], next_cursor: null } : { ...result(status), ...overrides }) })));
 }
+
+it("muestra entradas y salidas en resultados sin confundirlas con los lados A/B", async () => {
+  mockApi("completed", { summary: { ...result().summary, label_mode: "access", entry_direction: "b_to_a",
+    a_to_b_count: 1, b_to_a_count: 2 } });
+  await act(async () => root.render(<LiveResultsPage jobId="job-1" apiBaseUrl="http://api.test" />));
+  expect(container.textContent).toContain("Entradas: 2 · Salidas: 1");
+  expect(container.textContent).not.toContain("A → B:");
+});
 it("muestra cruces, cobertura y muestra acotada sin reproducción ni chat", async () => {
   mockApi(); await act(async () => root.render(<LiveResultsPage jobId="job-1" apiBaseUrl="http://api.test" />));
   expect(container.textContent).toContain("Sin grabación");
-  expect(container.textContent).toContain("Cobertura incompleta");
+  expect(container.textContent).toContain("Cobertura parcial");
   expect(container.textContent).toContain("No representa personas únicas");
   expect(container.querySelector('[aria-label="Total de cruces"]')?.textContent).toBe("3");
   expect(container.querySelector('svg[aria-label="Mapa de calor"]')).not.toBeNull();
@@ -43,4 +51,28 @@ it("conserva la duración del último checkpoint y hace visible el final descono
   expect(container.textContent).toContain("Final desconocido");
   expect(container.textContent).toContain("61");
   expect(container.textContent).not.toContain("Análisis completo");
+});
+
+it("resume cobertura real y oculta la auditoría hasta expandirla", async () => {
+  mockApi("completed", { elapsed_capture_seconds: 16, observed_seconds: 7, missing_seconds: 9 }, true);
+  await act(async () => root.render(<LiveResultsPage jobId="job-1" apiBaseUrl="http://api.test" />));
+  expect(container.querySelector('h1')?.textContent).toBe("Reporte de análisis · Webcam en vivo");
+  expect(container.textContent).toContain("Cobertura parcial (7.0s / 16.0s observados)");
+  expect(container.querySelector('[aria-label="Calidad de captura"]')?.textContent).toBe("43,8 %");
+  expect(container.querySelector('[aria-label="Estadía promedio interna"]')?.textContent).toBe("--");
+  expect(container.textContent).toContain("Sin muestra de posiciones");
+  const diagnosis = Array.from(container.querySelectorAll('details')).find(element => element.querySelector('summary')?.textContent?.includes("Diagnóstico técnico"));
+  expect(diagnosis).toBeDefined();
+  expect(diagnosis?.open).toBe(false);
+  expect(diagnosis?.textContent).toContain("Cruces sin confirmar descartados");
+  expect(diagnosis?.textContent).toContain("Asistente analítico no disponible");
+});
+it("no inventa un porcentaje sin duración y conserva la estadía observada", async () => {
+  mockApi("completed", { elapsed_capture_seconds: 0, observed_seconds: 0, missing_seconds: 0,
+    zone_dwell: { "shop-1": { interior_average_seconds: 12.5, interior_sample_count: 3,
+      front_average_seconds: 7, front_sample_count: 2 } } });
+  await act(async () => root.render(<LiveResultsPage jobId="job-1" apiBaseUrl="http://api.test" />));
+  expect(container.querySelector('[aria-label="Calidad de captura"]')?.textContent).toBe("--");
+  expect(container.querySelector('[aria-label="Estadía promedio interna"]')?.textContent).toBe("12,5 s");
+  expect(container.querySelector('[aria-label="Estadía promedio externa"]')?.textContent).toBe("7 s");
 });

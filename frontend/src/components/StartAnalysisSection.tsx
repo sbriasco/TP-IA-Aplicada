@@ -1,11 +1,14 @@
 import { useEffect, useState, type FormEvent } from "react";
 
+import { Play, Trash2, Layers, Cpu } from "lucide-react";
+
 import { ApiRequestError } from "../api/http";
 import { aspectRatioMismatch, createVideoAnalysisJob, deleteSceneVersion, listSceneVersions } from "../api/scenes";
 import type { AnalysisJob, AspectRatios, SceneVersionSummary } from "../types/scene";
 import type { SessionDetail } from "../types/session";
 import { Link } from "./Link";
 import { Modal } from "./Modal";
+import { SceneConfigurationSelect } from "./SceneConfigurationSelect";
 
 import styles from "./StartAnalysisSection.module.css";
 
@@ -24,13 +27,14 @@ interface StartAnalysisSectionProps {
   apiBaseUrl: string;
   session: SessionDetail;
   onConfigurationChange?: (versionId: string) => void;
+  onVersionChange?: (version: SceneVersionSummary | undefined) => void;
 }
 
 function errorMessage(reason: unknown): string {
   return reason instanceof ApiRequestError ? reason.error.message : "Ocurrió un error inesperado.";
 }
 
-export function StartAnalysisSection({ apiBaseUrl, session, onConfigurationChange }: StartAnalysisSectionProps) {
+export function StartAnalysisSection({ apiBaseUrl, session, onConfigurationChange, onVersionChange }: StartAnalysisSectionProps) {
   const [versions, setVersions] = useState<VersionsState>({ kind: "loading" });
   const [selectedId, setSelectedId] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -62,6 +66,8 @@ export function StartAnalysisSection({ apiBaseUrl, session, onConfigurationChang
       });
     return () => { active = false; };
   }, [apiBaseUrl, session.camera.id, session.id]);
+
+  useEffect(() => { onVersionChange?.(versions.kind === "loaded" ? versions.versions.find(version => version.id === selectedId) : undefined); }, [versions, selectedId, onVersionChange]);
 
   const editorHref = `/sessions/${encodeURIComponent(session.id)}/editor`;
 
@@ -101,33 +107,6 @@ export function StartAnalysisSection({ apiBaseUrl, session, onConfigurationChang
     }
   }
 
-  function configurationOption(version: SceneVersionSummary, latest: boolean) {
-    return (
-      <div key={version.id} className={styles.optionRow}>
-      <label className={selectedId === version.id ? styles.selectedOption : styles.option}>
-        <input type="radio" name="analysis-configuration" value={version.id}
-          aria-label={`Configuración ${version.version_number}`} checked={selectedId === version.id}
-          onChange={() => { setSelectedId(version.id); setOutcome(null); }} />
-        <span className={styles.optionBody}>
-          <span className={styles.optionHeading}>
-            <strong>Configuración {version.version_number}</strong>
-            {latest && <span className={styles.latest}>Más reciente</span>}
-          </span>
-          <span className={styles.shopCount}>{version.shop_count === 1 ? "1 zona definida" : `${version.shop_count} zonas definidas`}</span>
-          <span className={styles.savedAt}>Guardada el <time dateTime={version.created_at}>
-            {new Date(version.created_at).toLocaleString("es-AR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })}
-          </time></span>
-        </span>
-      </label>
-      <button className={styles.deleteConfiguration} type="button" disabled={submitting || removing}
-        title="Eliminar configuración" aria-label={`Eliminar configuración ${version.version_number}`}
-        onClick={() => { setToRemove(version); setRemoveError(null); }}>
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6" /></svg>
-      </button>
-      </div>
-    );
-  }
-
   let body;
   if (versions.kind === "loading") {
     body = <p role="status">Cargando configuraciones…</p>;
@@ -140,23 +119,23 @@ export function StartAnalysisSection({ apiBaseUrl, session, onConfigurationChang
       <Link className={styles.editorLink} href={editorHref}>Abrir el editor de escena</Link>
     </div>;
   } else {
-    const [latest, ...previous] = versions.versions;
     const selectedVersion = versions.versions.find((item) => item.id === selectedId);
     body = <form onSubmit={handleSubmit}>
-      <fieldset className={styles.configurations} disabled={submitting || removing} aria-describedby="configuration-explanation">
-        <legend>Configuración para este análisis</legend>
-        {latest !== undefined && configurationOption(latest, true)}
-        {previous.length > 0 && <details className={styles.previous}>
-          <summary>Ver configuraciones anteriores <span>({previous.length})</span>
-            {selectedVersion !== undefined && selectedVersion.id !== latest?.id &&
-              <span className={styles.previousSelection}>En uso: configuración {selectedVersion.version_number}</span>}
-          </summary>
-          <div className={styles.previousList}>{previous.map((version) => configurationOption(version, false))}</div>
-        </details>}
-      </fieldset>
-      <p className={styles.explanation} id="configuration-explanation">Cada configuración guarda las zonas de análisis, sus áreas y líneas que dibujaste. Al guardar cambios se crea una nueva; los análisis anteriores conservan la que usaron.</p>
+      <label className={styles.label} htmlFor="analysis-configuration">Configuración de escena</label>
+      <div className={styles.selectorRow}>
+        <SceneConfigurationSelect id="analysis-configuration" versions={versions.versions} value={selectedId} disabled={submitting || removing}
+          onChange={id => { setSelectedId(id); setOutcome(null); }} />
+        {selectedVersion && <button className={styles.deleteConfiguration} type="button" disabled={submitting || removing}
+          aria-label={`Eliminar configuración ${selectedVersion.version_number}`} title="Eliminar configuración"
+          onClick={() => { setToRemove(selectedVersion); setRemoveError(null); }}><Trash2 size={16} aria-hidden="true" /></button>}
+      </div>
+      <p className={styles.explanation} id="configuration-explanation">Las métricas se procesarán utilizando los polígonos de esta versión.</p>
+      <div className={styles.quickStats}>
+        <div><span><Layers size={14} aria-hidden="true" /> Zonas definidas</span><strong>{selectedVersion?.shop_count ?? 0} {selectedVersion?.shop_count === 1 ? "zona de interés" : "zonas de interés"}</strong></div>
+        <div><span><Cpu size={14} aria-hidden="true" /> Dispositivo de inferencia</span><strong>Worker local</strong></div>
+      </div>
       <button className={styles.startButton} type="submit" disabled={submitting || removing || selectedId === ""}>
-        {submitting ? "Iniciando…" : "Iniciar análisis"}
+        <Play size={18} aria-hidden="true" />{submitting ? "Iniciando…" : "Iniciar análisis de video"}
       </button>
       {outcome?.kind === "created" && <p className={styles.feedback} role="status">
         Análisis en cola{outcome.version !== undefined && ` con la configuración ${outcome.version.version_number}`}.

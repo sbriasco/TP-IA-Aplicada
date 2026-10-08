@@ -7,3 +7,14 @@
 .definition > summary { position: absolute; top: 10px; right: 10px; list-style: none; width: 16px; height: 16px; border: 1px solid var(--fs-line); border-radius: 50%; text-align: center; color: var(--fs-muted); font-size: 11px; line-height: 14px; cursor: pointer; }
 .definition > summary::-webkit-details-marker { display: none; }
 .description { display: block; margin-top: 8px; color: var(--fs-muted); padding-top: 8px; border-top: 1px solid var(--fs-line); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+
+.prominent { min-height: 110px; padding: 12px; border-radius: 10px; }
+.prominent .value { font: 700 26px/1.25 ui-monospace, SFMono-Regular, Consolas, monospace; color: var(--fs-ink); margin-top: 8px; }
+.prominent .estimate { padding: 3px 6px; border-radius: 4px; background: var(--fs-raised); margin-top: 8px; font-size: 10px; }
+@media (min-width: 1281px) { .prominent { min-height: 88px; padding: 10px 12px; } .prominent .value { font-size: 23px; margin-top: 6px; } .prominent .estimate { margin-top: 5px; padding: 2px 5px; } }
+@media (min-width: 1281px) {
+  .prominent { min-height: 84px; }
+  .prominent .name { line-height: 1.2; }
+  .prominent .value { font-size: 22px; margin-top: 4px; }
+  .prominent .estimate { font-size: 9px; line-height: 1.2; margin-top: 4px; }
+}

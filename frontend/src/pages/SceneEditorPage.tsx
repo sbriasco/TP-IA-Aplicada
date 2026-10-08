@@ -2,6 +2,7 @@ import { useEffect, useReducer, useState, type ReactNode } from "react";
 
 import { API_BASE_URL } from "../api/config";
 import { ApiRequestError } from "../api/http";
+import { listProcessedSessions } from "../api/processedSessions";
 import { createSceneVersion, getSceneVersion, listSceneVersions } from "../api/scenes";
 import { getSession, referenceFrameUrl } from "../api/sessions";
 import { AppShell } from "../components/AppShell";
@@ -123,6 +124,9 @@ function SceneEditor({ apiBaseUrl, session, frame, initialVersion, backLink }: S
     return { present: initialVersion === null ? initial : editorReducer(initial, { type: "loadVersion", version: initialVersion }), past: [], future: [] };
   });
   const state = history.present;
+  const sceneContent = JSON.stringify(toSceneVersionCreate(state, session.id, frame.width, frame.height).shops);
+  const [savedContent, setSavedContent] = useState(sceneContent);
+  const hasChanges = sceneContent !== savedContent;
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
   const [configurationTitle, setConfigurationTitle] = useState(() => {
     const fallback = `Configuración ${initialVersion?.version_number ?? 1}`;
@@ -131,13 +135,33 @@ function SceneEditor({ apiBaseUrl, session, frame, initialVersion, backLink }: S
   const [baseNumber, setBaseNumber] = useState(initialVersion?.version_number ?? null);
   const [saving, setSaving] = useState(false);
   const [outcome, setOutcome] = useState<SaveOutcome | null>(null);
+  const [continueHref, setContinueHref] = useState<string | null>(null);
+  const [resultsError, setResultsError] = useState(false);
+  const [resultsCheck, setResultsCheck] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setContinueHref(null);
+    setResultsError(false);
+    listProcessedSessions(apiBaseUrl).then(rows => {
+      if (!active) return;
+      const job = rows.find(row => row.session_id === session.id);
+      const path = `/sessions/${encodeURIComponent(session.id)}`;
+      if (session.source_kind === "webcam") {
+        setContinueHref(job && job.status !== "pending" && job.status !== "processing"
+          ? `/live/jobs/${encodeURIComponent(job.job_id)}/results` : `${path}/live`);
+      } else {
+        setContinueHref(job?.status === "completed" && job.result_complete ? `${path}/results` : path);
+      }
+    }).catch(() => { if (active) setResultsError(true); });
+    return () => { active = false; };
+  }, [apiBaseUrl, session.id, session.source_kind, resultsCheck]);
   useEffect(() => {
     try { localStorage.setItem(`flowsight-scene-title:${session.camera.id}:${baseNumber ?? "draft"}`, configurationTitle); } catch { /* El título sigue siendo editable si el navegador bloquea el almacenamiento. */ }
   }, [configurationTitle, session.camera.id, baseNumber]);
 
   // FR-035: advertir al salir solo mientras haya cambios sin guardar.
   useEffect(() => {
-    if (!state.isDirty && state.drawing === null) return;
+    if (!hasChanges && state.drawing === null) return;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
@@ -148,15 +172,18 @@ function SceneEditor({ apiBaseUrl, session, frame, initialVersion, backLink }: S
       window.removeEventListener("beforeunload", onBeforeUnload);
       removeGuard();
     };
-  }, [state.isDirty, state.drawing]);
+  }, [hasChanges, state.drawing]);
 
   async function handleSave() {
+    if (saving || !hasChanges || state.drawing !== null) return;
     setSaving(true);
     setOutcome(null);
     try {
       const payload = toSceneVersionCreate(state, session.id, frame.width, frame.height);
       const result = await createSceneVersion(apiBaseUrl, session.camera.id, payload);
       if (result.ok) {
+        const savedState = editorReducer(state, { type: "saveSucceeded", version: result.version, warnings: result.warnings });
+        setSavedContent(JSON.stringify(toSceneVersionCreate(savedState, session.id, frame.width, frame.height).shops));
         dispatch({ type: "saveSucceeded", version: result.version, warnings: result.warnings });
         setBaseNumber(result.version.version_number);
         setConfigurationTitle(current => /^Configuración \d+$/.test(current) ? `Configuración ${result.version.version_number}` : current);
@@ -181,14 +208,15 @@ function SceneEditor({ apiBaseUrl, session, frame, initialVersion, backLink }: S
       <div className={`${styles.editor} h-[calc(100vh-4.5rem)] overflow-hidden`}>
       <div className={styles.workspaceHeader}>
         <div className="min-w-0">
-          <div className="mb-2 flex flex-wrap items-center gap-3 text-xs">{backLink}<span className={styles.badge}>Paso 2: Editor de escena</span><span className="text-[var(--fs-muted)]">{frame.width} × {frame.height} px</span></div>
+          <div className="mb-2 flex flex-wrap items-center gap-3 text-xs">{backLink}<span className={styles.badge}>Paso 2: Editor de escena</span></div>
           <label className="sr-only" htmlFor="scene-configuration-title">Título de la configuración</label>
           <input id="scene-configuration-title" className={styles.configurationTitle} value={configurationTitle} maxLength={120} onChange={event => setConfigurationTitle(event.target.value)} aria-describedby="scene-title-help" />
           <span id="scene-title-help" className="sr-only">Título de trabajo conservado en este navegador. La configuración se guarda en el servidor con su número de versión.</span>
           <p className={styles.description}>{session.camera.name} · {baseNumber === null ? "Agregá una zona de análisis para marcar sus áreas y accesos." : `Editando la configuración ${baseNumber}. Al guardar, se crea una nueva.`}</p>
         </div>
         <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
-          {baseNumber !== null && !state.isDirty && state.drawing === null ? <Link className={styles.continueLink} href={session.source_kind === "webcam" ? `/sessions/${encodeURIComponent(session.id)}/live` : `/sessions/${encodeURIComponent(session.id)}`}>Continuar a resultados<ArrowRight size={15} aria-hidden="true" /></Link> : <button type="button" disabled title="Guardá la configuración para continuar">Continuar a resultados</button>}
+          {baseNumber !== null && !hasChanges && state.drawing === null && continueHref !== null ? <Link className={styles.continueLink} href={continueHref}>Continuar a resultados<ArrowRight size={15} aria-hidden="true" /></Link> : <button type="button" disabled title={baseNumber === null || hasChanges || state.drawing !== null ? "Guardá la configuración para continuar" : "Consultando disponibilidad de resultados"}>Continuar a resultados</button>}
+          {resultsError && <p role="alert">No se pudo consultar si hay resultados. <button type="button" onClick={() => setResultsCheck(current => current + 1)}>Reintentar</button></p>}
         </div>
       </div>
       {state.aspectMismatch && initialVersion !== null && <p role="alert">La última versión se dibujó sobre un frame de {initialVersion.frame_width} × {initialVersion.frame_height}, con otra relación de aspecto: las figuras pueden verse deformadas. Revisalas antes de guardar.</p>}
@@ -196,24 +224,24 @@ function SceneEditor({ apiBaseUrl, session, frame, initialVersion, backLink }: S
         <section className={styles.canvasPanel} aria-label="Definí tu escena">
           <div className={styles.canvasTop}><h2>Definí tu escena</h2></div>
           <div className={styles.canvasViewport}>
-            <SceneCanvas state={state} dispatch={dispatch} hidden={hidden} onGestureStart={() => dispatch({ type: "beginGesture" })} onGestureEnd={() => dispatch({ type: "endGesture" })} frameUrl={referenceFrameUrl(apiBaseUrl, frame)} />
+            <SceneCanvas labelMode={session.live_source?.label_mode} state={state} dispatch={dispatch} hidden={hidden} onGestureStart={() => dispatch({ type: "beginGesture" })} onGestureEnd={() => dispatch({ type: "endGesture" })} frameUrl={referenceFrameUrl(apiBaseUrl, frame)} />
           </div>
           <aside className={styles.guide} aria-label="Atajos del editor"><span><kbd>Esc</kbd> cancelar</span><span>Doble clic o <kbd>Enter</kbd> para cerrar polígono</span><span><kbd>← ↑ ↓ →</kbd> mover vértice · <kbd>Shift</kbd> 10 px</span></aside>
         </section>
         <aside className={styles.sidebar} aria-label="Capas y propiedades">
           <div className={styles.sidebarContent}>
-          <SceneLayers state={state} dispatch={dispatch} hidden={hidden} onGestureStart={() => dispatch({ type: "beginGesture" })} onGestureEnd={() => dispatch({ type: "endGesture" })} toggleVisibility={key => setHidden(current => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; })} />
+          <SceneLayers labelMode={session.live_source?.label_mode} state={state} dispatch={dispatch} hidden={hidden} onGestureStart={() => dispatch({ type: "beginGesture" })} onGestureEnd={() => dispatch({ type: "endGesture" })} toggleVisibility={key => setHidden(current => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; })} />
           {outcome?.kind === "saved" && <p role="status">Se guardó la configuración {outcome.versionNumber}.</p>}
           {outcome?.kind === "invalid" && <p role="alert">No se guardó la configuración: {outcome.count === 1 ? "hay 1 error" : `hay ${outcome.count} errores`}. Los elementos afectados están marcados en rojo; el dibujo se conserva.</p>}
           {outcome?.kind === "error" && <p role="alert">{outcome.message}</p>}
           <SceneIssues state={state} dispatch={dispatch} />
           </div>
           <div className={styles.sidebarFooter}>
-          <button type="button" data-primary disabled={saving || state.drawing !== null} onClick={() => void handleSave()} className="flex items-center gap-2"><Save size={16} aria-hidden="true" />{saving ? "Guardando…" : "Guardar configuración"}</button>
+          <button type="button" data-primary disabled={saving || !hasChanges || state.drawing !== null} title={!hasChanges ? "No hay cambios para guardar" : undefined} onClick={() => void handleSave()} className="flex items-center gap-2"><Save size={16} aria-hidden="true" />{saving ? "Guardando…" : "Guardar configuración"}</button>
           </div>
         </aside>
       </fieldset>
-      <p className={styles.bottomStatus}>{state.isDirty ? "Cambios sin guardar" : baseNumber === null ? "Nueva configuración" : `Configuración ${baseNumber} guardada`} · {state.shops.length} zonas</p>
+      <p className={styles.bottomStatus}>{hasChanges ? "Cambios sin guardar" : baseNumber === null ? "Nueva configuración" : `Configuración ${baseNumber} guardada`} · {state.shops.length} zonas</p>
       </div>
     </AppShell>
   );

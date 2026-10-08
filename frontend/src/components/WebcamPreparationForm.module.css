@@ -1,15 +1,28 @@
-.form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 1.25rem; width: 100%; margin-top: 1.5rem; }
-.intro { grid-column: 1 / -1; margin: 0; color: var(--fs-muted); }
-.card { display: grid; align-content: start; gap: 1rem; min-width: 0; padding: 1.5rem; background: var(--fs-surface); border: 1px solid var(--fs-line); border-radius: 12px; }
-.form > [role="alert"] { grid-column: 1 / -1; }
-.card h2 { margin: 0 0 .25rem; font-size: 1rem; }
-.field { display: grid; gap: .5rem; min-width: 0; }
-.field input, .field select { width: 100%; min-height: 42px; }
-.field label { font-size: .85rem; }
-.deviceRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: .75rem; }
-.help { color: var(--fs-muted); margin: 0; font-size: .8rem; }
-.actions { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; padding: .25rem 0; }
-.actions span { color: var(--fs-muted); font-size: .8rem; max-width: 28rem; }
-.actions button { flex-shrink: 0; }
-@media (max-width: 900px) { .form { grid-template-columns: minmax(0, 1fr); } }
-@media (max-width: 600px) { .card { padding: 1rem; } .deviceRow { grid-template-columns: 1fr; } .deviceRow button { justify-self: start; } .actions { flex-direction: column; align-items: stretch; gap: .75rem; } }
+.form { padding: 24px; background: var(--fs-surface); border: 1px solid var(--fs-line); border-radius: 12px; box-shadow: 0 10px 25px #00000020; }
+.column { display: grid; align-content: start; gap: 20px; min-width: 0; }
+.column h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 14px; font-weight: 600; }
+.column h2 svg, .locationIcon { color: var(--fs-accent); }
+.field { display: grid; gap: 8px; min-width: 0; }
+.field label, .location label, .crossings legend { font-size: 13px; font-weight: 500; }
+.form input, .form select { width: 100%; min-height: 44px; border-radius: 8px; background: var(--fs-bg); color: var(--fs-ink); border: 1px solid var(--fs-line); }
+.form input::placeholder { color: var(--fs-muted); }
+.deviceRow { display: grid; grid-template-columns: minmax(0, 1fr) 44px; align-items: end; gap: 8px; }
+.refresh { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; background: var(--fs-bg); }
+.crossings, .location { margin: 0; padding: 0; border: 0; }
+.crossings legend { padding: 0; margin-bottom: 8px; }
+.segmented { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; background: var(--fs-bg); border: 1px solid var(--fs-line); border-radius: 9px; }
+.segmented button { display: flex; justify-content: center; align-items: center; gap: 7px; padding: 10px 6px; font-size: 12px; font-weight: 500; background: transparent; border-color: transparent; color: var(--fs-muted); }
+.segmented button svg { flex-shrink: 0; }
+.segmented button[aria-pressed="true"] { background: var(--fs-tint); border-color: var(--fs-accent); color: var(--fs-accent); }
+.help { color: var(--fs-muted); margin: 8px 0 0; font-size: 12px; line-height: 1.5; }
+.location { position: relative; }
+.locationIcon { position: absolute; top: 1px; left: 0; }
+.location label { padding-left: 23px; margin-bottom: 8px; }
+.location fieldset { background: var(--fs-bg); }
+.location fieldset label { padding-left: 0; }
+.actions { display: flex; align-items: center; justify-content: space-between; gap: 24px; border-top: 1px solid var(--fs-line); padding-top: 20px; margin-top: 24px; }
+.actions p { display: flex; align-items: flex-start; gap: 8px; color: var(--fs-muted); font-size: 12px; margin: 0; max-width: 340px; line-height: 1.5; }
+.actions p svg { flex-shrink: 0; margin-top: 1px; }
+.actions .primary { display: flex; justify-content: center; align-items: center; gap: 8px; flex-shrink: 0; padding: 10px 24px; background: var(--fs-primary); border-color: var(--fs-primary); border-radius: 8px; color: white; font-weight: 600; box-shadow: 0 1px 3px #00000020; }
+.actions .primary:hover:not(:disabled) { background: var(--fs-primary-hover); border-color: var(--fs-primary-hover); }
+@media (max-width: 640px) { .form { padding: 20px; } .actions { flex-direction: column; align-items: stretch; gap: 16px; } .actions p { max-width: none; } }

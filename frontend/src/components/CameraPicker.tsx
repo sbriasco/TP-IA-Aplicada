@@ -13,6 +13,7 @@ interface CameraPickerProps {
   terminology?: "camera" | "location";
   label?: string;
   createLegend?: string;
+  disclosureLabel?: string;
 }
 
 function errorMessage(error: unknown): string {
@@ -23,7 +24,7 @@ function byName(a: Camera, b: Camera): number {
   return a.name.localeCompare(b.name);
 }
 
-export function CameraPicker({ apiBaseUrl, value, onChange, compact = false, terminology = "camera", label, createLegend }: CameraPickerProps) {
+export function CameraPicker({ apiBaseUrl, value, onChange, compact = false, terminology = "camera", label, createLegend, disclosureLabel }: CameraPickerProps) {
   const location = terminology === "location";
   const id = useId();
   const [cameras, setCameras] = useState<Camera[]>([]);
@@ -107,7 +108,7 @@ export function CameraPicker({ apiBaseUrl, value, onChange, compact = false, ter
       </select>
       {loadError !== null && <p role="alert">{loadError}</p>}
 
-      {compact ? <details className={styles.disclosure}><summary>{location ? "Agregar una ubicación" : "Agregar una cámara"}</summary>{createFields}</details> : createFields}
+      {compact ? <details className={styles.disclosure}><summary>{disclosureLabel ?? (location ? "Agregar una ubicación" : "Agregar una cámara")}</summary>{createFields}</details> : createFields}
     </div>
   );
 }

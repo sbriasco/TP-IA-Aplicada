@@ -6,9 +6,9 @@ import { AppShell } from "../components/AppShell";
 import { CrossingChart } from "../components/CrossingChart";
 import { Link } from "../components/Link";
 import { PositionHeatmap } from "../components/PositionHeatmap";
-import { LiveDwellSummary } from "../components/LiveDwellSummary";
+import { Activity, ArrowLeft, CheckCircle2, ChevronDown, MapPinOff, VideoOff, AlertTriangle } from "lucide-react";
 import type { LiveResults } from "../types/live";
-import styles from "./LiveAnalysisPage.module.css";
+import styles from "./LiveResultsPage.module.css";
 
 interface LiveSamples { job_id: string; source_kind: "webcam"; time_basis: "capture";
   availability: "available" | "unavailable"; sample_count: number; returned_count: number;
@@ -71,50 +71,114 @@ export function LiveResultsPage({ jobId, apiBaseUrl = API_BASE_URL }: { jobId: s
   }
   const summary = result?.summary;
   const access = summary?.label_mode === "access";
-  return <AppShell title="Resultados de webcam" context="Resultados de webcam">
-    <Link href="/">Mis análisis</Link>
-    <p>Sin grabación · No representa personas únicas. El total suma cruces confirmados de la línea seleccionada.</p>
+  const dwell = result?.zone_dwell?.[result.selected_shop_id ?? ""];
+  const ended = result && ["completed", "failed", "cancelled"].includes(result.status);
+  const captureDate = result?.capture_started_at;
+  const dateLabel = captureDate && Number.isFinite(Date.parse(captureDate)) ? new Date(captureDate).toLocaleString("es-AR", {
+    day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+    timeZone: "America/Argentina/Buenos_Aires",
+  }) : "Fecha de inicio no disponible";
+  const quality = result && result.elapsed_capture_seconds > 0 ?
+    (result.observed_seconds / result.elapsed_capture_seconds * 100).toLocaleString("es-AR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " %" : "--";
+  function duration(value: number | null | undefined) {
+    if (value === undefined || value === null || value <= 0) return "--";
+    return value < .1 ? "< 0,1 s" : value.toLocaleString("es-AR", { maximumFractionDigits: 1 }) + " s";
+  }
+  function minuteTime(seconds: number) {
+    return captureDate && Number.isFinite(Date.parse(captureDate)) ? new Date(Date.parse(captureDate) + seconds * 1000)
+      .toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "America/Argentina/Buenos_Aires" }) : seconds.toFixed(0) + " s";
+  }
+  return <AppShell title="Reporte de análisis · Webcam en vivo" hideContext mainClassName={styles.main}
+    pageHeader={<header className={styles.header}>
+      <Link href="/" className={styles.back}><ArrowLeft size={15} aria-hidden="true" />Volver a mis análisis</Link>
+      <div className={styles.titleRow}><h1>Reporte de análisis · Webcam en vivo</h1>
+        {result && <time dateTime={captureDate ?? undefined}>{dateLabel}</time>}
+      </div>
+      {result && <div className={styles.badges}>
+        <span className={styles.success}><CheckCircle2 size={14} aria-hidden="true" />{ended ? "Captura finalizada" : "Captura en curso"}</span>
+        {!result.coverage_complete && <span className={styles.warning} tabIndex={0}
+          title={result.unknown_tail ? "Hay intervalos sin observaciones y un final desconocido; la duración corresponde al último checkpoint válido." : "Hubo pausas o interrupciones sin observaciones. Los intervalos sin cobertura no representan cero personas."}>
+          <AlertTriangle size={14} aria-hidden="true" />Cobertura parcial ({result.observed_seconds.toFixed(1)}s / {result.elapsed_capture_seconds.toFixed(1)}s observados)
+        </span>}
+        <span className={styles.neutral}><VideoOff size={14} aria-hidden="true" />Sin grabación local</span>
+        {!result.result_complete && <span className={styles.warning}>Resultados parciales</span>}
+        {result.unknown_tail && <span className={styles.warning}>Final desconocido</span>}
+        {!ended && <Link href={"/live/jobs/" + encodeURIComponent(jobId)}>Volver al análisis en vivo</Link>}
+      </div>}
+    </header>}>
     {error && <p role="alert">{error}</p>}
     {!result && !error && <p role="status">Cargando resultados…</p>}
     {result && <>
-      <p role="status">{result.result_complete ? "Análisis completo" : "Resultados parciales"}</p>
-      <LiveDwellSummary dwell={result.zone_dwell?.[result.selected_shop_id ?? ""]} />
-      {!["completed", "failed", "cancelled"].includes(result.status) && <Link href={`/live/jobs/${encodeURIComponent(jobId)}`}>Volver al análisis en vivo</Link>}
-      <p>Duración de captura guardada: {result.elapsed_capture_seconds.toFixed(1)} segundos · Observados: {result.observed_seconds.toFixed(1)} s · Sin cobertura: {result.missing_seconds.toFixed(1)} s</p>
-      {!result.coverage_complete && <p className={styles.warning}>Cobertura incompleta: hay intervalos sin observaciones.</p>}
-      {result.unknown_tail && <p className={styles.warning}>Final desconocido: la duración y las cifras corresponden al último checkpoint válido.</p>}
-      <label htmlFor={selectId}>Línea de conteo</label><select id={selectId} value={result.selected_shop_id ?? ""} onChange={(event) => setShopId(event.target.value)}>
-        {result.shops.map((shop) => <option key={shop.shop_id} value={shop.shop_id}>{shop.shop_name}</option>)}
-      </select>
-      {summary && <section className={styles.panel} aria-label="Cruces guardados"><dl className={styles.metrics}>
-        <div><dt>{access ? "Entradas" : "A → B"}</dt><dd>{access ? summary.entry_count : summary.a_to_b_count}</dd></div>
-        <div><dt>{access ? "Salidas" : "B → A"}</dt><dd>{access ? summary.exit_count : summary.b_to_a_count}</dd></div>
-        <div><dt>Total</dt><dd aria-label="Total de cruces">{summary.total_crossings}</dd></div>
-      </dl><CrossingChart minutes={result.minutes} summary={summary} captureStartedAt={result.capture_started_at} />
-        {result.next_bucket_cursor !== null && <button type="button" disabled={loadingMore} onClick={() => void moreMinutes()}>Cargar más minutos</button>}
-      </section>}
-      <section><h2>Interrupciones</h2>{result.interruptions.length === 0 ? <p>Sin interrupciones registradas.</p> :
-        <ul>{result.interruptions.map((gap) => <li key={gap.id}>{gap.start_seconds.toFixed(1)} s → {gap.end_known && gap.end_seconds !== null ? `${gap.end_seconds.toFixed(1)} s` : "Final desconocido"} ({gap.reason})</li>)}</ul>}
-        <p>Cruces sin confirmar descartados: {result.unconfirmed_crossings}</p>
-      </section>
-      <section><h2>Mapa de posiciones muestreadas</h2><p>Posiciones observadas sobre el frame de referencia. No mide visitantes únicos ni permanencia exacta.</p>
-        {sampleError && <p role="alert">{sampleError}</p>}
-        {samples?.samples.length ? <>
-          <div style={{ position: "relative", maxWidth: 960 }}><img style={{ width: "100%", display: "block" }}
-            alt="Frame de referencia de la escena" src={`${apiBaseUrl}/sessions/${encodeURIComponent(result.session_id)}/reference-frame`} />
+      <section aria-label="Indicadores de captura"><dl className={styles.metrics}>
+        <div className={styles.metric}><dt>Cruces totales</dt><dd aria-label="Total de cruces">{summary?.total_crossings ?? "--"}</dd>
+          <dd className={styles.metricNote}>{access ? "Entradas: " + (summary?.entry_count ?? "--") + " · Salidas: " + (summary?.exit_count ?? "--") :
+            "A → B: " + (summary?.a_to_b_count ?? "--") + " · B → A: " + (summary?.b_to_a_count ?? "--")}</dd></div>
+        <div className={styles.metric}><dt>Permanencia interna</dt><dd aria-label="Estadía promedio interna">{duration(dwell?.interior_average_seconds)}</dd>
+          <dd className={styles.metricNote}>{dwell?.interior_sample_count ? dwell.interior_sample_count + " visitas observadas" : "Sin tracks observados"}</dd></div>
+        <div className={styles.metric}><dt>Permanencia externa</dt><dd aria-label="Estadía promedio externa">{duration(dwell?.front_average_seconds)}</dd>
+          <dd className={styles.metricNote}>{dwell?.front_sample_count ? dwell.front_sample_count + " visitas observadas" : "Sin tracks observados"}</dd></div>
+        <div className={styles.metric}><dt>Calidad de captura</dt><dd aria-label="Calidad de captura">{quality}</dd>
+          <dd className={styles.metricNote}>{result.missing_seconds.toFixed(1)}s en pausa / gap</dd></div>
+      </dl></section>
+      <div className={styles.content}>
+        <section className={styles.panel} aria-labelledby={selectId + "-flow"}>
+          <header className={styles.panelHeader}><h2 id={selectId + "-flow"}>Flujo de cruces temporales</h2>
+            <div className={styles.lineSelect}><label htmlFor={selectId}>Línea:</label><select id={selectId} value={result.selected_shop_id ?? ""}
+              onChange={(event) => setShopId(event.target.value)} disabled={!result.shops.length}>
+              {!result.shops.length && <option value="">Sin líneas</option>}
+              {result.shops.map((shop) => <option key={shop.shop_id} value={shop.shop_id}>{shop.shop_name}</option>)}
+            </select></div></header>
+          {summary ? <CrossingChart minutes={result.minutes} summary={summary} captureStartedAt={captureDate} report /> :
+            <div className={styles.chartEmpty}>Sin cruces guardados para esta línea.</div>}
+          {result.next_bucket_cursor !== null && <button type="button" data-primary disabled={loadingMore} onClick={() => void moreMinutes()}>Cargar más minutos</button>}
+        </section>
+        <section className={styles.panel} aria-labelledby={selectId + "-map"}>
+          <header className={styles.panelHeader}><h2 id={selectId + "-map"}>Mapa de posiciones</h2></header>
+          {sampleError && <p role="alert">{sampleError}</p>}
+          {samples?.availability === "available" && samples.samples.length > 0 ? <figure className={styles.frame}>
+            <img alt="Frame de referencia de la escena" src={apiBaseUrl + "/sessions/" + encodeURIComponent(result.session_id) + "/reference-frame"} />
             <PositionHeatmap availability={samples.availability} samples={samples.samples} />
-          </div><p>{samples.returned_count} posiciones mostradas de {samples.sample_count} muestras guardadas; capacidad {samples.capacity}.</p>
-        </> : !sampleError && <p>No hay posiciones válidas guardadas para esta sesión.</p>}
-      </section>
-      <section><h2>Cruces individuales</h2>{eventError && <p role="alert">{eventError}</p>}
-        {events?.events.length === 0 && <p>No hay cruces confirmados para esta línea.</p>}
-        {events && events.events.length > 0 && <table><thead><tr><th>Captura (s)</th><th>Confirmación (s)</th><th>Sentido</th></tr></thead>
-          <tbody>{events.events.map((event) => <tr key={event.id}><td>{event.capture_timestamp_seconds.toFixed(2)}</td><td>{event.confirmed_at_capture_seconds.toFixed(2)}</td>
-            <td>{access ? event.direction === "entry" ? "Entrada" : "Salida" :
-              (event.direction === "entry") === (summary?.entry_direction === "a_to_b") ? "A → B" : "B → A"}</td></tr>)}</tbody></table>}
-        {events?.next_cursor && <button type="button" disabled={loadingMore} onClick={() => void moreEvents()}>Cargar más cruces</button>}
-      </section>
-      <p>El chat no está disponible para las sesiones de webcam.</p>
+          </figure> : !sampleError && <div className={styles.emptyMap}>
+            <MapPinOff size={32} strokeWidth={1.5} aria-hidden="true" />
+            <h3>{samples ? "Sin muestra de posiciones" : "Cargando posiciones…"}</h3>
+            <p>{!samples ? "Consultando la muestra guardada." : samples.availability === "unavailable" ?
+              "No hay una muestra de posiciones disponible para esta captura." : "No se registraron trayectorias continuas durante el lapso de captura."}</p>
+          </div>}
+        </section>
+      </div>
+      <details className={styles.diagnostics}>
+        <summary><Activity size={18} aria-hidden="true" /><span>Diagnóstico técnico de la captura (Interrupciones y descarte)</span><ChevronDown className={styles.chevron} size={18} aria-hidden="true" /></summary>
+        <div className={styles.diagnosticBody}>
+          <dl className={styles.audit}>
+            <div><dt>Intervalos sin cobertura</dt><dd>{result.interruptions.length ? <ul>{result.interruptions.map(gap =>
+              <li key={gap.id}>{gap.start_seconds.toFixed(1)} s ➔ {gap.end_known && gap.end_seconds !== null ? gap.end_seconds.toFixed(1) + " s" : "Final desconocido"} <code>({gap.reason === "operator_pause" ? "Pausa del operador" : gap.reason})</code></li>)}</ul> : "Sin interrupciones registradas"}</dd></div>
+            <div><dt>Cruces sin confirmar descartados</dt><dd>{result.unconfirmed_crossings}</dd></div>
+            <div><dt>Registro de eventos</dt><dd>{summary ? summary.total_crossings + " cruces individuales" : "Sin datos"}</dd></div>
+            <div><dt>Muestra de posiciones</dt><dd>{samples ? samples.returned_count + " posiciones mostradas de " + samples.sample_count + " muestras guardadas; capacidad " + samples.capacity + "." : "No disponible"}</dd></div>
+            <div><dt>Asistente analítico</dt><dd>Asistente analítico no disponible para sesiones en tiempo real.</dd></div>
+          </dl>
+          <p className={styles.note}>No representa personas únicas. El total suma cruces confirmados de la línea seleccionada. La permanencia usa visitas de duración positiva, incluidas las visitas en curso; los períodos sin seguimiento cortan la continuidad.</p>
+          {result.unknown_tail && <p className={styles.warning}>Final desconocido: la duración y las cifras corresponden al último checkpoint válido.</p>}
+          <section aria-label="Registro de cruces"><h3>Cruces individuales</h3>
+            {eventError && <p role="alert">{eventError}</p>}
+            {!events && !eventError && <p role="status">Cargando cruces…</p>}
+            {events?.events.length === 0 && <p className={styles.note}>No hay cruces confirmados para esta línea.</p>}
+            {events && events.events.length > 0 && <div className={styles.tableScroll}><table><thead><tr><th>Captura (s)</th><th>Confirmación (s)</th><th>Sentido</th></tr></thead>
+              <tbody>{events.events.map(event => <tr key={event.id}><td>{event.capture_timestamp_seconds.toFixed(2)}</td><td>{event.confirmed_at_capture_seconds.toFixed(2)}</td>
+                <td>{access ? event.direction === "entry" ? "Entrada" : "Salida" :
+                  (event.direction === "entry") === (summary?.entry_direction === "a_to_b") ? "A → B" : "B → A"}</td></tr>)}</tbody></table></div>}
+            {events?.next_cursor && <button type="button" data-primary disabled={loadingMore} onClick={() => void moreEvents()}>Cargar más cruces</button>}
+          </section>
+          {summary && result.minutes.length > 0 && <section aria-label="Cobertura por minuto"><h3>Datos y cobertura por minuto</h3>
+            <p className={styles.note}>El minuto en curso puede cambiar al confirmarse un cruce. Los intervalos sin análisis no representan cero personas.</p>
+            <div className={styles.tableScroll}><table><thead><tr><th>Minuto</th><th>{access ? "Entradas" : "A → B"}</th><th>{access ? "Salidas" : "B → A"}</th><th>Cobertura</th></tr></thead>
+              <tbody>{result.minutes.map(minute => <tr key={minute.bucket_index}><th>{minuteTime(minute.start_seconds)}</th>
+                <td>{minute.observed_seconds === 0 ? "Sin datos" : access || summary.entry_direction === "a_to_b" ? minute.entries : minute.exits}</td>
+                <td>{minute.observed_seconds === 0 ? "Sin datos" : access || summary.entry_direction === "a_to_b" ? minute.exits : minute.entries}</td>
+                <td>{minute.coverage_incomplete || minute.unknown_tail ? "Cobertura incompleta" : minute.is_open ? "Minuto en curso" : "Minuto cerrado"}</td></tr>)}</tbody></table></div>
+          </section>}
+        </div>
+      </details>
     </>}
   </AppShell>;
 }

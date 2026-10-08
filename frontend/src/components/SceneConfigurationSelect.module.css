@@ -1,0 +1,17 @@
+.control { flex: 1; min-width: 0; }
+.trigger { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 54px; padding: 10px 12px; text-align: left; background: var(--fs-raised); border-color: var(--fs-line); font-weight: 400; }
+.trigger[aria-expanded="true"] { border-color: var(--fs-accent); background: var(--fs-tint); }
+.icon { flex-shrink: 0; color: var(--fs-muted); }
+.value { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.value strong { font-size: 13px; font-weight: 600; color: var(--fs-ink); }
+.value small { font-size: 11px; color: var(--fs-muted); }
+.badge { flex-shrink: 0; padding: 3px 6px; font-size: 10px; font-weight: 500; color: var(--fs-accent); background: var(--fs-tint); border: 1px solid var(--fs-line); border-radius: 5px; }
+.chevron, .chevronOpen { flex-shrink: 0; color: var(--fs-muted); }
+.chevronOpen { transform: rotate(180deg); }
+.menu { position: fixed; z-index: 100; padding: 6px; background: var(--fs-surface); color: var(--fs-ink); border: 1px solid var(--fs-line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 18%); overflow-y: auto; overscroll-behavior: contain; }
+.option { display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 10px; border: 1px solid transparent; border-radius: 6px; cursor: pointer; }
+.option + .option { margin-top: 4px; }
+.option[aria-selected="true"] { background: var(--fs-tint); }
+.option[data-active="true"] { border-color: var(--fs-accent); background: var(--fs-raised); }
+.check { display: flex; flex-shrink: 0; width: 17px; color: var(--fs-accent); }
+@media (max-width: 480px) { .trigger { gap: 6px; padding: 8px; } .trigger > .icon { display: none; } .badge { padding: 3px 4px; font-size: 9px; } .option { gap: 6px; padding: 8px; } }

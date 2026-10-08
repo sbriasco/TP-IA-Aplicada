@@ -118,11 +118,15 @@ describe("SessionResultsPage", () => {
 
     await act(async () => root.render(<SessionResultsPage sessionId="s-1" apiBaseUrl={API} />));
 
-    expect(container.textContent).toContain("El archivo no está en este equipo.");
-    expect(container.querySelector("img")?.getAttribute("src")).toBe(`${API}/sessions/s-1/reference-frame`);
+    expect(container.textContent).not.toContain("El archivo no está en este equipo.");
+    expect(container.textContent).not.toContain("No hay muestra de posiciones en este equipo.");
+    expect(container.textContent).toContain("Zonas aplicadas: Versión 1");
+    expect(container.textContent).not.toContain("Valores de toda la sesión. El tramo seleccionado no cambia estas cifras.");
+    expect(container.querySelector("image")?.getAttribute("href")).toBe(`${API}/sessions/s-1/reference-frame`);
     expect(container.textContent).toContain("Tráfico");
     expect(container.querySelector("h1")?.textContent).toBe("Mañana");
-    expect(container.querySelector("header")?.textContent).toContain("Resultados");
+    expect(container.querySelector("header")?.textContent).not.toContain("Resultados");
+    expect(container.querySelector('nav[aria-label="Sesión"] a[aria-current="page"]')?.textContent).toContain("Resultados");
     expect(Array.from(container.querySelectorAll("p")).some((node) => node.textContent === "s-1")).toBe(false);
   });
 

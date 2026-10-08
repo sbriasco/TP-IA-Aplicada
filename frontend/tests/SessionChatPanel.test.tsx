@@ -166,7 +166,7 @@ describe("SessionChatPanel", () => {
     vi.stubGlobal("fetch", vi.fn(async () => json(reply("answered", "El tráfico es 17."))));
     await act(async () => root.render(<SessionChatPanel apiBaseUrl={API} sessionId="s-1" shopId="shop-1" />));
     expect(container.textContent).toContain("Agente FlowSight");
-    expect(container.textContent).toContain("Asistente de IA");
+    expect(container.textContent).toContain("Consultas sobre este análisis");
     await ask(container, "¿cuál es el tráfico?");
     await ask(container, "¿cuál fue el horario pico?");
     const log = container.querySelector('[role="log"]');

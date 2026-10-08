@@ -31,10 +31,10 @@ test(`webcam fake: preparación, editor, vivo, ${recover ? "recuperación confir
     await page.getByLabel("Nombre de la sesión").fill("Expo webcam");
     await page.getByLabel("Cámara", { exact: true }).selectOption(camera.id);
     await expect(page.getByLabel("Webcam", { exact: true }).getByRole("option", { name: "Webcam simulada (prueba)", exact: true })).toHaveCount(1);
-    await page.getByRole("button", { name: "Actualizar cámaras", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Preparar webcam", exact: true })).toBeEnabled();
+    await page.getByRole("button", { name: "Actualizar dispositivos", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Preparar webcam y continuar", exact: true })).toBeEnabled();
     const preparedResponse = page.waitForResponse((response) => response.url().endsWith("/live/sessions") && response.request().method() === "POST");
-    await page.getByRole("button", { name: "Preparar webcam", exact: true }).click();
+    await page.getByRole("button", { name: "Preparar webcam y continuar", exact: true }).click();
     expect((await preparedResponse).status()).toBe(201);
     await page.waitForURL(/\/sessions\/[^/]+\/live$/);
     const sessionId = new URL(page.url()).pathname.split("/")[2];

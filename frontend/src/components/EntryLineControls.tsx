@@ -8,6 +8,7 @@ interface EntryLineControlsProps {
   state: EditorState;
   dispatch: Dispatch<EditorAction>;
   compact?: boolean;
+  labelMode?: "directions" | "access";
 }
 
 const OPTIONS: { value: EntryDirection; label: string }[] = [
@@ -16,7 +17,7 @@ const OPTIONS: { value: EntryDirection; label: string }[] = [
 ];
 
 /** Sentido de entrada de la línea dla zona seleccionada (T043, FR-032). */
-export function EntryLineControls({ state, dispatch, compact = false }: EntryLineControlsProps) {
+export function EntryLineControls({ state, dispatch, compact = false, labelMode = "directions" }: EntryLineControlsProps) {
   const id = useId();
   const shopIndex = state.selection?.shopIndex ?? null;
   const shop = shopIndex === null ? undefined : state.shops[shopIndex];
@@ -24,6 +25,12 @@ export function EntryLineControls({ state, dispatch, compact = false }: EntryLin
 
   const name = shopDisplayName(shop.name, shopIndex);
   const line = shop.entry_line;
+
+  if (labelMode === "access") return <fieldset disabled={line === null} className="!m-0 !p-2 !rounded-lg border-[var(--fs-line)]">
+    <legend className="!text-xs">Entrada / Salida</legend>
+    <p className="text-xs">La flecha indica la entrada; el sentido opuesto cuenta como salida.</p>
+    <button type="button" className="w-full !text-xs" onClick={() => dispatch({ type: "setEntryDirection", shopIndex, direction: line?.entry_direction === "a_to_b" ? "b_to_a" : "a_to_b" })}>Invertir entrada y salida</button>
+  </fieldset>;
 
   if (compact) return <fieldset disabled={line === null} className="!m-0 !p-2 !rounded-lg border-[var(--fs-line)]"><legend className="!text-xs">Sentido de entrada</legend><div className="flex gap-2">{OPTIONS.map(option => <button key={option.value} type="button" className="flex-1 !min-h-8 !py-2 !text-xs" aria-label={option.label} aria-pressed={line?.entry_direction === option.value} onClick={() => dispatch({ type: "setEntryDirection", shopIndex, direction: option.value })}>{option.value === "a_to_b" ? "A → B" : "B → A"}</button>)}</div></fieldset>;
 

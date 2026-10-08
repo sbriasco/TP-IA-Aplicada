@@ -204,6 +204,65 @@ def _interrupted_job(database, job_id, machine_id=None):
     return job, state
 
 
+def _manual_control_job(database, job_id, machine_id, now):
+    # Same lock order as checkpoint/resume: machine, job, state.
+    machine = database.scalar(
+        select(WorkerMachine)
+        .where(WorkerMachine.machine_id == machine_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    job = database.scalar(
+        select(ProcessingJob)
+        .where(ProcessingJob.id == job_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if (
+        job is None
+        or job.kind != JobKind.LIVE_ANALYSIS
+        or get_active_session(database, job.session_id) is None
+    ):
+        raise LiveMachineError("not_found")
+    state = database.scalar(
+        select(LiveAnalysisState)
+        .where(LiveAnalysisState.job_id == job_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if state is None or state.machine_id != machine_id:
+        raise LiveMachineError("live_wrong_machine")
+    if job.status != JobStatus.PROCESSING or state.stop_requested_at is not None:
+        raise LiveMachineError("live_stopping")
+    if machine is None or machine.heartbeat_at <= now - timedelta(seconds=5):
+        raise LiveMachineError("worker_unavailable")
+    return job, state
+
+
+def request_live_pause(database, job_id, now, *, machine_id):
+    job, state = _manual_control_job(database, job_id, machine_id, now)
+    if state.capture_status in {"pausing", "paused"}:
+        return job
+    if state.capture_status != "connected":
+        raise LiveMachineError("live_not_connected")
+    state.pause_requested_at = now
+    state.paused_at = state.resume_requested_at = None
+    state.capture_status = "pausing"
+    database.flush()
+    return job
+
+
+def request_live_continue(database, job_id, now, *, machine_id):
+    job, state = _manual_control_job(database, job_id, machine_id, now)
+    if state.resume_requested_at is not None:
+        return job
+    if state.capture_status != "paused" or state.paused_at is None:
+        raise LiveMachineError("live_not_paused")
+    state.resume_requested_at = now
+    database.flush()
+    return job
+
+
 def request_live_retry(database, job_id, now, *, machine_id=None):
     job, state = _interrupted_job(database, job_id, machine_id)
     state.retry_requested_at = now

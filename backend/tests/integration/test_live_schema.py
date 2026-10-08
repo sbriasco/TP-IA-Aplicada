@@ -39,6 +39,37 @@ def live_database(monkeypatch: pytest.MonkeyPatch):
 BACKEND = Path(__file__).resolve().parents[2]
 
 
+def test_pause_migration_preserves_checkpoint_and_blocks_active_downgrade(live_job):
+    from flowsight.db.models import JobStatus, LiveAnalysisState
+    from flowsight.services.jobs import transition_job
+
+    factory, job_id, _ = live_job
+    config = Config(BACKEND / "alembic.ini")
+    with factory.begin() as database:
+        transition_job(
+            database, job_id=job_id, target=JobStatus.PROCESSING, occurred_at=datetime.now(UTC)
+        )
+        state = database.get(LiveAnalysisState, job_id)
+        state.capture_status = "paused"
+        state.pause_requested_at = state.paused_at = datetime.now(UTC)
+        state.elapsed_capture_seconds = 120
+        state.zone_dwell = {"sample": {"interior_average_seconds": 3}}
+    with pytest.raises(RuntimeError, match="Stop paused webcam jobs"):
+        command.downgrade(config, "0011_live_zone_dwell")
+    with factory.begin() as database:
+        database.get(LiveAnalysisState, job_id).capture_status = "ended"
+        transition_job(
+            database, job_id=job_id, target=JobStatus.COMPLETED, occurred_at=datetime.now(UTC)
+        )
+    command.downgrade(config, "0011_live_zone_dwell")
+    with factory() as database:
+        row = database.execute(
+            text("SELECT elapsed_capture_seconds,zone_dwell FROM live_analysis_states")
+        ).one()
+        assert row[0] == 120 and row[1]["sample"]["interior_average_seconds"] == 3
+    command.upgrade(config, "head")
+
+
 @pytest.mark.parametrize(
     "violation",
     [

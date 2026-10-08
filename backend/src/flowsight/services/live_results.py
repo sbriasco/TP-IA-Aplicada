@@ -106,13 +106,16 @@ def persist_live_checkpoint(
                     reason="analysis_gap",
                 )
             )
-        elif segment_reason == "reconnected":
+        elif segment_reason in {"reconnected", "operator_resume"}:
             interruption = database.scalar(
                 select(LiveInterruption)
                 .where(
                     LiveInterruption.job_id == job_id,
                     LiveInterruption.end_known.is_(False),
-                    LiveInterruption.reason == "capture_lost",
+                    LiveInterruption.reason
+                    == (
+                        "operator_pause" if segment_reason == "operator_resume" else "capture_lost"
+                    ),
                 )
                 .order_by(LiveInterruption.start_seconds.desc())
             )
@@ -173,18 +176,33 @@ def persist_live_checkpoint(
             )
         )
     ending_capture_seconds = getattr(frame, "ending_capture_seconds", None)
-    state.capture_status = "stopping" if ending_capture_seconds is not None else "connected"
+    new_segment = frame.segment_index > state.current_segment_index
+    manual_resume = (
+        new_segment
+        and getattr(frame, "segment_reason", None) == "operator_resume"
+        and state.resume_confirmed_at is not None
+    )
+    if ending_capture_seconds is not None or state.stop_requested_at is not None:
+        state.capture_status = "stopping"
+    elif state.pause_requested_at is not None and not manual_resume:
+        # A valid in-flight frame may finish after pause was requested.
+        state.capture_status = "paused" if state.paused_at else "pausing"
+    else:
+        state.capture_status = "connected"
+    if manual_resume:
+        state.pause_requested_at = state.paused_at = state.resume_requested_at = None
     if ending_capture_seconds is not None:
         for interruption in database.scalars(
             select(LiveInterruption).where(
                 LiveInterruption.job_id == job_id,
                 LiveInterruption.end_known.is_(False),
-                LiveInterruption.reason == "capture_lost",
+                LiveInterruption.reason.in_(("capture_lost", "operator_pause")),
             )
         ):
             interruption.end_seconds = ending_capture_seconds
             interruption.end_known = True
-    state.resume_confirmed_at = None
+    if new_segment or ending_capture_seconds is not None:
+        state.resume_confirmed_at = None
     if bucket_rows:
         values = [
             {
@@ -214,7 +232,9 @@ def persist_live_checkpoint(
     if zone_dwell is not None:
         state.zone_dwell = zone_dwell
     state.elapsed_capture_seconds = (
-        frame.timestamp_seconds if ending_capture_seconds is None else ending_capture_seconds
+        (getattr(frame, "checkpoint_capture_seconds", None) or frame.timestamp_seconds)
+        if ending_capture_seconds is None
+        else ending_capture_seconds
     )
     state.last_capture_sequence = frame.sequence
     state.last_analyzed_sequence = frame.sequence
@@ -383,6 +403,7 @@ def load_live_results(database, job_id, *, shop_id=None, bucket_cursor=None):
         "source_kind": "webcam",
         "status": job.status.value,
         "capture_status": state.capture_status,
+        "resume_requested": state.resume_requested_at is not None,
         "result_complete": job.result_complete,
         "coverage_complete": state.coverage_complete,
         "unknown_tail": state.unknown_tail,

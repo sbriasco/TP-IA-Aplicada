@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { lazy, Suspense } from "react";
 
+import { Camera, Layers, ChevronRight } from "lucide-react";
+import { ScenePreview } from "../components/ScenePreview";
+
 import { API_BASE_URL } from "../api/config";
 import { ApiRequestError } from "../api/http";
 import {
@@ -22,6 +25,7 @@ import { PositionHeatmap } from "../components/PositionHeatmap";
 import { SessionChatPanel } from "../components/SessionChatPanel";
 import { Link } from "../components/Link";
 import { MetricCard } from "../components/MetricCard";
+import { Modal } from "../components/Modal";
 import { VideoTimeRange } from "../components/VideoTimeRange";
 import { presenceSeries } from "../flow/presenceSeries";
 import { EVENT_NAME, METRIC_NAME, peakCaption } from "../presentation/metrics";
@@ -42,6 +46,7 @@ export function SessionResultsPage({
   sessionId,
   apiBaseUrl = API_BASE_URL,
 }: SessionResultsPageProps) {
+  const [eventsOpen, setEventsOpen] = useState(false);
   const [row, setRow] = useState<ProcessedSession | null>(null);
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [shops, setShops] = useState<SceneShop[]>([]);
@@ -56,6 +61,7 @@ export function SessionResultsPage({
 
   useEffect(() => {
     let active = true;
+    setEventsOpen(false);
     Promise.all([listProcessedSessions(apiBaseUrl), getSession(apiBaseUrl, sessionId)])
       .then(([rows, detail]) => {
         if (!active) return;
@@ -138,8 +144,6 @@ export function SessionResultsPage({
     };
   }, [apiBaseUrl, row?.job_id, row?.result_complete]);
 
-  const videoMissing =
-    session?.video?.availability === "missing" || session?.video?.availability === "mismatch";
   const finishedBadly = row?.status === "failed" || row?.status === "cancelled";
   const inProgress = row?.status === "pending" || row?.status === "processing";
   const durationSeconds = session?.video?.duration_seconds ?? 0;
@@ -148,14 +152,13 @@ export function SessionResultsPage({
 
   const frame = session?.reference_frame;
   return (
-    <AppShell title={session?.name ?? "Resultados"} context="Resultados" sessionId={sessionId} canEdit={session?.reference_frame != null}>
+    <AppShell viewport={row?.result_complete === true && row.scene_version_id !== null && !finishedBadly} hideContext mainClassName={styles.main} title={session?.name ?? "Resultados"} context="Resultados" sessionId={sessionId} canEdit={session?.reference_frame != null}>
       {error !== null && <p role="alert">{error}</p>}
       {session === null && error === null && <p role="status">Cargando resultados…</p>}
-      {videoMissing && <p className={styles.notice}>El archivo no está en este equipo.</p>}
       {session !== null && (
         <div className={styles.summary}>
-          <p>{session.camera.name} · {session.video?.original_filename ?? "Sesión sintética"}</p>
-          {row?.version_number != null && <span>Escena · versión {row.version_number}</span>}
+          <p><Camera size={15} aria-hidden="true" />{session.camera.name} · {session.video?.original_filename ?? "Sesión sintética"}</p>
+          {row?.version_number != null && <span><Layers size={14} aria-hidden="true" />Zonas aplicadas: Versión {row.version_number}</span>}
         </div>
       )}
       {session !== null && row === null && error === null && <p className={styles.notice}>Esta sesión todavía no tiene un análisis. Configurá la escena e iniciá el procesamiento desde el detalle.</p>}
@@ -178,7 +181,7 @@ export function SessionResultsPage({
         <div className={styles.analytics}>
           <section className={styles.overview} aria-label="Indicadores de la sesión">
             <div className={styles.sectionHeading}>
-              <div><h2>Indicadores de la zona</h2><p>Valores de toda la sesión. El tramo seleccionado no cambia estas cifras.</p></div>
+              <h2>Indicadores de la zona</h2>
               {shops.length > 0 && <label className={styles.shop}>Zona
                 <select aria-label="Zona" value={shopId ?? ""} onChange={(event) => setShopId(event.target.value)}>
                   {shops.map((shop) => <option key={shop.shop_id} value={shop.shop_id}>{shop.name}</option>)}
@@ -186,14 +189,17 @@ export function SessionResultsPage({
               </label>}
             </div>
             {metrics === null ? <p role="status">Cargando indicadores…</p> : <>
-              <ul className={styles.metrics}>{metrics.metrics.filter((metric) => PRIMARY_CODES.has(metric.code)).map((metric) => <MetricCard key={metric.code} metric={metric} />)}</ul>
-              <details className={styles.moreMetrics}><summary>Ver todos los indicadores</summary><ul className={styles.metrics}>{metrics.metrics.filter((metric) => !PRIMARY_CODES.has(metric.code)).map((metric) => <MetricCard key={metric.code} metric={metric} />)}</ul></details>
+              <ul className={`${styles.metrics} grid grid-cols-2 lg:grid-cols-4 gap-4`}>{metrics.metrics.filter((metric) => PRIMARY_CODES.has(metric.code)).map((metric) => <MetricCard key={metric.code} metric={metric} prominent />)}</ul>
+              <details className={styles.moreMetrics}><summary>Ver todos los indicadores</summary><ul className={styles.metrics}>{metrics.metrics.filter((metric) => !PRIMARY_CODES.has(metric.code)).map((metric) => <MetricCard key={metric.code} metric={metric} prominent />)}</ul></details>
             </>}
           </section>
           <div className={styles.analysisGrid}>
-            <section className={styles.panel} aria-labelledby="flow-title">
+            <section className={`${styles.panel} ${styles.flowPanel}`} aria-labelledby="flow-title">
               <h2 id="flow-title">Flujo temporal</h2>
               <p className={styles.description}>Tracks en el área externa en cada segundo. Sube al entrar y baja al salir.</p>
+              <Suspense fallback={<p role="status">Cargando gráfico…</p>}><FlowChart fit points={series} fromSeconds={fromSeconds} toSeconds={rangeEnd} /></Suspense>
+              <section className={styles.chartFooter} aria-label="Tramo temporal">
+                {metrics !== null && <p className={styles.peak}>{peakCaption(metrics.peak.start_seconds, metrics.peak.track_count, durationSeconds)}</p>}
               <VideoTimeRange
                 durationSeconds={durationSeconds}
                 fromSeconds={fromSeconds}
@@ -201,38 +207,43 @@ export function SessionResultsPage({
                 onFromChange={setFromSeconds}
                 onToChange={setToSeconds}
               />
-              <details className={styles.filterHelp}><summary>Alcance del tramo</summary><p className={styles.filterNote}>El tramo recorta este gráfico y los hechos. Si se pierde el seguimiento, esa persona no sigue contando. Los indicadores de arriba no cambian.</p></details>
-              {metrics !== null && <p className={styles.peak}>{peakCaption(metrics.peak.start_seconds, metrics.peak.track_count, durationSeconds)} <span>· Toda la sesión</span></p>}
-              <Suspense fallback={<p role="status">Cargando gráfico…</p>}><FlowChart points={series} fromSeconds={fromSeconds} toSeconds={rangeEnd} /></Suspense>
+                <details className={styles.filterHelp}><summary>Alcance del tramo</summary><p className={styles.filterNote}>El tramo recorta el gráfico y los hechos. Los indicadores corresponden a toda la sesión. Si se pierde el seguimiento, ese track deja de contar.</p></details>
+              </section>
+
             </section>
-            <section className={styles.panel} aria-labelledby="scene-title">
+            <div className={styles.sceneColumn}>
+            <section className={`${styles.panel} ${styles.scenePanel}`} aria-labelledby="scene-title">
               <h2 id="scene-title">Distribución en la escena</h2>
-              <p className={styles.description}>Muestra de posiciones de toda la sesión sobre el frame de referencia.</p>
+              <p className={styles.description}>Zonas aplicadas sobre el frame de referencia.</p>
               {frame != null ? <figure className={styles.frame}>
-                <div className={styles.frameImage}>
-                  <img src={referenceFrameUrl(apiBaseUrl, frame)} alt="Frame de referencia" />
+                <div className={styles.frameViewport}><div className={styles.frameImage} style={{ aspectRatio: `${frame.width} / ${frame.height}`, width: `min(100%, ${frame.width / frame.height * 100}cqh)` }}>
+                  <ScenePreview apiBaseUrl={apiBaseUrl} versionId={row.scene_version_id} frameUrl={referenceFrameUrl(apiBaseUrl, frame)} width={frame.width} height={frame.height} label="Frame de referencia con zonas aplicadas" showConfigurationBadge={false} />
                   {positions?.availability === "available" && positions.samples.length > 0 && <PositionHeatmap availability={positions.availability} samples={positions.samples} />}
-                </div>
-                <figcaption>{positions === null ? "Cargando muestra de posiciones…" : positions.availability === "unavailable" || positions.samples.length === 0 ? "No hay muestra de posiciones en este equipo." : "Mapa de calor · posiciones observadas, no personas únicas"}</figcaption>
+                </div></div>
+                {positions?.availability === "available" && positions.samples.length > 0 && <figcaption>Mapa de calor · posiciones observadas, no personas únicas</figcaption>}
               </figure> : <p className={styles.description}>Esta sesión no tiene frame de referencia.</p>}
             </section>
+          <button type="button" className={styles.eventPanel} aria-haspopup="dialog" onClick={() => setEventsOpen(true)}>
+            <span id="events-title">Hechos del análisis <span className={styles.count}>{events.length} hechos</span></span>
+            <ChevronRight size={16} aria-hidden="true" />
+          </button>
+            </div>
+
           </div>
-          <details className={styles.eventPanel}>
-            <summary id="events-title">Hechos del análisis <span className={styles.count}>{events.length} hechos</span></summary>
-            <p className={styles.description}>Eventos de la zona dentro del tramo seleccionado.</p>
-            {events.length === 0 && <p className={styles.description}>No hay hechos registrados en este tramo.</p>}
-            <ul className={styles.events} aria-label="Hechos">{events.map((event, index) => (
-              <li key={`${event.track_id}-${event.kind}-${event.video_timestamp_seconds}-${index}`}>
-                <span>{EVENT_NAME[event.kind] ?? "Evento registrado"}</span>
-                <span className={styles.track}>Track {event.track_id}</span>
-                <span>{event.video_timestamp_seconds} s</span>
-              </li>
-            ))}</ul>
-          </details>
         </div>
           <SessionChatPanel key={sessionId} apiBaseUrl={apiBaseUrl} sessionId={sessionId} shopId={shopId} shopName={shops.find((shop) => shop.shop_id === shopId)?.name} />
         </div>
       )}
+      {eventsOpen && <Modal wide title="Hechos del análisis" subtitle={`${events.length} hechos · zona seleccionada · ${fromSeconds}–${rangeEnd} s`} onClose={() => setEventsOpen(false)}>
+        {events.length === 0 ? <p className={styles.description}>No hay hechos registrados en este tramo.</p> : <div className={styles.eventsTableWrap}>
+          <table className={styles.eventsTable} aria-label="Hechos del análisis">
+            <thead><tr><th scope="col">Evento</th><th scope="col">Track</th><th scope="col">Tiempo del video</th></tr></thead>
+            <tbody>{events.map((event, index) => <tr key={`${event.track_id}-${event.kind}-${event.video_timestamp_seconds}-${index}`}>
+              <td>{EVENT_NAME[event.kind] ?? "Evento registrado"}</td><td className={styles.track}>Track {event.track_id}</td><td>{event.video_timestamp_seconds} s</td>
+            </tr>)}</tbody>
+          </table>
+        </div>}
+      </Modal>}
     </AppShell>
   );
 }

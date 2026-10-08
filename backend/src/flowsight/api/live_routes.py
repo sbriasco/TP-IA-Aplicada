@@ -20,6 +20,8 @@ from flowsight.db.models import Camera, LiveAnalysisState, LiveSource, WorkerMac
 from flowsight.services.live_jobs import (
     LiveMachineError,
     release_reservation,
+    request_live_continue,
+    request_live_pause,
     request_live_resume,
     request_live_retry,
     request_live_stop,
@@ -279,6 +281,32 @@ def retry(job_id: uuid.UUID, request: Request):
             # publish a fresh nonce between commit and this invalidation.
             request.app.state.live_checks.expire_job(job_id)
         return data
+    except LiveMachineError as error:
+        raise live_error(error) from None
+    except SQLAlchemyError:
+        raise live_error(LiveMachineError("database_unavailable")) from None
+
+
+@router.post("/jobs/{job_id}/live/pause", status_code=202)
+def pause(job_id: uuid.UUID, request: Request):
+    try:
+        with request.app.state.session_factory.begin() as database:
+            request_live_pause(database, job_id, datetime.now(UTC), machine_id=machine_id(request))
+        return {"job_id": str(job_id), "pause_requested": True}
+    except LiveMachineError as error:
+        raise live_error(error) from None
+    except SQLAlchemyError:
+        raise live_error(LiveMachineError("database_unavailable")) from None
+
+
+@router.post("/jobs/{job_id}/live/continue", status_code=202)
+def continue_capture(job_id: uuid.UUID, request: Request):
+    try:
+        with request.app.state.session_factory.begin() as database:
+            request_live_continue(
+                database, job_id, datetime.now(UTC), machine_id=machine_id(request)
+            )
+        return {"job_id": str(job_id), "resume_requested": True}
     except LiveMachineError as error:
         raise live_error(error) from None
     except SQLAlchemyError:

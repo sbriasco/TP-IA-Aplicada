@@ -770,7 +770,7 @@ class LiveAnalysisState(_LiveJobColumns, Base):
         CheckConstraint(
             "capture_status IN "
             "('starting','connected','interrupted','awaiting_confirmation',"
-            "'stopping','ended')"
+            "'pausing','paused','stopping','ended')"
         ),
         CheckConstraint("elapsed_capture_seconds >= 0 AND last_capture_sequence >= 0"),
         CheckConstraint("current_segment_index >= 0 AND revision >= 0"),
@@ -791,6 +791,9 @@ class LiveAnalysisState(_LiveJobColumns, Base):
     stop_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     retry_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     resume_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    pause_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resume_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     checkpoint_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revision: Mapped[int] = mapped_column(BigInteger, default=0)
     coverage_complete: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -818,7 +821,7 @@ class LiveCaptureSegment(_LiveJobColumns, Base):
         CheckConstraint(
             "first_sequence >= 0 AND (last_sequence IS NULL OR last_sequence >= first_sequence)"
         ),
-        CheckConstraint("reason IN ('initial','reconnected','analysis_gap')"),
+        CheckConstraint("reason IN ('initial','reconnected','analysis_gap','operator_resume')"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -841,7 +844,7 @@ class LiveInterruption(_LiveJobColumns, Base):
         CheckConstraint("end_known = (end_seconds IS NOT NULL)"),
         CheckConstraint(
             "reason IN ('capture_lost','analysis_gap','awaiting_confirmation',"
-            "'worker_interrupted','database_unavailable')"
+            "'worker_interrupted','database_unavailable','operator_pause')"
         ),
     )
 

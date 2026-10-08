@@ -63,6 +63,14 @@ export async function stopWebcam(base: string, jobId: string): Promise<void> {
   await requestJson<unknown>(`${base}/jobs/${encodeURIComponent(jobId)}/live/stop`, { method: "POST" });
 }
 
+export async function pauseWebcam(base: string, jobId: string): Promise<void> {
+  await requestJson<unknown>(`${base}/jobs/${encodeURIComponent(jobId)}/live/pause`, { method: "POST" });
+}
+
+export async function continueWebcam(base: string, jobId: string): Promise<void> {
+  await requestJson<unknown>(`${base}/jobs/${encodeURIComponent(jobId)}/live/continue`, { method: "POST" });
+}
+
 export async function retryWebcam(base: string, jobId: string): Promise<void> {
   await requestJson<unknown>(`${base}/jobs/${encodeURIComponent(jobId)}/live/retry`, { method: "POST" });
 }

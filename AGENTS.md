@@ -58,6 +58,7 @@ Consultar [Decisiones técnicas](docs/decisiones-tecnicas.md) para los motivos, 
 - Distinguir ocupación visible de ocupación total de un local.
 - No inferir permanencia dentro de un comercio si se pierde el seguimiento.
 - En webcam, la estadía promedio por zona usa visitas observadas de duración positiva, incluidas las visitas en curso; una pérdida de track, cambio de segmento o intervalo mayor a un segundo corta la continuidad. Se guarda con el checkpoint (migración `0011_live_zone_dwell`).
+- La pausa manual de webcam cierra captura e inferencia sin terminar el job; conserva sus métricas y reserva el worker/modelo. Retomar exige un encuadre nuevo confirmado y segmento nuevo sin vincular tracks anteriores. El intervalo `operator_pause` no suma estadía ni observaciones; forma parte de la duración conocida y de la cobertura incompleta (migración `0012_live_manual_pause`).
 - Documentar denominadores, deduplicación y tratamiento de datos incompletos; una división por cero se muestra como no disponible.
 - Calcular conversiones entre etapas solo con tracks vinculados y criterios compatibles.
 - Mostrar atención y posible compra como estimaciones.
