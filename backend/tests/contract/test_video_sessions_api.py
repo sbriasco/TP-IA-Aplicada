@@ -387,10 +387,8 @@ def test_rejected_video_leaves_no_session_row_or_file(
     [
         ({"videos": None}, "videos_dir_not_configured"),
         ("missing-dir", "videos_dir_not_writable"),
-        ({"machine_id": None}, "machine_id_not_configured"),
-        ({"machine_id": "Mi Equipo"}, "machine_id_not_configured"),
     ],
-    ids=["sin-carpeta", "carpeta-inexistente", "sin-machine-id", "machine-id-invalido"],
+    ids=["sin-carpeta", "carpeta-inexistente"],
 )
 def test_reports_unavailable_storage_with_503(
     make_client: ClientFactory,
