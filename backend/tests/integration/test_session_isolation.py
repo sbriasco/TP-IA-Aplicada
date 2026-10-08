@@ -4,11 +4,9 @@ import uuid
 from pathlib import Path
 
 import pytest
-from alembic.config import Config
-from conftest import destructive_database_url
+from conftest import prepare_empty_schema
 from fastapi.testclient import TestClient
 
-from alembic import command
 from flowsight.api.main import create_app
 from flowsight.db.models import ProcessingJob
 from flowsight.worker.lifecycle import load_synthetic_fixture
@@ -20,19 +18,16 @@ FIXTURE_PATH = ROOT_DIR / "fixtures" / "synthetic" / "base-flow.json"
 
 @pytest.fixture()
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    database_url = destructive_database_url()
+    database_url = prepare_empty_schema()
     monkeypatch.setenv("FLOWSIGHT_ENV", "test")
     monkeypatch.setenv("FLOWSIGHT_DATABASE_URL", database_url)
     monkeypatch.setenv("FLOWSIGHT_API_HOST", "127.0.0.1")
     monkeypatch.setenv("FLOWSIGHT_API_PORT", "8000")
     monkeypatch.setenv("FLOWSIGHT_WORKER_ID", "worker-isolation")
     monkeypatch.setenv("FLOWSIGHT_PREVIEW_MAX_FPS", "5")
-    config = Config(BACKEND_DIR / "alembic.ini")
-    command.downgrade(config, "base")
-    command.upgrade(config, "head")
     with TestClient(create_app()) as test_client:
         yield test_client
-    command.downgrade(config, "base")
+    test_client.app.state.engine.dispose()
 
 
 def create_trace(client: TestClient, name: str, duration_ms: int) -> dict:

@@ -16,7 +16,7 @@ test("nuevo análisis: dos columnas, archivo, arrastre, cancelación y diseño m
   const width = (await dialog.boundingBox())!.width;
   expect(width).toBeGreaterThanOrEqual(880);
   expect(width).toBeLessThanOrEqual(920);
-  const drop = dialog.getByRole("group", { name: "Soltar archivo de video" });
+  const drop = dialog.getByRole("group", { name: "Zona de soltado" });
   const name = dialog.getByRole("textbox", { name: "Nombre de la sesión" });
   expect((await name.boundingBox())!.x).toBeGreaterThan((await drop.boundingBox())!.x + (await drop.boundingBox())!.width);
   await page.screenshot({ path: "test-results/upload-modal-light.png", fullPage: true });

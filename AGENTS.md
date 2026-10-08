@@ -54,7 +54,7 @@ Consultar [Decisiones técnicas](docs/decisiones-tecnicas.md) para los motivos, 
 
 ## Reglas de medición
 
-- Evitar eventos duplicados por oscilaciones en líneas y bordes.
+- Evitar eventos duplicados por oscilaciones en líneas y bordes. Un cruce se confirma al pasar 1/3 s sin el sentido contrario; en video ese plazo usa el tiempo del archivo (a 30 fps equivale a los 10 frames anteriores). Un pie dentro de la franja de 0,004 normalizada conserva el último lado válido. En video, el mismo `track_id` no une posiciones ni confirma un cruce pendiente si reaparece después de más de 1 s.
 - Distinguir ocupación visible de ocupación total de un local.
 - No inferir permanencia dentro de un comercio si se pierde el seguimiento.
 - En webcam, la estadía promedio por zona usa visitas observadas de duración positiva, incluidas las visitas en curso; una pérdida de track, cambio de segmento o intervalo mayor a un segundo corta la continuidad. Se guarda con el checkpoint (migración `0011_live_zone_dwell`).

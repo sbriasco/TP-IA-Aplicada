@@ -29,7 +29,7 @@ test(`webcam fake: preparación, editor, vivo, ${recover ? "recuperación confir
     const camera = await created.json() as { id: string };
     await page.goto("/live");
     await page.getByLabel("Nombre de la sesión").fill("Expo webcam");
-    await page.getByLabel("Ubicación asignada", { exact: true }).selectOption(camera.id);
+    await page.getByLabel("Cámara", { exact: true }).selectOption(camera.id);
     await expect(page.getByLabel("Webcam", { exact: true }).getByRole("option", { name: "Webcam simulada (prueba)", exact: true })).toHaveCount(1);
     await page.getByRole("button", { name: "Actualizar dispositivos", exact: true }).click();
     await expect(page.getByRole("button", { name: "Preparar webcam y continuar", exact: true })).toBeEnabled();

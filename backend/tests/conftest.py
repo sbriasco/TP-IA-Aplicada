@@ -87,29 +87,81 @@ def _is_azure(host: str) -> bool:
     return host.endswith(AZURE_HOST_SUFFIX)
 
 
-@pytest.fixture
-def live_engine(monkeypatch: pytest.MonkeyPatch):
-    """Dedicated live fixtures; every destructive operation follows the local guard."""
+def prepare_empty_schema(database_url: str | None = None) -> str:
+    """Leave the guarded test database at Alembic head with no application rows.
+
+    Contract and integration tests need an empty schema, not a new migration.
+    The schema is rebuilt only when it is missing or left on another revision.
+    """
+
+    url = destructive_database_url() if database_url is None else database_url
+    os.environ["FLOWSIGHT_DATABASE_URL"] = url
     from alembic.config import Config
-    from sqlalchemy import create_engine, inspect, text
+    from alembic.script import ScriptDirectory
+    from sqlalchemy import create_engine
+    from sqlalchemy.pool import NullPool
 
     from alembic import command
 
-    url = destructive_database_url()
-    monkeypatch.setenv("FLOWSIGHT_DATABASE_URL", url)
     config = Config(ROOT_DIR / "backend" / "alembic.ini")
+    engine = create_engine(url, poolclass=NullPool)
+    try:
+        head = ScriptDirectory.from_config(config).get_current_head()
+        revision = _current_revision(engine)
+        if revision != head:
+            if revision is not None:
+                _truncate_application_tables(engine)
+                command.downgrade(config, "base")
+            command.upgrade(config, "head")
+        else:
+            _truncate_application_tables(engine)
+    finally:
+        engine.dispose()
+    return url
+
+
+def _current_revision(engine: object) -> str | None:
+    from sqlalchemy import inspect, text
+
+    if "alembic_version" not in inspect(engine).get_table_names():
+        return None
+    with engine.connect() as connection:
+        row = connection.execute(text("SELECT version_num FROM alembic_version")).first()
+    if row is None:
+        return None
+    return str(row[0])
+
+
+def _truncate_application_tables(engine: object) -> None:
+    from sqlalchemy import inspect, text
+
+    names = [name for name in inspect(engine).get_table_names() if name != "alembic_version"]
+    if not names:
+        return
+    with engine.connect() as connection:
+        connection.execute(
+            text(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                "WHERE datname = current_database() AND pid <> pg_backend_pid()"
+            )
+        )
+        connection.commit()
+    quoted = ", ".join(f'"{name}"' for name in names)
+    with engine.begin() as connection:
+        connection.execute(text(f"TRUNCATE {quoted} RESTART IDENTITY CASCADE"))
+
+
+@pytest.fixture
+def live_engine(monkeypatch: pytest.MonkeyPatch):
+    """Dedicated live fixtures; every destructive operation follows the local guard."""
+    from sqlalchemy import create_engine
+
+    url = prepare_empty_schema()
+    monkeypatch.setenv("FLOWSIGHT_DATABASE_URL", url)
     engine = create_engine(url)
-    if "processing_jobs" in inspect(engine).get_table_names():
-        with engine.begin() as connection:
-            connection.execute(text("TRUNCATE processing_jobs CASCADE"))
-    command.downgrade(config, "base")
-    command.upgrade(config, "head")
     try:
         yield engine
     finally:
-        with engine.begin() as connection:
-            connection.execute(text("TRUNCATE processing_jobs CASCADE"))
-        command.downgrade(config, "base")
         engine.dispose()
 
 

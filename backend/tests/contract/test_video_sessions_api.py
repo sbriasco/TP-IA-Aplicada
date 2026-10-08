@@ -11,14 +11,13 @@ from typing import Any
 import cv2
 import numpy as np
 import pytest
-from alembic.config import Config
-from conftest import destructive_database_url
+from conftest import prepare_empty_schema
 from fastapi.testclient import TestClient
 from httpx import Response
 from sqlalchemy import text
 
-from alembic import command
 from flowsight.api.main import create_app
+from flowsight.core.local_webcam import configure_local_webcam
 from flowsight.video.fixtures import CLIP_FPS, CLIP_FRAMES, MpegUnavailable, write_clip
 from flowsight.video.fixtures import write_mpeg_clip as _write_mpeg_clip
 
@@ -63,17 +62,8 @@ def mpeg_clip(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.fixture()
-def database_url() -> Iterator[str]:
-    url = destructive_database_url()
-    config = Config(BACKEND_DIR / "alembic.ini")
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setenv("FLOWSIGHT_DATABASE_URL", url)
-        command.downgrade(config, "base")
-        command.upgrade(config, "head")
-    yield url
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setenv("FLOWSIGHT_DATABASE_URL", url)
-        command.downgrade(config, "base")
+def database_url() -> str:
+    return prepare_empty_schema()
 
 
 @pytest.fixture()
@@ -85,11 +75,15 @@ def videos_dir(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def make_client(
-    monkeypatch: pytest.MonkeyPatch, database_url: str, videos_dir: Path
+    monkeypatch: pytest.MonkeyPatch, database_url: str, videos_dir: Path, tmp_path: Path
 ) -> Iterator[ClientFactory]:
     """Start the API with the given per-machine settings; several may coexist."""
 
     stack: list[Any] = []
+    monkeypatch.setattr(
+        "flowsight.api.main.configure_local_webcam",
+        lambda settings: configure_local_webcam(settings, directory=tmp_path / "runtime"),
+    )
 
     def factory(videos: Path | None = videos_dir, machine_id: str | None = MACHINE_ID):
         monkeypatch.setenv("FLOWSIGHT_ENV", "test")
@@ -411,6 +405,30 @@ def test_reports_unavailable_storage_with_503(
     _assert_safe_error(response, tmp_path, database_url)
     _assert_nothing_created(client, videos_dir)
     assert not (tmp_path / "no-existe").exists()
+
+
+@pytest.mark.parametrize("machine_id", [None, "", "Mi Equipo", "\t", "equipo-test", "backend-ci"])
+def test_registration_preserves_machine_identity_after_api_restart(
+    make_client: ClientFactory, clips: dict[str, Path], machine_id: str | None
+) -> None:
+    client = make_client(machine_id=machine_id)
+    camera_id = client.post("/cameras", json={"name": "Cam"}).json()["id"]
+    response = _register(client, clips["avi"].read_bytes(), camera_id)
+
+    assert response.status_code == 201
+    body = response.json()
+    origin = body["video"]["origin_machine_id"]
+    if machine_id in {"equipo-test", "backend-ci"}:
+        assert origin == machine_id
+    else:
+        assert origin.startswith("local-")
+    assert body["video"]["availability"] == "available"
+
+    restarted = make_client(machine_id=machine_id)
+    recovered = restarted.get(f"/sessions/{body['id']}")
+    assert recovered.status_code == 200
+    assert recovered.json()["video"]["origin_machine_id"] == origin
+    assert recovered.json()["video"]["availability"] == "available"
 
 
 def test_same_video_twice_is_accepted_and_reported_as_duplicate(

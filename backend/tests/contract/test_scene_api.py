@@ -19,13 +19,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from alembic.config import Config
-from conftest import destructive_database_url
+from conftest import prepare_empty_schema
 from fastapi.testclient import TestClient
 from httpx import Response
 from sqlalchemy import text
 
-from alembic import command
 from flowsight.api.main import create_app
 from flowsight.video.fixtures import write_clip
 
@@ -47,6 +45,7 @@ SUMMARY_FIELDS = {
     "reference_session_id",
     "frame_width",
     "frame_height",
+    "display_name",
     "created_by_machine_id",
     "created_at",
     "shop_count",
@@ -69,17 +68,8 @@ def clip(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.fixture()
-def database_url() -> Iterator[str]:
-    url = destructive_database_url()
-    config = Config(BACKEND_DIR / "alembic.ini")
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setenv("FLOWSIGHT_DATABASE_URL", url)
-        command.downgrade(config, "base")
-        command.upgrade(config, "head")
-    yield url
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setenv("FLOWSIGHT_DATABASE_URL", url)
-        command.downgrade(config, "base")
+def database_url() -> str:
+    return prepare_empty_schema()
 
 
 @pytest.fixture()

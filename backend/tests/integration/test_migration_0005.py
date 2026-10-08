@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import pytest
 from alembic.config import Config
 from conftest import destructive_database_url
 from sqlalchemy import create_engine, inspect
@@ -12,6 +13,7 @@ from sqlalchemy import create_engine, inspect
 from alembic import command
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
+pytestmark = pytest.mark.historical_migration
 
 
 def test_upgrade_from_0004_adds_scene_metrics_and_keeps_official_measures(

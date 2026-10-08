@@ -397,6 +397,7 @@ components:
       properties:
         reference_session_id: {type: string, format: uuid}
         base_version_id: {type: [string, 'null'], format: uuid, description: Versión cargada en el editor; solo sirve para advertir newer_version_exists.}
+        display_name: {type: [string, 'null'], maxLength: 120, description: Nombre visible guardado con esta versión inmutable.}
         shops: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/ShopInput'}, description: 'Tope de 20 locales: las advertencias de superposición comparan cada par de zonas de cada par de locales.'}
     SceneVersionSummary:
       type: object
@@ -408,6 +409,7 @@ components:
         reference_session_id: {type: string, format: uuid}
         frame_width: {type: integer}
         frame_height: {type: integer}
+        display_name: {type: [string, 'null'], maxLength: 120}
         created_by_machine_id: {type: [string, 'null']}
         created_at: {type: string, format: date-time}
         shop_count: {type: integer}

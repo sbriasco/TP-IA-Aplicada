@@ -321,7 +321,16 @@ class SceneVersionCreate(BaseModel):
 
     reference_session_id: uuid.UUID
     base_version_id: uuid.UUID | None = None
+    display_name: str | None = Field(default=None, max_length=120)
     shops: list[ShopInput] = Field(max_length=MAX_SHOPS_PER_VERSION)
+
+    @field_validator("display_name")
+    @classmethod
+    def clean_display_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        trimmed = value.strip()
+        return trimmed or None
 
 
 class SceneIssueResponse(BaseModel):
@@ -343,6 +352,7 @@ class SceneVersionSummary(BaseModel):
     reference_session_id: uuid.UUID
     frame_width: int
     frame_height: int
+    display_name: str | None = None
     created_by_machine_id: str | None
     created_at: datetime
     shop_count: int

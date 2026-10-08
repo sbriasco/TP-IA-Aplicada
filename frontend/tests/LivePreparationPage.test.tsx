@@ -38,7 +38,7 @@ it("prepara el dispositivo seleccionado por nombre aunque no sea el índice cero
   }));
   await act(async () => root.render(<LivePreparationPage apiBaseUrl="http://api.test" />));
   await changeValue(byLabel<HTMLInputElement>(container, "Nombre de la sesión"), "Stand");
-  await changeValue(byLabel<HTMLSelectElement>(container, "Ubicación asignada"), camera.id);
+  await changeValue(byLabel<HTMLSelectElement>(container, "Cámara"), camera.id);
   await changeValue(byLabel<HTMLSelectElement>(container, "Webcam"), "1");
   await click(byButton(container, "Entradas / Salidas"));
   await click(byButton(container, "Preparar webcam y continuar"));
@@ -54,7 +54,7 @@ it("actualiza las cámaras conectadas y no prepara un dispositivo que fue retira
     url.endsWith("/live/devices") ? { machine_id: "expo-test", worker_available: true, candidates: cameras } : session)));
   await act(async () => root.render(<LivePreparationPage apiBaseUrl="http://api.test" />));
   await changeValue(byLabel<HTMLInputElement>(container, "Nombre de la sesión"), "Stand");
-  await changeValue(byLabel<HTMLSelectElement>(container, "Ubicación asignada"), camera.id);
+  await changeValue(byLabel<HTMLSelectElement>(container, "Cámara"), camera.id);
   await changeValue(byLabel<HTMLSelectElement>(container, "Webcam"), "1");
   cameras = [{ device_index: 0, label: "Integrated Camera", verified: false }];
   await click(container.querySelector<HTMLButtonElement>('button[aria-label="Actualizar dispositivos"]')!);
@@ -67,7 +67,7 @@ it("sin webcams conectadas muestra estado vacío y bloquea preparación", async 
     { machine_id: "expo-test", worker_available: true, candidates: [] })));
   await act(async () => root.render(<LivePreparationPage apiBaseUrl="http://api.test" />));
   await changeValue(byLabel<HTMLInputElement>(container, "Nombre de la sesión"), "Stand");
-  await changeValue(byLabel<HTMLSelectElement>(container, "Ubicación asignada"), camera.id);
+  await changeValue(byLabel<HTMLSelectElement>(container, "Cámara"), camera.id);
   expect(container.textContent).toContain("No se detectaron webcams");
   expect(byButton(container, "Preparar webcam y continuar").disabled).toBe(true);
 });
@@ -79,7 +79,7 @@ it("prepara una webcam sin grabación y permite abrir el editor", async () => {
   vi.stubGlobal("fetch", fetchMock);
   await act(async () => root.render(<LivePreparationPage apiBaseUrl="http://api.test" />));
   await changeValue(byLabel<HTMLInputElement>(container, "Nombre de la sesión"), "Stand");
-  await changeValue(byLabel<HTMLSelectElement>(container, "Ubicación asignada"), camera.id);
+  await changeValue(byLabel<HTMLSelectElement>(container, "Cámara"), camera.id);
   await click(byButton(container, "Preparar webcam y continuar"));
   expect(window.location.pathname).toBe("/sessions/session-1/live");
   const call = fetchMock.mock.calls.find(([url]) => url.endsWith("/live/sessions"));

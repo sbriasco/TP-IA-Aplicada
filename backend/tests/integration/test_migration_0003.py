@@ -22,6 +22,7 @@ from sqlalchemy.exc import IntegrityError
 from alembic import command
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
+pytestmark = pytest.mark.historical_migration
 SCENE_REVISION = "0002_scene_configuration"
 
 

@@ -351,6 +351,7 @@ class SceneVersion(Base):
     reference_session_id: Mapped[uuid.UUID] = mapped_column(Uuid)
     frame_width: Mapped[int] = mapped_column(Integer)
     frame_height: Mapped[int] = mapped_column(Integer)
+    display_name: Mapped[str | None] = mapped_column(String(120))
     created_by_machine_id: Mapped[str | None] = mapped_column(String(40))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

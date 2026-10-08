@@ -80,7 +80,7 @@ export function VideoUploadForm({ apiBaseUrl, onRegistered, onCancel, onBusyChan
       <fieldset className={styles.fields} disabled={busy}>
         <div className={styles.fileColumn}>
         <div className={styles.sectionLabel}><span>01</span><label htmlFor={`${id}-file`}>Archivo de video</label></div>
-        <div className={`${styles.fileArea}${dragging ? " " + styles.dragging : ""}`} role="group" aria-label="Soltar archivo de video"
+        <div className={`${styles.fileArea}${dragging ? " " + styles.dragging : ""}`} role="group" aria-label="Zona de soltado"
           onDragOver={event => { event.preventDefault(); if (!busy) setDragging(true); }}
           onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }}
           onDrop={event => { event.preventDefault(); setDragging(false); const dropped = event.dataTransfer.files[0]; if (!busy && dropped) selectFile(dropped); }}>
