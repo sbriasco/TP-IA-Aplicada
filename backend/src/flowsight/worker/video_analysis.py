@@ -53,6 +53,9 @@ from flowsight.vision.trajectory import TrajectoryWriter, trajectory_relative_pa
 logger = logging.getLogger(__name__)
 
 FLUSH_EVERY_FRAMES = 15
+# Remote writers coalesce and drain about once per second so inference never
+# waits on Azure RTT; a crash can lose at most this window of partial measures.
+REMOTE_FLUSH_INTERVAL_S = 1.0
 
 
 @dataclass(frozen=True)
@@ -66,65 +69,130 @@ class _MeasureFlushPayload:
     fps: float
 
 
-class _MeasureFlushGate:
-    """Overlap one DB flush with the next frames when the database is remote."""
+def _coalesce_measure_payloads(
+    current: _MeasureFlushPayload | None, incoming: _MeasureFlushPayload
+) -> _MeasureFlushPayload:
+    """Keep latest totals; append crossing facts until the writer drains."""
 
-    def __init__(self, factory: sessionmaker[DatabaseSession], *, overlap: bool) -> None:
+    if current is None:
+        return incoming
+    return _MeasureFlushPayload(
+        job_id=incoming.job_id,
+        session_id=incoming.session_id,
+        frames_analyzed=incoming.frames_analyzed,
+        video_timestamp_seconds=incoming.video_timestamp_seconds,
+        counts=incoming.counts,
+        facts=current.facts + incoming.facts,
+        fps=incoming.fps,
+    )
+
+
+class _MeasureFlushGate:
+    """Local: sync flush. Remote: in-memory coalesce queue + background drain."""
+
+    def __init__(
+        self,
+        factory: sessionmaker[DatabaseSession],
+        *,
+        overlap: bool,
+        interval_s: float = REMOTE_FLUSH_INTERVAL_S,
+    ) -> None:
+        if interval_s <= 0:
+            raise ValueError("Invalid measure flush interval")
         self._factory = factory
         self._overlap = overlap
-        self._thread: threading.Thread | None = None
+        self._interval_s = interval_s
+        self._lock = threading.Lock()
+        self._pending: _MeasureFlushPayload | None = None
+        self._wake = threading.Event()
+        self._closed = threading.Event()
         self._error: BaseException | None = None
         self.cancelled = False
+        self._thread: threading.Thread | None = None
+        if overlap:
+            self._thread = threading.Thread(target=self._run, daemon=True)
+            self._thread.start()
 
     def submit(self, payload: _MeasureFlushPayload) -> None:
-        self.join()
+        self._raise_if_failed()
         if self.cancelled:
             return
         if not self._overlap:
             self._write(payload)
             return
-        self._thread = threading.Thread(target=self._write, args=(payload,), daemon=True)
-        self._thread.start()
+        with self._lock:
+            self._pending = _coalesce_measure_payloads(self._pending, payload)
+        self._wake.set()
 
     def pump(self) -> None:
-        """Harvest a finished background flush without blocking inference."""
+        """Surface writer failures without blocking the analysis loop."""
 
-        if self._thread is not None and not self._thread.is_alive():
-            self.join()
+        self._raise_if_failed()
 
     def join(self) -> None:
+        if not self._overlap:
+            self._raise_if_failed()
+            return
+        self._closed.set()
+        self._wake.set()
         if self._thread is not None:
             self._thread.join()
             self._thread = None
+        self._raise_if_failed()
+
+    def _raise_if_failed(self) -> None:
         if self._error is not None:
             error = self._error
             self._error = None
             raise error
 
+    def _run(self) -> None:
+        while True:
+            self._wake.wait(timeout=self._interval_s)
+            self._wake.clear()
+            try:
+                self._drain()
+            except BaseException as error:
+                self._error = error
+                return
+            if self._closed.is_set():
+                try:
+                    self._drain()
+                except BaseException as error:
+                    self._error = error
+                return
+
+    def _drain(self) -> None:
+        with self._lock:
+            payload = self._pending
+            self._pending = None
+        if payload is None:
+            return
+        # Still persist the last coalesced batch when the job was cancelled so
+        # partial measures/crossings match the previous sync flush semantics.
+        self._write(payload)
+
     def _write(self, payload: _MeasureFlushPayload) -> None:
-        try:
-            with self._factory.begin() as database_session:
-                stored = database_session.get(ProcessingJob, payload.job_id)
-                if stored is None or stored.status not in {
-                    JobStatus.PROCESSING,
-                    JobStatus.CANCELLED,
-                }:
-                    raise _AnalysisError("analysis_failed")
-                if stored.status is JobStatus.CANCELLED:
-                    self.cancelled = True
-                stored.frames_analyzed = payload.frames_analyzed
-                stored.analyzed_video_timestamp_seconds = payload.video_timestamp_seconds
-                sync_measures(
-                    database_session,
-                    job_id=payload.job_id,
-                    session_id=payload.session_id,
-                    video_timestamp_seconds=payload.video_timestamp_seconds,
-                    counts=payload.counts,
-                    facts=payload.facts,
-                    fps=payload.fps,
-                )
-        except BaseException as error:
-            self._error = error
+        with self._factory.begin() as database_session:
+            stored = database_session.get(ProcessingJob, payload.job_id)
+            if stored is None or stored.status not in {
+                JobStatus.PROCESSING,
+                JobStatus.CANCELLED,
+            }:
+                raise _AnalysisError("analysis_failed")
+            if stored.status is JobStatus.CANCELLED:
+                self.cancelled = True
+            stored.frames_analyzed = payload.frames_analyzed
+            stored.analyzed_video_timestamp_seconds = payload.video_timestamp_seconds
+            sync_measures(
+                database_session,
+                job_id=payload.job_id,
+                session_id=payload.session_id,
+                video_timestamp_seconds=payload.video_timestamp_seconds,
+                counts=payload.counts,
+                facts=payload.facts,
+                fps=payload.fps,
+            )
 
 
 def _monotonic() -> float:
