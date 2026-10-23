@@ -26,6 +26,7 @@ from flowsight.db.models import (
     SceneVersionShop,
     WorkerMachine,
 )
+from flowsight.db.session import live_write_timeouts_ms
 from flowsight.services.live_jobs import LiveMachineError
 from flowsight.services.sessions import get_active_session
 
@@ -52,8 +53,9 @@ def persist_live_checkpoint(
     machine_id=None,
     zone_dwell=None,
 ):
-    database.execute(text("SET LOCAL lock_timeout = '250ms'"))
-    database.execute(text("SET LOCAL statement_timeout = '1000ms'"))
+    lock_ms, statement_ms = live_write_timeouts_ms(str(database.get_bind().url))
+    database.execute(text(f"SET LOCAL lock_timeout = '{lock_ms}ms'"))
+    database.execute(text(f"SET LOCAL statement_timeout = '{statement_ms}ms'"))
     if owner_epoch is not None:
         machine = database.scalar(
             select(WorkerMachine)
@@ -135,44 +137,57 @@ def persist_live_checkpoint(
             )
         )
         database.flush()
-    for fact in facts:
-        database.execute(
-            insert(LiveCrossing)
-            .values(
-                job_id=job_id,
-                session_id=session_id,
-                segment_id=segment_id,
-                shop_id=fact.shop_id,
-                track_id=fact.track_id,
-                candidate_sequence=fact.candidate_sequence,
-                capture_sequence=fact.capture_sequence,
-                capture_timestamp_seconds=fact.capture_timestamp_seconds,
-                confirmed_at_capture_seconds=fact.confirmed_at_capture_seconds,
-                direction=fact.direction,
-                foot_x=Decimal(str(fact.foot[0])),
-                foot_y=Decimal(str(fact.foot[1])),
+    if facts:
+        crossing_rows = [
+            {
+                "job_id": job_id,
+                "session_id": session_id,
+                "segment_id": segment_id,
+                "shop_id": fact.shop_id,
+                "track_id": fact.track_id,
+                "candidate_sequence": fact.candidate_sequence,
+                "capture_sequence": fact.capture_sequence,
+                "capture_timestamp_seconds": fact.capture_timestamp_seconds,
+                "confirmed_at_capture_seconds": fact.confirmed_at_capture_seconds,
+                "direction": fact.direction,
+                "foot_x": Decimal(str(fact.foot[0])),
+                "foot_y": Decimal(str(fact.foot[1])),
+            }
+            for fact in facts
+        ]
+        database.execute(insert(LiveCrossing).values(crossing_rows).on_conflict_do_nothing())
+    if slots:
+        sample_rows = []
+        for change in slots.values():
+            sample = change.sample
+            sample_rows.append(
+                {
+                    "job_id": job_id,
+                    "session_id": session_id,
+                    "slot_index": change.slot_index,
+                    "segment_id": segment_id,
+                    "track_id": sample.track_id,
+                    "capture_sequence": sample.sequence,
+                    "capture_timestamp_seconds": sample.timestamp_s,
+                    "foot_x": Decimal(str(sample.foot[0])),
+                    "foot_y": Decimal(str(sample.foot[1])),
+                }
             )
-            .on_conflict_do_nothing()
-        )
-    for change in slots.values():
-        sample = change.sample
-        values = dict(
-            job_id=job_id,
-            session_id=session_id,
-            slot_index=change.slot_index,
-            segment_id=segment_id,
-            track_id=sample.track_id,
-            capture_sequence=sample.sequence,
-            capture_timestamp_seconds=sample.timestamp_s,
-            foot_x=Decimal(str(sample.foot[0])),
-            foot_y=Decimal(str(sample.foot[1])),
-        )
+        sample_statement = insert(LivePositionSample).values(sample_rows)
         database.execute(
-            insert(LivePositionSample)
-            .values(**values)
-            .on_conflict_do_update(
+            sample_statement.on_conflict_do_update(
                 index_elements=[LivePositionSample.job_id, LivePositionSample.slot_index],
-                set_=values,
+                set_={
+                    "session_id": sample_statement.excluded.session_id,
+                    "segment_id": sample_statement.excluded.segment_id,
+                    "track_id": sample_statement.excluded.track_id,
+                    "capture_sequence": sample_statement.excluded.capture_sequence,
+                    "capture_timestamp_seconds": (
+                        sample_statement.excluded.capture_timestamp_seconds
+                    ),
+                    "foot_x": sample_statement.excluded.foot_x,
+                    "foot_y": sample_statement.excluded.foot_y,
+                },
             )
         )
     ending_capture_seconds = getattr(frame, "ending_capture_seconds", None)

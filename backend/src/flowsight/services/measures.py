@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session as DatabaseSession
 
 from flowsight.db.models import (
@@ -46,8 +47,9 @@ def sync_measures(
     facts: Sequence[CrossingFact],
     fps: float,
 ) -> None:
-    """Write the current totals and only the crossings decided on this frame."""
+    """Write the current totals and only the crossings decided since the last flush."""
 
+    rows: list[dict[str, object]] = []
     for count in counts:
         values = {
             MeasureCode.ENTRIES: count.entries,
@@ -55,15 +57,32 @@ def sync_measures(
             MeasureCode.VISIBLE_OCCUPANCY: count.visible_occupancy,
         }
         for code, value in values.items():
-            _upsert(
-                database_session,
-                job_id=job_id,
-                session_id=session_id,
-                shop_id=count.shop_id,
-                code=code,
-                value=value,
-                video_timestamp_seconds=video_timestamp_seconds,
+            rows.append(
+                {
+                    "id": uuid.uuid4(),
+                    "job_id": job_id,
+                    "session_id": session_id,
+                    "shop_id": count.shop_id,
+                    "code": code,
+                    "value": value,
+                    "availability": MeasureAvailability.AVAILABLE,
+                    "partial": True,
+                    "video_timestamp_seconds": video_timestamp_seconds,
+                }
             )
+    if rows:
+        statement = insert(AnalysisMeasure).values(rows)
+        database_session.execute(
+            statement.on_conflict_do_update(
+                constraint="uq_analysis_measures_job_id_shop_id_code",
+                set_={
+                    "value": statement.excluded.value,
+                    "availability": statement.excluded.availability,
+                    "partial": statement.excluded.partial,
+                    "video_timestamp_seconds": statement.excluded.video_timestamp_seconds,
+                },
+            )
+        )
     for fact in facts:
         database_session.add(
             LineCrossing(
@@ -119,43 +138,6 @@ def list_measures(database_session: DatabaseSession, job: ProcessingJob) -> list
         )
         for measure, name in rows
     ]
-
-
-def _upsert(
-    database_session: DatabaseSession,
-    *,
-    job_id: uuid.UUID,
-    session_id: uuid.UUID,
-    shop_id: uuid.UUID,
-    code: MeasureCode,
-    value: int,
-    video_timestamp_seconds: Decimal,
-) -> None:
-    existing = database_session.scalar(
-        select(AnalysisMeasure).where(
-            AnalysisMeasure.job_id == job_id,
-            AnalysisMeasure.shop_id == shop_id,
-            AnalysisMeasure.code == code,
-        )
-    )
-    if existing is None:
-        database_session.add(
-            AnalysisMeasure(
-                job_id=job_id,
-                session_id=session_id,
-                shop_id=shop_id,
-                code=code,
-                value=value,
-                availability=MeasureAvailability.AVAILABLE,
-                partial=True,
-                video_timestamp_seconds=video_timestamp_seconds,
-            )
-        )
-        return
-    existing.value = value
-    existing.availability = MeasureAvailability.AVAILABLE
-    existing.partial = True
-    existing.video_timestamp_seconds = video_timestamp_seconds
 
 
 def _timestamp(frame_index: int, fps: float) -> Decimal:

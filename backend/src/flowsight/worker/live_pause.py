@@ -10,11 +10,13 @@ from flowsight.db.models import (
     LiveInterruption,
     ProcessingJob,
 )
+from flowsight.db.session import live_write_timeouts_ms
 
 
 def _state(database, job_id, owner_guard):
-    database.execute(text("SET LOCAL lock_timeout = '250ms'"))
-    database.execute(text("SET LOCAL statement_timeout = '1000ms'"))
+    lock_ms, statement_ms = live_write_timeouts_ms(str(database.get_bind().url))
+    database.execute(text(f"SET LOCAL lock_timeout = '{lock_ms}ms'"))
+    database.execute(text(f"SET LOCAL statement_timeout = '{statement_ms}ms'"))
     if not owner_guard(database):
         raise CaptureError("worker_owner_lost")
     job = database.scalar(select(ProcessingJob).where(ProcessingJob.id == job_id).with_for_update())
