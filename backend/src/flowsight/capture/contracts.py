@@ -16,6 +16,8 @@ class CaptureSettings:
     backend: Literal["auto", "dshow", "msmf", "fake"] = "auto"
     requested_width: int = 1280
     requested_height: int = 720
+    # Advisory only: OpenCV/DirectShow may clamp to a supported rate.
+    requested_fps: int = 60
 
 
 @dataclass(frozen=True)

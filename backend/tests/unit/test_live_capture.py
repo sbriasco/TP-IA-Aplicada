@@ -30,12 +30,35 @@ def test_webcam_uses_local_backends_and_never_opens_a_url(monkeypatch: pytest.Mo
         call(webcam.cv2.CAP_PROP_FOURCC, webcam.cv2.VideoWriter_fourcc(*"MJPG")),
         call(webcam.cv2.CAP_PROP_FRAME_WIDTH, 1280),
         call(webcam.cv2.CAP_PROP_FRAME_HEIGHT, 720),
-        call(webcam.cv2.CAP_PROP_FPS, 30),
+        call(webcam.cv2.CAP_PROP_FPS, 60),
         call(webcam.cv2.CAP_PROP_BUFFERSIZE, 1),
     ]
     with pytest.raises(CaptureError, match="device_unavailable"):
         webcam.open_webcam(CaptureSettings("rtsp://invalid"))
     assert factory.call_count == 2
+
+
+def test_webcam_requests_custom_fps_and_reads_device_reported_fps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import Mock, call
+
+    from flowsight.capture import webcam
+
+    opened = Mock()
+    opened.isOpened.return_value = True
+    opened.get.return_value = 60.0
+    monkeypatch.setattr(webcam.cv2, "VideoCapture", Mock(return_value=opened))
+    monkeypatch.setattr(webcam.sys, "platform", "win32")
+    camera, backend = webcam.open_webcam(
+        CaptureSettings(0, backend="dshow", requested_fps=60)
+    )
+    assert camera is opened
+    assert backend == "dshow"
+    assert call(webcam.cv2.CAP_PROP_FPS, 60) in opened.set.call_args_list
+    assert webcam.device_reported_fps(opened) == 60.0
+    opened.get.return_value = 0.0
+    assert webcam.device_reported_fps(opened) is None
 
 
 @pytest.fixture(autouse=True)
