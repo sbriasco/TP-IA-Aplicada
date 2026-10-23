@@ -10,7 +10,7 @@ from flowsight.capture.process import ProcessFrameSource
 
 
 def test_webcam_uses_local_backends_and_never_opens_a_url(monkeypatch: pytest.MonkeyPatch) -> None:
-    from unittest.mock import Mock
+    from unittest.mock import Mock, call
 
     from flowsight.capture import webcam
 
@@ -26,6 +26,13 @@ def test_webcam_uses_local_backends_and_never_opens_a_url(monkeypatch: pytest.Mo
     assert factory.call_args_list[0].args == (2, webcam.cv2.CAP_DSHOW)
     assert factory.call_args_list[1].args == (2, webcam.cv2.CAP_MSMF)
     closed.release.assert_called_once()
+    assert opened.set.call_args_list == [
+        call(webcam.cv2.CAP_PROP_FOURCC, webcam.cv2.VideoWriter_fourcc(*"MJPG")),
+        call(webcam.cv2.CAP_PROP_FRAME_WIDTH, 1280),
+        call(webcam.cv2.CAP_PROP_FRAME_HEIGHT, 720),
+        call(webcam.cv2.CAP_PROP_FPS, 30),
+        call(webcam.cv2.CAP_PROP_BUFFERSIZE, 1),
+    ]
     with pytest.raises(CaptureError, match="device_unavailable"):
         webcam.open_webcam(CaptureSettings("rtsp://invalid"))
     assert factory.call_count == 2
