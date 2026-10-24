@@ -32,6 +32,19 @@ export function startWorker(root: string, captureDiagnostics = false, overrides:
   return worker;
 }
 
+function pause(milliseconds: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+function processIsRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function stopWorker(worker: ChildProcess): void {
   if (worker.pid === undefined) {
     return;
@@ -48,5 +61,18 @@ export function stopWorker(worker: ChildProcess): void {
     spawnSync("powershell.exe", ["-NoProfile", "-Command", command], { stdio: "ignore" });
     return;
   }
+  // The machine lease is a Postgres advisory lock. The next test's worker exits
+  // if this process is still holding it, and then nobody publishes the preview.
   worker.kill("SIGTERM");
+  const deadline = Date.now() + 5_000;
+  while (processIsRunning(worker.pid) && Date.now() < deadline) {
+    pause(50);
+  }
+  if (processIsRunning(worker.pid)) {
+    worker.kill("SIGKILL");
+    const forced = Date.now() + 1_000;
+    while (processIsRunning(worker.pid) && Date.now() < forced) {
+      pause(50);
+    }
+  }
 }

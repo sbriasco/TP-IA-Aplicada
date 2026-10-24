@@ -43,9 +43,14 @@ def run_worker() -> None:
     channel = None
     try:
         if lease is not None:
-            if not lease.acquire(datetime.now(UTC)):
-                logging.error("Ya hay un worker activo en este equipo.")
-                return
+            # A test may stop the previous worker and start this one immediately.
+            # The advisory lock disappears with that process; wait briefly for it.
+            acquire_deadline = time.monotonic() + 5
+            while not lease.acquire(datetime.now(UTC)):
+                if time.monotonic() >= acquire_deadline:
+                    logging.error("Ya hay un worker activo en este equipo.")
+                    return
+                time.sleep(0.2)
             heartbeat = MachineHeartbeat(lease)
             heartbeat.start()
             if settings.live_channel_token is not None:
