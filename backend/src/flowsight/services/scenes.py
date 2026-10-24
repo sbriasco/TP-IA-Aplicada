@@ -72,6 +72,7 @@ class SceneVersionSummaryRow:
     reference_session_id: uuid.UUID
     frame_width: int
     frame_height: int
+    display_name: str | None
     created_by_machine_id: str | None
     created_at: datetime
     shop_count: int
@@ -184,6 +185,7 @@ def create_scene_version(
     reference_session_id: uuid.UUID,
     base_version_id: uuid.UUID | None,
     shops: Sequence[Mapping[str, Any]],
+    display_name: str | None = None,
 ) -> CreatedSceneVersion:
     """Validate and insert a new version of the camera's scene; the caller commits.
 
@@ -243,6 +245,7 @@ def create_scene_version(
         reference_session_id=reference_session_id,
         frame_width=frame.width,
         frame_height=frame.height,
+        display_name=display_name,
         created_by_machine_id=settings.machine_id,
     )
     database_session.add(version)
@@ -318,6 +321,7 @@ def _summary(version: SceneVersion, shop_count: int) -> SceneVersionSummaryRow:
         reference_session_id=version.reference_session_id,
         frame_width=version.frame_width,
         frame_height=version.frame_height,
+        display_name=version.display_name,
         created_by_machine_id=version.created_by_machine_id,
         created_at=version.created_at,
         shop_count=shop_count,

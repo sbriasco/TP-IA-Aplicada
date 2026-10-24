@@ -29,6 +29,7 @@ from flowsight.db.models import (
 from flowsight.services.cameras import get_or_create_camera
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
+pytestmark = pytest.mark.historical_migration
 
 
 @pytest.fixture()

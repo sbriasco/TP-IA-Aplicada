@@ -10,13 +10,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from alembic.config import Config
-from conftest import destructive_database_url
+from conftest import prepare_empty_schema
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 
-from alembic import command
 from flowsight.api.main import create_app
 from flowsight.api.schemas import JobResponse
 from flowsight.core.config import Settings
@@ -61,21 +59,17 @@ FIXTURE_PATH = ROOT_DIR / "fixtures" / "synthetic" / "base-flow.json"
 
 @pytest.fixture()
 def session_factory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    database_url = destructive_database_url()
+    database_url = prepare_empty_schema()
     monkeypatch.setenv("FLOWSIGHT_DATABASE_URL", database_url)
     monkeypatch.setenv("FLOWSIGHT_ENV", "test")
     monkeypatch.setenv("FLOWSIGHT_WORKER_ID", "worker-video")
     monkeypatch.setenv("FLOWSIGHT_DETECTOR", "fake")
     monkeypatch.setenv("FLOWSIGHT_VIDEOS_DIR", str(tmp_path))
     monkeypatch.setenv("FLOWSIGHT_YOLO_WEIGHTS", str(tmp_path / "missing-yolov8n.pt"))
-    config = Config(BACKEND_DIR / "alembic.ini")
-    command.downgrade(config, "base")
-    command.upgrade(config, "head")
     engine = create_engine(database_url)
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     yield factory
     engine.dispose()
-    command.downgrade(config, "base")
 
 
 def _register_video_job(
@@ -407,28 +401,32 @@ def test_preview_snapshots_follow_five_per_second_while_every_frame_is_analyzed(
         assert stored.frames_analyzed == stored.frames_total == 50
 
 
-def test_measures_flush_every_fifteen_frames_and_on_each_crossing(
+def test_measures_flush_every_fifteen_frames_batches_crossings(
     session_factory, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     job = _register_video_job(session_factory, tmp_path, "batches", datetime.now(UTC))
     _add_shop(session_factory, job)
     progress: list[int | None] = []
     crossings_at_frame_3: list[int] = []
+    crossings_at_frame_15: list[int] = []
 
     def detect(self, frame_index, width, height, frame=None):
         del self, width, height, frame
         with session_factory() as database_session:
             stored = database_session.get(ProcessingJob, job.id)
             progress.append(None if stored is None else stored.frames_analyzed)
-            if frame_index == 3:
-                crossings_at_frame_3.append(
-                    database_session.scalar(
-                        select(func.count())
-                        .select_from(LineCrossing)
-                        .where(LineCrossing.job_id == job.id)
-                    )
-                    or 0
+            count = (
+                database_session.scalar(
+                    select(func.count())
+                    .select_from(LineCrossing)
+                    .where(LineCrossing.job_id == job.id)
                 )
+                or 0
+            )
+            if frame_index == 3:
+                crossings_at_frame_3.append(count)
+            if frame_index == 15:
+                crossings_at_frame_15.append(count)
         # y=72 is side B of the entry line; y=192 is side A. Frame 1 opens a
         # pending exit and frame 2 reverses it, which decides two oscillations.
         y2 = 192 if frame_index == 1 else 72
@@ -446,10 +444,12 @@ def test_measures_flush_every_fifteen_frames_and_on_each_crossing(
     assert progress[0] == 0
     assert progress[1] == 0
     assert progress[2] == 0
-    assert progress[3] == 3
-    assert crossings_at_frame_3 == [2]
-    assert progress[14] == 3
+    # Crossings wait for the 15-frame batch (no per-crossing commit).
+    assert progress[3] == 0
+    assert crossings_at_frame_3 == [0]
+    assert progress[14] == 0
     assert progress[15] == 15
+    assert crossings_at_frame_15 == [2]
     assert progress[29] == 15
     assert progress[30] == 30
     assert progress[45] == 45
@@ -463,6 +463,12 @@ def test_measures_flush_every_fifteen_frames_and_on_each_crossing(
         measures = database_session.scalars(
             select(AnalysisMeasure).where(AnalysisMeasure.job_id == job.id)
         ).all()
+        crossing_count = database_session.scalar(
+            select(func.count())
+            .select_from(LineCrossing)
+            .where(LineCrossing.job_id == job.id)
+        )
+    assert crossing_count == 2
     assert {(measure.code.value, measure.value, measure.partial) for measure in measures} == {
         ("entries", 0, False),
         ("exits", 0, False),

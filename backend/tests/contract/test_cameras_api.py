@@ -6,12 +6,10 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
-from alembic.config import Config
-from conftest import destructive_database_url
+from conftest import prepare_empty_schema
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from alembic import command
 from flowsight.api.main import create_app
 from flowsight.db.models import Camera
 from flowsight.services import cameras
@@ -21,7 +19,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 @pytest.fixture()
 def client() -> TestClient:
-    database_url = destructive_database_url()
+    database_url = prepare_empty_schema()
     os.environ.update(
         {
             "FLOWSIGHT_ENV": "test",
@@ -32,13 +30,10 @@ def client() -> TestClient:
             "FLOWSIGHT_PREVIEW_MAX_FPS": "5",
         }
     )
-    config = Config(BACKEND_DIR / "alembic.ini")
-    command.downgrade(config, "base")
-    command.upgrade(config, "head")
     application = create_app()
     with TestClient(application) as test_client:
         yield test_client
-    command.downgrade(config, "base")
+    application.state.engine.dispose()
 
 
 def _assert_camera(body: dict, name: str) -> None:

@@ -24,8 +24,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-from alembic.config import Config
-from conftest import destructive_database_url
+from conftest import prepare_empty_schema
 from fastapi.testclient import TestClient
 from httpx import Response
 from psycopg.errors import ForeignKeyViolation
@@ -33,7 +32,6 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError
 
-from alembic import command
 from flowsight.api.main import create_app
 from flowsight.video.fixtures import write_clip
 
@@ -75,17 +73,8 @@ def clip(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.fixture()
-def database_url() -> Iterator[str]:
-    url = destructive_database_url()
-    config = Config(BACKEND_DIR / "alembic.ini")
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setenv("FLOWSIGHT_DATABASE_URL", url)
-        command.downgrade(config, "base")
-        command.upgrade(config, "head")
-    yield url
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setenv("FLOWSIGHT_DATABASE_URL", url)
-        command.downgrade(config, "base")
+def database_url() -> str:
+    return prepare_empty_schema()
 
 
 @pytest.fixture()
@@ -316,19 +305,14 @@ def test_shop_id_of_the_other_camera_is_rejected_even_with_the_same_name(
 
 @pytest.fixture(scope="module")
 def engine() -> Iterator[Engine]:
-    database_url = destructive_database_url()
     with pytest.MonkeyPatch.context() as monkeypatch:
-        monkeypatch.setenv("FLOWSIGHT_DATABASE_URL", database_url)
         monkeypatch.setattr(logging.config, "fileConfig", lambda *args, **kwargs: None)
-        config = Config(BACKEND_DIR / "alembic.ini")
-        command.downgrade(config, "base")
-        command.upgrade(config, "head")
+        database_url = prepare_empty_schema()
         engine = create_engine(database_url)
         try:
             yield engine
         finally:
             engine.dispose()
-            command.downgrade(config, "base")
 
 
 @dataclass(frozen=True)

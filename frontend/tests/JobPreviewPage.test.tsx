@@ -165,6 +165,61 @@ describe("JobPreviewPage", () => {
     expect(container.querySelector("img")?.getAttribute("width")).toBeNull();
   });
 
+  it("muestra el último frame de un video ya terminado", async () => {
+    const sockets: FakeSocket[] = [];
+
+    class FakeSocket {
+      listeners: Record<string, Array<(event: { data: string }) => void>> = {};
+
+      constructor(_url: string) {
+        sockets.push(this);
+      }
+
+      addEventListener(type: string, listener: (event: { data: string }) => void) {
+        (this.listeners[type] ??= []).push(listener);
+      }
+
+      close() {}
+    }
+
+    vi.stubGlobal("WebSocket", FakeSocket);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          id: "job-1",
+          session_id: "session-1",
+          status: "completed",
+          kind: "video_analysis",
+        }),
+      }),
+    );
+
+    await act(async () => root.render(<JobPreviewPage jobId="job-1" />));
+    const socket = sockets[0];
+    expect(socket).toBeDefined();
+    await act(async () => {
+      for (const listener of socket?.listeners.message ?? []) {
+        listener({
+          data: JSON.stringify({
+            type: "preview.update",
+            schema_version: "2",
+            frame_index: 0,
+            video_timestamp_seconds: 0,
+            progress_percent: 100,
+            image_media_type: "image/jpeg",
+            image_base64: "/9j/2Q==",
+          }),
+        });
+      }
+    });
+
+    expect(container.querySelector("img")?.getAttribute("alt")).toBe("Previsualización del frame 0");
+    expect(container.querySelector("img")?.getAttribute("src")).toBe("data:image/jpeg;base64,/9j/2Q==");
+    expect(container.textContent).toContain("0 s");
+  });
+
   it("muestra directamente un trabajo terminal sin abrir WebSocket", async () => {
     const socket = vi.fn();
     vi.stubGlobal(

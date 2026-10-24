@@ -102,7 +102,7 @@ describe("VideoUploadForm", () => {
     const file = new File(["video"], "arrastrado.mp4");
     const drop = new Event("drop", { bubbles: true, cancelable: true });
     Object.defineProperty(drop, "dataTransfer", { value: { files: [file], types: ["Files"] } });
-    await act(async () => { container.querySelector('[aria-label="Soltar archivo de video"]')!.dispatchEvent(drop); });
+    await act(async () => { container.querySelector('[aria-label="Zona de soltado"]')!.dispatchEvent(drop); });
     expect(container.textContent).toContain("arrastrado.mp4");
     await changeValue(byLabel<HTMLInputElement>(container, "Nombre de la sesión"), "Entrada");
     await changeValue(byLabel<HTMLSelectElement>(container, "Cámara asignada"), "cam-1");

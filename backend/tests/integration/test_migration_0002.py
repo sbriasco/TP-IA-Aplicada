@@ -23,6 +23,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from alembic import command
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
+pytestmark = pytest.mark.historical_migration
 INITIAL_REVISION = "0001_initial"
 SCENE_TABLES = ("scene_versions", "scene_version_shops", "scene_zones", "scene_entry_lines")
 CHECK_VIOLATION = "23514"

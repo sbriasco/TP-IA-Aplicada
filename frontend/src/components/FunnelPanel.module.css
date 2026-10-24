@@ -1,0 +1,50 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--fs-line);
+  border-radius: 8px;
+  background: var(--fs-surface);
+}
+
+.panel h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.stages, .rates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stages li, .rates li {
+  padding: 10px;
+  border: 1px solid var(--fs-line);
+  border-radius: 6px;
+}
+
+.name {
+  display: block;
+  color: var(--fs-muted);
+  font-size: 12px;
+}
+
+.value {
+  display: block;
+  margin-top: 4px;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.note, .disclaimer, .excluded {
+  margin: 0;
+  color: var(--fs-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}

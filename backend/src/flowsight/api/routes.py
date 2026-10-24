@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, WebSocket, status
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, text
 from sqlalchemy.orm import Session as DatabaseSession
 from sqlalchemy.orm import selectinload, undefer
 from starlette.concurrency import run_in_threadpool
@@ -43,6 +43,7 @@ from flowsight.api.schemas import (
     SessionCreate,
     SessionDetail,
     SessionSummary,
+    ShopFunnelResponse,
     ShopMetricsResponse,
     TrafficBucketResponse,
     TrimmedName,
@@ -80,6 +81,7 @@ from flowsight.services.cameras import (
 )
 from flowsight.services.chat import ChatAnswer, SessionMissing, ask
 from flowsight.services.chat_metrics import LiveChatUnavailable
+from flowsight.services.funnel import LiveFunnelUnavailable, load_shop_funnel
 from flowsight.services.jobs import (
     InvalidJobTransition,
     JobRequestError,
@@ -138,6 +140,40 @@ Database = Annotated[DatabaseSession, Depends(get_database_session)]
 @router.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@router.get("/startup")
+def startup(request: Request) -> dict[str, str]:
+    """Database, migrations, worker heartbeat and the configured detector."""
+
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from flowsight.core.startup_status import migration_status, startup_report, worker_status
+
+    settings = request.app.state.settings
+    database = "unavailable"
+    migrations = "unknown"
+    worker = "unavailable"
+    try:
+        with request.app.state.session_factory() as database_session:
+            database_session.execute(text("SELECT 1"))
+            database = "connected"
+            try:
+                migrations = migration_status(settings.database_url.get_secret_value())
+            except Exception:
+                migrations = "unknown"
+            try:
+                worker = worker_status(database_session)
+            except SQLAlchemyError:
+                worker = "unavailable"
+    except SQLAlchemyError:
+        database = "unavailable"
+    return startup_report(
+        database=database,
+        migrations=migrations,
+        worker=worker,
+        detector=settings.detector,
+    )
 
 
 def not_found(message: str) -> HTTPException:
@@ -322,6 +358,67 @@ def get_shop_metrics(
         metrics=[MetricValueResponse.model_validate(row) for row in rows],
         flow=[TrafficBucketResponse.model_validate(bucket) for bucket in flow],
         peak=TrafficBucketResponse.model_validate(peak),
+    )
+
+
+def _threshold_text(value: Decimal) -> str:
+    text = format(value, "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text
+
+
+@router.get(
+    "/sessions/{session_id}/shops/{shop_id}/funnel",
+    response_model=ShopFunnelResponse,
+)
+def get_shop_funnel(
+    session_id: uuid.UUID, shop_id: uuid.UUID, database: Database
+) -> ShopFunnelResponse:
+    if get_active_session(database, session_id) is None:
+        raise not_found("La sesión no existe.")
+    try:
+        view = load_shop_funnel(database, session_id, shop_id)
+    except LiveFunnelUnavailable:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "live_funnel_unavailable",
+            "El funnel comercial no está disponible para una sesión de webcam.",
+        ) from None
+    except ResultIncomplete:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "result_incomplete",
+            "No hay un análisis completado para consultar.",
+        ) from None
+    except ShopNotInSession:
+        raise not_found("El local no pertenece a esta sesión.") from None
+    return ShopFunnelResponse(
+        session_id=session_id,
+        shop_id=shop_id,
+        stop_threshold_seconds=_threshold_text(view.stop_threshold_seconds),
+        attention_threshold_seconds=_threshold_text(view.attention_threshold_seconds),
+        excluded_window_only=view.excluded_window_only,
+        precision_uncommitted=True,
+        stages=[
+            {
+                "stage": row.stage.value,
+                "count": row.count,
+                "availability": row.availability.value,
+                "label": row.label.value,
+                "unavailable_reason": row.unavailable_reason,
+            }
+            for row in view.stages
+        ],
+        rates=[
+            {
+                "code": row.code.value,
+                "value": None if row.value is None else format(row.value, "f"),
+                "availability": row.availability.value,
+                "unavailable_reason": row.unavailable_reason,
+            }
+            for row in view.rates
+        ],
     )
 
 
@@ -650,6 +747,7 @@ def post_scene_version(
             camera_id,
             reference_session_id=payload.reference_session_id,
             base_version_id=payload.base_version_id,
+            display_name=payload.display_name,
             shops=payload.model_dump()["shops"],
         )
     except SceneError as error:
@@ -870,6 +968,20 @@ def _terminal_message(
     }
 
 
+async def _send_stored_video_preview(
+    websocket: WebSocket, session_id: uuid.UUID, job_id: uuid.UUID
+) -> None:
+    """Replay the last frame when a client joins after the video job already finished."""
+
+    videos_dir = websocket.app.state.settings.videos_dir
+    if videos_dir is None:
+        return
+    snapshot = read_preview_snapshot(snapshot_path(videos_dir, session_id, job_id))
+    if snapshot is None:
+        return
+    await websocket.send_json(snapshot.as_message())
+
+
 @router.websocket("/ws/jobs/{job_id}/preview")
 async def preview_job(websocket: WebSocket, job_id: uuid.UUID) -> None:
     factory = websocket.app.state.session_factory
@@ -884,6 +996,8 @@ async def preview_job(websocket: WebSocket, job_id: uuid.UUID) -> None:
 
     await websocket.accept()
     if job_status in _TERMINAL_STATUSES:
+        if job_kind is JobKind.VIDEO_ANALYSIS:
+            await _send_stored_video_preview(websocket, session_id, job_id)
         await websocket.send_json(_terminal_message(session_id, job_id, job_status))
         return
     if job_kind is JobKind.LIVE_ANALYSIS:

@@ -1,12 +1,15 @@
 .summary { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin: -6px 0 14px; color: var(--fs-muted); font-size: 12px; }
+.summaryStart { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
 .summary p { margin: 0; overflow-wrap: anywhere; }
-.summary > span, .count { background: var(--fs-raised); border-radius: 4px; padding: 3px 6px; font-size: 11px; }
+.summaryStart > span, .count { background: var(--fs-raised); border-radius: 4px; padding: 3px 6px; font-size: 11px; }
 .resultsWorkspace { display: grid; grid-template-columns: minmax(0, 7fr) minmax(300px, 3fr); align-items: start; gap: 24px; }
 .analytics { min-width: 0; }
 .panel { min-width: 0; background: var(--fs-surface); border: 1px solid var(--fs-line); border-radius: 12px; padding: 18px; margin-bottom: 12px; }
 .overview { margin-bottom: 12px; }
 .sectionHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-.sectionHeading h2 { margin: 0 0 3px; font-size: 14px; }
+.headingTitle { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.sectionHeading h2 { margin: 0; font-size: 14px; }
+.trafficLine { color: var(--fs-muted); font-size: 12px; white-space: nowrap; }
 .sectionHeading p, .description { margin: 0 0 8px; color: var(--fs-muted); font-size: 12px; }
 .sectionHeading p { margin-bottom: 0; }
 .shop { display: flex; align-items: center; gap: 8px; font-size: 12px; min-width: 0; }
@@ -46,8 +49,8 @@
 @media (max-width: 900px) { .resultsWorkspace { grid-template-columns: 1fr; } .analysisGrid { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .analysisGrid { grid-template-columns: 1fr; } .sectionHeading { align-items: flex-start; flex-direction: column; } .shop { width: 100%; } .shop select { flex: 1; max-width: none; } }
 
-.summary p, .summary > span { display: inline-flex; align-items: center; gap: 7px; }
-.summary > span { padding: 6px 9px; border: 1px solid var(--fs-line); color: var(--fs-accent); border-radius: 6px; }
+.summary p, .summaryStart > span { display: inline-flex; align-items: center; gap: 7px; }
+.summaryStart > span { padding: 6px 9px; border: 1px solid var(--fs-line); color: var(--fs-accent); border-radius: 6px; }
 .chartFooter { padding-top: 8px; border-top: 1px solid var(--fs-line); margin-top: 8px; }
 .peak { display: inline-block; border: 1px solid var(--fs-line); border-radius: 6px; margin: 0 0 10px; }
 

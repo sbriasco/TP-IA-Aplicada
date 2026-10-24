@@ -93,7 +93,7 @@ test("preparación webcam: dispositivos reconocidos y formulario sin controles s
   await page.goto("/live");
   await expect(page.getByRole("combobox", { name: "Webcam", exact: true }).getByRole("option", { name: "Logitech USB" })).toHaveCount(1);
   await page.getByLabel("Nombre de la sesión", { exact: true }).fill("Entrada · turno mañana");
-  await page.getByLabel("Ubicación asignada", { exact: true }).selectOption(camera.id);
+  await page.getByLabel("Cámara", { exact: true }).selectOption(camera.id);
   await page.getByLabel("Webcam", { exact: true }).selectOption("1");
   await expect(page.getByRole("button", { name: "Preparar webcam y continuar", exact: true })).toBeEnabled();
   await expect(page.getByText(/Configurá el equipo|\.env/)).toHaveCount(0);
@@ -345,7 +345,7 @@ test("etiquetas de webcam: selección Entrada/Salida, editor, vivo y reporte", a
   await page.goto("/live");
   await page.getByRole("button", { name: "Entradas / Salidas", exact: true }).click();
   await page.getByLabel("Nombre de la sesión", { exact: true }).fill("Acceso");
-  await page.getByLabel("Ubicación asignada", { exact: true }).selectOption(camera.id);
+  await page.getByLabel("Cámara", { exact: true }).selectOption(camera.id);
   await page.getByRole("button", { name: "Preparar webcam y continuar", exact: true }).click();
   await expect(page).toHaveURL(/\/sessions\/session-1\/live$/);
   expect(mode).toBe("access");

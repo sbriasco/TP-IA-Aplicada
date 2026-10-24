@@ -321,7 +321,16 @@ class SceneVersionCreate(BaseModel):
 
     reference_session_id: uuid.UUID
     base_version_id: uuid.UUID | None = None
+    display_name: str | None = Field(default=None, max_length=120)
     shops: list[ShopInput] = Field(max_length=MAX_SHOPS_PER_VERSION)
+
+    @field_validator("display_name")
+    @classmethod
+    def clean_display_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        trimmed = value.strip()
+        return trimmed or None
 
 
 class SceneIssueResponse(BaseModel):
@@ -343,6 +352,7 @@ class SceneVersionSummary(BaseModel):
     reference_session_id: uuid.UUID
     frame_width: int
     frame_height: int
+    display_name: str | None = None
     created_by_machine_id: str | None
     created_at: datetime
     shop_count: int
@@ -499,6 +509,38 @@ class ChatResponse(BaseModel):
     scope: Literal["whole_session"] | None
     figures: list[ChatFigure]
     model_calls: int = Field(ge=0, le=2)
+
+
+class FunnelStageResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    stage: str
+    availability: str
+    label: str
+    count: int | None = None
+    unavailable_reason: str | None = None
+
+
+class FunnelRateResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    availability: str
+    value: str | None = None
+    unavailable_reason: str | None = None
+
+
+class ShopFunnelResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: uuid.UUID
+    shop_id: uuid.UUID
+    stop_threshold_seconds: str
+    attention_threshold_seconds: str
+    excluded_window_only: int
+    precision_uncommitted: Literal[True]
+    stages: list[FunnelStageResponse]
+    rates: list[FunnelRateResponse]
 
 
 class SceneEventResponse(BaseModel):

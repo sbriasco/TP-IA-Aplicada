@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { lazy, Suspense } from "react";
 
 import { Camera, Layers, ChevronRight } from "lucide-react";
 import { ScenePreview } from "../components/ScenePreview";
 
 import { API_BASE_URL } from "../api/config";
+import { getShopFunnel, type ShopFunnel } from "../api/funnel";
 import { ApiRequestError } from "../api/http";
 import {
   getJobMeasures,
@@ -24,7 +25,12 @@ import { AppShell } from "../components/AppShell";
 import { PositionHeatmap } from "../components/PositionHeatmap";
 import { SessionChatPanel } from "../components/SessionChatPanel";
 import { Link } from "../components/Link";
+import { FunnelPanel } from "../components/FunnelPanel";
 import { MetricCard } from "../components/MetricCard";
+import { EmptyState } from "../components/results/EmptyState";
+import { EventsTable } from "../components/results/EventsTable";
+import { StatusBadge } from "../components/results/StatusBadge";
+import { ZoneSelect } from "../components/results/ZoneSelect";
 import { Modal } from "../components/Modal";
 import { VideoTimeRange } from "../components/VideoTimeRange";
 import { presenceSeries } from "../flow/presenceSeries";
@@ -54,10 +60,12 @@ export function SessionResultsPage({
   const [fromSeconds, setFromSeconds] = useState(0);
   const [toSeconds, setToSeconds] = useState(0);
   const [metrics, setMetrics] = useState<ShopMetrics | null>(null);
+  const [funnel, setFunnel] = useState<ShopFunnel | null>(null);
   const [events, setEvents] = useState<SceneEvent[]>([]);
   const [measures, setMeasures] = useState<AnalysisMeasure[]>([]);
   const [positions, setPositions] = useState<PositionSamples | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const zoneSelectId = useId();
 
   useEffect(() => {
     let active = true;
@@ -112,6 +120,25 @@ export function SessionResultsPage({
   }, [apiBaseUrl, sessionId, shopId, row?.result_complete]);
 
   useEffect(() => {
+    if (row?.result_complete !== true || shopId === null || session?.source_kind === "webcam") {
+      setFunnel(null);
+      return;
+    }
+    let active = true;
+    setFunnel(null);
+    getShopFunnel(apiBaseUrl, sessionId, shopId)
+      .then((result) => {
+        if (active) setFunnel(result);
+      })
+      .catch(() => {
+        if (active) setFunnel(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [apiBaseUrl, sessionId, shopId, row?.result_complete, session?.source_kind]);
+
+  useEffect(() => {
     if (row?.result_complete !== true || shopId === null) return;
     let active = true;
     setEvents([]);
@@ -157,8 +184,11 @@ export function SessionResultsPage({
       {session === null && error === null && <p role="status">Cargando resultados…</p>}
       {session !== null && (
         <div className={styles.summary}>
-          <p><Camera size={15} aria-hidden="true" />{session.camera.name} · {session.video?.original_filename ?? "Sesión sintética"}</p>
-          {row?.version_number != null && <span><Layers size={14} aria-hidden="true" />Zonas aplicadas: Versión {row.version_number}</span>}
+          <div className={styles.summaryStart}>
+            <p><Camera size={15} aria-hidden="true" />{session.camera.name} · {session.video?.original_filename ?? "Sesión sintética"}</p>
+            {row?.version_number != null && <span><Layers size={14} aria-hidden="true" />Zonas aplicadas: Versión {row.version_number}</span>}
+          </div>
+          {row !== null && <StatusBadge source="video" status={row.status} />}
         </div>
       )}
       {session !== null && row === null && error === null && <p className={styles.notice}>Esta sesión todavía no tiene un análisis. Configurá la escena e iniciá el procesamiento desde el detalle.</p>}
@@ -181,18 +211,27 @@ export function SessionResultsPage({
         <div className={styles.analytics}>
           <section className={styles.overview} aria-label="Indicadores de la sesión">
             <div className={styles.sectionHeading}>
-              <h2>Indicadores de la zona</h2>
-              {shops.length > 0 && <label className={styles.shop}>Zona
-                <select aria-label="Zona" value={shopId ?? ""} onChange={(event) => setShopId(event.target.value)}>
-                  {shops.map((shop) => <option key={shop.shop_id} value={shop.shop_id}>{shop.name}</option>)}
-                </select>
-              </label>}
+              <div className={styles.headingTitle}>
+                <h2>Indicadores de la zona</h2>
+                {metrics !== null && (
+                  <span className={styles.trafficLine}>
+                    Tráfico: {metrics.metrics.find(({ code }) => code === "traffic_total")?.value ?? 0}
+                  </span>
+                )}
+              </div>
+              {shops.length > 0 && <ZoneSelect id={zoneSelectId} className={styles.shop} value={shopId ?? ""} options={shops.map((shop) => ({ id: shop.shop_id, name: shop.name }))} onChange={setShopId} />}
             </div>
             {metrics === null ? <p role="status">Cargando indicadores…</p> : <>
               <ul className={`${styles.metrics} grid grid-cols-2 lg:grid-cols-4 gap-4`}>{metrics.metrics.filter((metric) => PRIMARY_CODES.has(metric.code)).map((metric) => <MetricCard key={metric.code} metric={metric} prominent />)}</ul>
               <details className={styles.moreMetrics}><summary>Ver todos los indicadores</summary><ul className={styles.metrics}>{metrics.metrics.filter((metric) => !PRIMARY_CODES.has(metric.code)).map((metric) => <MetricCard key={metric.code} metric={metric} prominent />)}</ul></details>
             </>}
           </section>
+          {funnel !== null && session != null && session.source_kind !== "webcam" && (
+            <FunnelPanel
+              funnel={funnel}
+              officialEntries={metrics?.metrics.find((metric) => metric.code === "entries")?.value ?? null}
+            />
+          )}
           <div className={styles.analysisGrid}>
             <section className={`${styles.panel} ${styles.flowPanel}`} aria-labelledby="flow-title">
               <h2 id="flow-title">Flujo temporal</h2>
@@ -235,14 +274,12 @@ export function SessionResultsPage({
         </div>
       )}
       {eventsOpen && <Modal wide title="Hechos del análisis" subtitle={`${events.length} hechos · zona seleccionada · ${fromSeconds}–${rangeEnd} s`} onClose={() => setEventsOpen(false)}>
-        {events.length === 0 ? <p className={styles.description}>No hay hechos registrados en este tramo.</p> : <div className={styles.eventsTableWrap}>
-          <table className={styles.eventsTable} aria-label="Hechos del análisis">
+        {events.length === 0 ? <EmptyState title="Sin hechos en este tramo">No hay hechos registrados para la zona y el tramo elegidos.</EmptyState> : <EventsTable label="Hechos del análisis">
             <thead><tr><th scope="col">Evento</th><th scope="col">Track</th><th scope="col">Tiempo del video</th></tr></thead>
             <tbody>{events.map((event, index) => <tr key={`${event.track_id}-${event.kind}-${event.video_timestamp_seconds}-${index}`}>
               <td>{EVENT_NAME[event.kind] ?? "Evento registrado"}</td><td className={styles.track}>Track {event.track_id}</td><td>{event.video_timestamp_seconds} s</td>
             </tr>)}</tbody>
-          </table>
-        </div>}
+          </EventsTable>}
       </Modal>}
     </AppShell>
   );

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import base64
 import logging
+import threading
 import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Literal, cast
@@ -24,11 +26,14 @@ from flowsight.db.models import (
     SceneEntryLine,
     SceneVersionShop,
     SceneZone,
+    Session,
     VideoSource,
     ZoneRole,
 )
+from flowsight.db.session import database_url_is_remote
 from flowsight.preview.broker import PreviewUpdate
 from flowsight.preview.snapshot import snapshot_path, write_preview_snapshot
+from flowsight.services.funnel import persist_shop_funnel
 from flowsight.services.jobs import transition_job
 from flowsight.services.measures import close_measures, sync_measures
 from flowsight.services.scene_metrics import persist_completed_scene
@@ -38,12 +43,158 @@ from flowsight.vision.detector import Detection, Detector, ModelUnavailable, bui
 from flowsight.vision.events import SceneEventRecorder
 from flowsight.vision.evidence import build_reference_summary, write_reference_summary
 from flowsight.vision.overlay import render_overlay_jpeg
-from flowsight.vision.spatial import ShopGeometry, SpatialCounter, normalized_foot
+from flowsight.vision.spatial import (
+    CrossingFact,
+    ShopCounts,
+    ShopGeometry,
+    SpatialCounter,
+    normalized_foot,
+)
 from flowsight.vision.trajectory import TrajectoryWriter, trajectory_relative_path
 
 logger = logging.getLogger(__name__)
 
 FLUSH_EVERY_FRAMES = 15
+# Remote writers coalesce and drain about once per second so inference never
+# waits on Azure RTT; a crash can lose at most this window of partial measures.
+REMOTE_FLUSH_INTERVAL_S = 1.0
+
+
+@dataclass(frozen=True)
+class _MeasureFlushPayload:
+    job_id: uuid.UUID
+    session_id: uuid.UUID
+    frames_analyzed: int
+    video_timestamp_seconds: Decimal
+    counts: tuple[ShopCounts, ...]
+    facts: tuple[CrossingFact, ...]
+    fps: float
+
+
+def _coalesce_measure_payloads(
+    current: _MeasureFlushPayload | None, incoming: _MeasureFlushPayload
+) -> _MeasureFlushPayload:
+    """Keep latest totals; append crossing facts until the writer drains."""
+
+    if current is None:
+        return incoming
+    return _MeasureFlushPayload(
+        job_id=incoming.job_id,
+        session_id=incoming.session_id,
+        frames_analyzed=incoming.frames_analyzed,
+        video_timestamp_seconds=incoming.video_timestamp_seconds,
+        counts=incoming.counts,
+        facts=current.facts + incoming.facts,
+        fps=incoming.fps,
+    )
+
+
+class _MeasureFlushGate:
+    """Local: sync flush. Remote: in-memory coalesce queue + background drain."""
+
+    def __init__(
+        self,
+        factory: sessionmaker[DatabaseSession],
+        *,
+        overlap: bool,
+        interval_s: float = REMOTE_FLUSH_INTERVAL_S,
+    ) -> None:
+        if interval_s <= 0:
+            raise ValueError("Invalid measure flush interval")
+        self._factory = factory
+        self._overlap = overlap
+        self._interval_s = interval_s
+        self._lock = threading.Lock()
+        self._pending: _MeasureFlushPayload | None = None
+        self._wake = threading.Event()
+        self._closed = threading.Event()
+        self._error: BaseException | None = None
+        self.cancelled = False
+        self._thread: threading.Thread | None = None
+        if overlap:
+            self._thread = threading.Thread(target=self._run, daemon=True)
+            self._thread.start()
+
+    def submit(self, payload: _MeasureFlushPayload) -> None:
+        self._raise_if_failed()
+        if self.cancelled:
+            return
+        if not self._overlap:
+            self._write(payload)
+            return
+        with self._lock:
+            self._pending = _coalesce_measure_payloads(self._pending, payload)
+        self._wake.set()
+
+    def pump(self) -> None:
+        """Surface writer failures without blocking the analysis loop."""
+
+        self._raise_if_failed()
+
+    def join(self) -> None:
+        if not self._overlap:
+            self._raise_if_failed()
+            return
+        self._closed.set()
+        self._wake.set()
+        if self._thread is not None:
+            self._thread.join()
+            self._thread = None
+        self._raise_if_failed()
+
+    def _raise_if_failed(self) -> None:
+        if self._error is not None:
+            error = self._error
+            self._error = None
+            raise error
+
+    def _run(self) -> None:
+        while True:
+            self._wake.wait(timeout=self._interval_s)
+            self._wake.clear()
+            try:
+                self._drain()
+            except BaseException as error:
+                self._error = error
+                return
+            if self._closed.is_set():
+                try:
+                    self._drain()
+                except BaseException as error:
+                    self._error = error
+                return
+
+    def _drain(self) -> None:
+        with self._lock:
+            payload = self._pending
+            self._pending = None
+        if payload is None:
+            return
+        # Still persist the last coalesced batch when the job was cancelled so
+        # partial measures/crossings match the previous sync flush semantics.
+        self._write(payload)
+
+    def _write(self, payload: _MeasureFlushPayload) -> None:
+        with self._factory.begin() as database_session:
+            stored = database_session.get(ProcessingJob, payload.job_id)
+            if stored is None or stored.status not in {
+                JobStatus.PROCESSING,
+                JobStatus.CANCELLED,
+            }:
+                raise _AnalysisError("analysis_failed")
+            if stored.status is JobStatus.CANCELLED:
+                self.cancelled = True
+            stored.frames_analyzed = payload.frames_analyzed
+            stored.analyzed_video_timestamp_seconds = payload.video_timestamp_seconds
+            sync_measures(
+                database_session,
+                job_id=payload.job_id,
+                session_id=payload.session_id,
+                video_timestamp_seconds=payload.video_timestamp_seconds,
+                counts=payload.counts,
+                facts=payload.facts,
+                fps=payload.fps,
+            )
 
 
 def _monotonic() -> float:
@@ -148,16 +299,22 @@ def _run(
         tracker_name=detector.tracker_name,
         tracker_version=detector.tracker_version,
     )
-    counter = SpatialCounter(shops)
+    counter = SpatialCounter(shops, fps=float(fps))
     recorder = SceneEventRecorder(shops, fps=float(fps))
     frame_index = 0
-    cancelled = False
+    pending_facts: list[CrossingFact] = []
+    flush_gate = _MeasureFlushGate(
+        factory, overlap=database_url_is_remote(settings.database_url.get_secret_value())
+    )
     last_preview_s: float | None = None
     try:
         for ok, decoded in iter_video_frames(capture, frames_total):
             frame = cast(np.ndarray, decoded)
             if not ok:
                 raise _AnalysisError("analysis_failed")
+            flush_gate.pump()
+            if flush_gate.cancelled:
+                break
             timestamp = (Decimal(frame_index) / Decimal(str(fps))).quantize(Decimal("0.000001"))
             detections = detector.detect(frame_index, width, height, frame)
             writer.observe(
@@ -173,31 +330,27 @@ def _run(
                 for detection in detections
             ]
             recorder.observe(frame_index, feet, facts)
+            pending_facts.extend(facts)
             frames_analyzed = frame_index + 1
             if frames_analyzed == frames_total:
                 finished = counter.finish()
-                facts.extend(finished)
+                pending_facts.extend(finished)
                 recorder.accept_crossings(finished)
-            if _should_flush(frames_analyzed, frames_total, facts):
-                with factory.begin() as database_session:
-                    stored = database_session.get(ProcessingJob, job_id)
-                    if stored is None or stored.status not in {
-                        JobStatus.PROCESSING,
-                        JobStatus.CANCELLED,
-                    }:
-                        raise _AnalysisError("analysis_failed")
-                    cancelled = stored.status is JobStatus.CANCELLED
-                    stored.frames_analyzed = frames_analyzed
-                    stored.analyzed_video_timestamp_seconds = timestamp
-                    sync_measures(
-                        database_session,
+            if _should_flush(frames_analyzed, frames_total):
+                flush_gate.submit(
+                    _MeasureFlushPayload(
                         job_id=job_id,
                         session_id=session_id,
+                        frames_analyzed=frames_analyzed,
                         video_timestamp_seconds=timestamp,
-                        counts=counter.counts(),
-                        facts=facts,
+                        counts=tuple(counter.counts()),
+                        facts=tuple(pending_facts),
                         fps=fps,
                     )
+                )
+                pending_facts.clear()
+                if flush_gate.cancelled:
+                    break
             now_s = _monotonic()
             if preview_is_due(
                 frame_index=frame_index,
@@ -221,29 +374,40 @@ def _run(
                 )
                 last_preview_s = now_s
             frame_index += 1
-            if cancelled:
-                break
     finally:
         capture.release()
         writer.close()
+        flush_gate.join()
 
-    if cancelled:
+    if flush_gate.cancelled:
         return
     if frame_index != frames_total:
         raise _AnalysisError("analysis_failed")
     evidence = None
     with factory.begin() as database_session:
         close_measures(database_session, job_id)
+        events = recorder.finish()
         persist_completed_scene(
             database_session,
             job_id=job_id,
             session_id=session_id,
-            events=recorder.finish(),
+            events=events,
             fps=float(fps),
             duration_seconds=frames_total / float(fps),
             front_by_shop={shop.shop_id: bool(shop.front_polygon) for shop in shops},
             line_by_shop={shop.shop_id: shop.line_start is not None for shop in shops},
         )
+        flow_session = database_session.get(Session, session_id)
+        if flow_session is not None:
+            persist_shop_funnel(
+                database_session,
+                job_id=job_id,
+                session_id=session_id,
+                events=events,
+                fps=float(fps),
+                windows={shop.shop_id: shop.window_polygon is not None for shop in shops},
+                source_kind=flow_session.source_kind.value,
+            )
         finished = transition_job(
             database_session,
             job_id=job_id,
@@ -269,14 +433,10 @@ def _run(
         write_reference_summary(settings.videos_dir / relative, evidence)
 
 
-def _should_flush(frames_analyzed: int, frames_total: int, facts: Sequence[object]) -> bool:
-    """Persist on each decided crossing, every 15 frames, and on the last frame."""
+def _should_flush(frames_analyzed: int, frames_total: int) -> bool:
+    """Persist every 15 frames and on the last frame; crossings ride the same batch."""
 
-    return (
-        frames_analyzed == frames_total
-        or frames_analyzed % FLUSH_EVERY_FRAMES == 0
-        or bool(facts)
-    )
+    return frames_analyzed == frames_total or frames_analyzed % FLUSH_EVERY_FRAMES == 0
 
 
 def _scene_context(

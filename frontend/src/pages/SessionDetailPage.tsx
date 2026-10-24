@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { Layers, ChevronDown } from "lucide-react";
+import { configurationLabel } from "../presentation/configurationLabel";
 import type { SceneVersionSummary } from "../types/scene";
 
 import { API_BASE_URL } from "../api/config";
@@ -123,7 +124,7 @@ export function SessionDetailPage({ sessionId, apiBaseUrl = API_BASE_URL }: Sess
       {frame !== null && (
         <section className={styles.panel} aria-labelledby="frame-title">
           <div className={styles.frameHeading}>
-            <div className={styles.previewTitle}><h2 id="frame-title">Escena y zonas configuradas</h2>{selectedVersion && <span className={styles.badge} aria-label="Configuración activa">Configuración {selectedVersion.version_number}</span>}</div>
+            <div className={styles.previewTitle}><h2 id="frame-title">Escena y zonas configuradas</h2>{selectedVersion && <span className={styles.badge} aria-label="Configuración activa">{configurationLabel(selectedVersion)}</span>}</div>
             <Link className={styles.editAction} href={`/sessions/${encodeURIComponent(session.id)}/editor`}><Layers size={15} aria-hidden="true" />Editar en canvas</Link>
           </div>
           <div className={styles.frameSurface} style={{ aspectRatio: `${frame.width} / ${frame.height}` }}>

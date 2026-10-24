@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, Layers } from "lucide-react";
+import { configurationLabel } from "../presentation/configurationLabel";
 import type { SceneVersionSummary } from "../types/scene";
 import styles from "./SceneConfigurationSelect.module.css";
 
@@ -88,16 +89,16 @@ export function SceneConfigurationSelect({ id, versions, value, disabled, onChan
       aria-describedby="configuration-explanation" disabled={disabled} className={styles.trigger}
       onKeyDown={handleKey} onClick={() => open ? setPlacement(null) : openMenu()}>
       <Layers size={17} className={styles.icon} aria-hidden="true" />
-      <span className={styles.value}><strong>Configuración {selected?.version_number}</strong><small>{selected?.shop_count} {selected?.shop_count === 1 ? "zona" : "zonas"}</small></span>
+      <span className={styles.value}><strong>{selected ? configurationLabel(selected) : "Sin configuración"}</strong><small>{selected?.shop_count} {selected?.shop_count === 1 ? "zona" : "zonas"}</small></span>
       {selected?.id === versions[0]?.id && <span className={styles.badge}>Más reciente</span>}
       <ChevronDown size={16} className={open ? styles.chevronOpen : styles.chevron} aria-hidden="true" />
     </button>
     {open && createPortal(<div ref={menu} id={listId} role="listbox" aria-label="Configuraciones de escena" className={styles.menu} style={placement}>
       {versions.map((version, index) => <div key={version.id} id={`${listId}-${index}`} role="option" aria-selected={version.id === value}
-        aria-label={`Configuración ${version.version_number}`} className={styles.option} data-active={index === activeIndex}
+        aria-label={configurationLabel(version)} className={styles.option} data-active={index === activeIndex}
         onPointerMove={() => setActiveIndex(index)} onMouseDown={event => event.preventDefault()} onClick={() => choose(version)}>
         <Layers size={17} className={styles.icon} aria-hidden="true" />
-        <span className={styles.value}><strong>Configuración {version.version_number}</strong><small>{version.shop_count} {version.shop_count === 1 ? "zona de interés" : "zonas de interés"}</small></span>
+        <span className={styles.value}><strong>{configurationLabel(version)}</strong><small>{version.shop_count} {version.shop_count === 1 ? "zona de interés" : "zonas de interés"}</small></span>
         {index === 0 && <span className={styles.badge}>Más reciente</span>}
         <span className={styles.check}>{version.id === value && <Check size={17} aria-hidden="true" />}</span>
       </div>)}

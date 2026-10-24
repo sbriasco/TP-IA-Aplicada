@@ -6,7 +6,11 @@ import { AppShell } from "../components/AppShell";
 import { CrossingChart } from "../components/CrossingChart";
 import { Link } from "../components/Link";
 import { PositionHeatmap } from "../components/PositionHeatmap";
-import { Activity, ArrowLeft, CheckCircle2, ChevronDown, MapPinOff, VideoOff, AlertTriangle } from "lucide-react";
+import { Activity, ArrowLeft, ChevronDown, MapPinOff, VideoOff, AlertTriangle } from "lucide-react";
+import { EmptyState } from "../components/results/EmptyState";
+import { EventsTable } from "../components/results/EventsTable";
+import { StatusBadge } from "../components/results/StatusBadge";
+import { ZoneSelect } from "../components/results/ZoneSelect";
 import type { LiveResults } from "../types/live";
 import styles from "./LiveResultsPage.module.css";
 
@@ -15,6 +19,12 @@ interface LiveSamples { job_id: string; source_kind: "webcam"; time_basis: "capt
   candidate_count: number; capacity: number; samples: { capture_timestamp_seconds: number; foot: [number, number] }[]; }
 interface LiveEvents { events: { id: string; track_id: number; capture_timestamp_seconds: number;
   confirmed_at_capture_seconds: number; direction: "entry" | "exit" }[]; next_cursor: string | null; }
+
+function visitNote(count: number | undefined) {
+  if (count === undefined) return "Sin estadía calculada";
+  if (count <= 0) return "Sin visitas con duración suficiente";
+  return count + " visitas observadas";
+}
 
 export function LiveResultsPage({ jobId, apiBaseUrl = API_BASE_URL }: { jobId: string; apiBaseUrl?: string }) {
   const [result, setResult] = useState<LiveResults | null>(null);
@@ -78,8 +88,9 @@ export function LiveResultsPage({ jobId, apiBaseUrl = API_BASE_URL }: { jobId: s
     day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
     timeZone: "America/Argentina/Buenos_Aires",
   }) : "Fecha de inicio no disponible";
-  const quality = result && result.elapsed_capture_seconds > 0 ?
+  const coverage = result && result.elapsed_capture_seconds > 0 ?
     (result.observed_seconds / result.elapsed_capture_seconds * 100).toLocaleString("es-AR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " %" : "--";
+  const unanalyzed = result ? result.missing_seconds.toLocaleString("es-AR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " s sin analizar" : "";
   function duration(value: number | null | undefined) {
     if (value === undefined || value === null || value <= 0) return "--";
     return value < .1 ? "< 0,1 s" : value.toLocaleString("es-AR", { maximumFractionDigits: 1 }) + " s";
@@ -95,7 +106,7 @@ export function LiveResultsPage({ jobId, apiBaseUrl = API_BASE_URL }: { jobId: s
         {result && <time dateTime={captureDate ?? undefined}>{dateLabel}</time>}
       </div>
       {result && <div className={styles.badges}>
-        <span className={styles.success}><CheckCircle2 size={14} aria-hidden="true" />{ended ? "Captura finalizada" : "Captura en curso"}</span>
+        <StatusBadge source="webcam" status={result.status} />
         {!result.coverage_complete && <span className={styles.warning} tabIndex={0}
           title={result.unknown_tail ? "Hay intervalos sin observaciones y un final desconocido; la duración corresponde al último checkpoint válido." : "Hubo pausas o interrupciones sin observaciones. Los intervalos sin cobertura no representan cero personas."}>
           <AlertTriangle size={14} aria-hidden="true" />Cobertura parcial ({result.observed_seconds.toFixed(1)}s / {result.elapsed_capture_seconds.toFixed(1)}s observados)
@@ -114,20 +125,16 @@ export function LiveResultsPage({ jobId, apiBaseUrl = API_BASE_URL }: { jobId: s
           <dd className={styles.metricNote}>{access ? "Entradas: " + (summary?.entry_count ?? "--") + " · Salidas: " + (summary?.exit_count ?? "--") :
             "A → B: " + (summary?.a_to_b_count ?? "--") + " · B → A: " + (summary?.b_to_a_count ?? "--")}</dd></div>
         <div className={styles.metric}><dt>Permanencia interna</dt><dd aria-label="Estadía promedio interna">{duration(dwell?.interior_average_seconds)}</dd>
-          <dd className={styles.metricNote}>{dwell?.interior_sample_count ? dwell.interior_sample_count + " visitas observadas" : "Sin tracks observados"}</dd></div>
+          <dd className={styles.metricNote}>{visitNote(dwell?.interior_sample_count)}</dd></div>
         <div className={styles.metric}><dt>Permanencia externa</dt><dd aria-label="Estadía promedio externa">{duration(dwell?.front_average_seconds)}</dd>
-          <dd className={styles.metricNote}>{dwell?.front_sample_count ? dwell.front_sample_count + " visitas observadas" : "Sin tracks observados"}</dd></div>
-        <div className={styles.metric}><dt>Calidad de captura</dt><dd aria-label="Calidad de captura">{quality}</dd>
-          <dd className={styles.metricNote}>{result.missing_seconds.toFixed(1)}s en pausa / gap</dd></div>
+          <dd className={styles.metricNote}>{visitNote(dwell?.front_sample_count)}</dd></div>
+        <div className={styles.metric}><dt>Cobertura del análisis</dt><dd aria-label="Cobertura del análisis">{coverage}</dd>
+          <dd className={styles.metricNote}>{unanalyzed}</dd></div>
       </dl></section>
       <div className={styles.content}>
         <section className={styles.panel} aria-labelledby={selectId + "-flow"}>
           <header className={styles.panelHeader}><h2 id={selectId + "-flow"}>Flujo de cruces temporales</h2>
-            <div className={styles.lineSelect}><label htmlFor={selectId}>Línea:</label><select id={selectId} value={result.selected_shop_id ?? ""}
-              onChange={(event) => setShopId(event.target.value)} disabled={!result.shops.length}>
-              {!result.shops.length && <option value="">Sin líneas</option>}
-              {result.shops.map((shop) => <option key={shop.shop_id} value={shop.shop_id}>{shop.shop_name}</option>)}
-            </select></div></header>
+            <ZoneSelect id={selectId} className={styles.lineSelect} value={result.selected_shop_id ?? ""} options={result.shops.map((shop) => ({ id: shop.shop_id, name: shop.shop_name }))} onChange={setShopId} /></header>
           {summary ? <CrossingChart minutes={result.minutes} summary={summary} captureStartedAt={captureDate} report /> :
             <div className={styles.chartEmpty}>Sin cruces guardados para esta línea.</div>}
           {result.next_bucket_cursor !== null && <button type="button" data-primary disabled={loadingMore} onClick={() => void moreMinutes()}>Cargar más minutos</button>}
@@ -138,12 +145,8 @@ export function LiveResultsPage({ jobId, apiBaseUrl = API_BASE_URL }: { jobId: s
           {samples?.availability === "available" && samples.samples.length > 0 ? <figure className={styles.frame}>
             <img alt="Frame de referencia de la escena" src={apiBaseUrl + "/sessions/" + encodeURIComponent(result.session_id) + "/reference-frame"} />
             <PositionHeatmap availability={samples.availability} samples={samples.samples} />
-          </figure> : !sampleError && <div className={styles.emptyMap}>
-            <MapPinOff size={32} strokeWidth={1.5} aria-hidden="true" />
-            <h3>{samples ? "Sin muestra de posiciones" : "Cargando posiciones…"}</h3>
-            <p>{!samples ? "Consultando la muestra guardada." : samples.availability === "unavailable" ?
-              "No hay una muestra de posiciones disponible para esta captura." : "No se registraron trayectorias continuas durante el lapso de captura."}</p>
-          </div>}
+          </figure> : !sampleError && <div className={styles.emptyMap}><EmptyState title={samples ? "Sin muestra de posiciones" : "Cargando posiciones…"} icon={<MapPinOff size={32} strokeWidth={1.5} aria-hidden="true" />}>{!samples ? "Consultando la muestra guardada." : samples.availability === "unavailable" ?
+              "No hay una muestra de posiciones disponible para esta captura." : "No se registraron trayectorias continuas durante el lapso de captura."}</EmptyState></div>}
         </section>
       </div>
       <details className={styles.diagnostics}>
@@ -163,19 +166,19 @@ export function LiveResultsPage({ jobId, apiBaseUrl = API_BASE_URL }: { jobId: s
             {eventError && <p role="alert">{eventError}</p>}
             {!events && !eventError && <p role="status">Cargando cruces…</p>}
             {events?.events.length === 0 && <p className={styles.note}>No hay cruces confirmados para esta línea.</p>}
-            {events && events.events.length > 0 && <div className={styles.tableScroll}><table><thead><tr><th>Captura (s)</th><th>Confirmación (s)</th><th>Sentido</th></tr></thead>
+            {events && events.events.length > 0 && <EventsTable label="Cruces individuales"><thead><tr><th>Captura (s)</th><th>Confirmación (s)</th><th>Sentido</th></tr></thead>
               <tbody>{events.events.map(event => <tr key={event.id}><td>{event.capture_timestamp_seconds.toFixed(2)}</td><td>{event.confirmed_at_capture_seconds.toFixed(2)}</td>
                 <td>{access ? event.direction === "entry" ? "Entrada" : "Salida" :
-                  (event.direction === "entry") === (summary?.entry_direction === "a_to_b") ? "A → B" : "B → A"}</td></tr>)}</tbody></table></div>}
+                  (event.direction === "entry") === (summary?.entry_direction === "a_to_b") ? "A → B" : "B → A"}</td></tr>)}</tbody></EventsTable>}
             {events?.next_cursor && <button type="button" data-primary disabled={loadingMore} onClick={() => void moreEvents()}>Cargar más cruces</button>}
           </section>
           {summary && result.minutes.length > 0 && <section aria-label="Cobertura por minuto"><h3>Datos y cobertura por minuto</h3>
             <p className={styles.note}>El minuto en curso puede cambiar al confirmarse un cruce. Los intervalos sin análisis no representan cero personas.</p>
-            <div className={styles.tableScroll}><table><thead><tr><th>Minuto</th><th>{access ? "Entradas" : "A → B"}</th><th>{access ? "Salidas" : "B → A"}</th><th>Cobertura</th></tr></thead>
+            <EventsTable label="Cobertura por minuto"><thead><tr><th>Minuto</th><th>{access ? "Entradas" : "A → B"}</th><th>{access ? "Salidas" : "B → A"}</th><th>Cobertura</th></tr></thead>
               <tbody>{result.minutes.map(minute => <tr key={minute.bucket_index}><th>{minuteTime(minute.start_seconds)}</th>
                 <td>{minute.observed_seconds === 0 ? "Sin datos" : access || summary.entry_direction === "a_to_b" ? minute.entries : minute.exits}</td>
                 <td>{minute.observed_seconds === 0 ? "Sin datos" : access || summary.entry_direction === "a_to_b" ? minute.exits : minute.entries}</td>
-                <td>{minute.coverage_incomplete || minute.unknown_tail ? "Cobertura incompleta" : minute.is_open ? "Minuto en curso" : "Minuto cerrado"}</td></tr>)}</tbody></table></div>
+                <td>{minute.coverage_incomplete || minute.unknown_tail ? "Cobertura incompleta" : minute.is_open ? "Minuto en curso" : "Minuto cerrado"}</td></tr>)}</tbody></EventsTable>
           </section>}
         </div>
       </details>

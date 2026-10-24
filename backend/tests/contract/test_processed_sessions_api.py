@@ -7,11 +7,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from alembic.config import Config
-from conftest import destructive_database_url
+from conftest import prepare_empty_schema
 from fastapi.testclient import TestClient
 
-from alembic import command
 from flowsight.api.main import create_app
 from flowsight.db.models import (
     JobKind,
@@ -31,7 +29,7 @@ SESSION_KEYS = {"id", "name", "source_kind", "camera", "created_at"}
 
 @pytest.fixture()
 def client(tmp_path: Path) -> TestClient:
-    database_url = destructive_database_url()
+    database_url = prepare_empty_schema()
     os.environ.update(
         {
             "FLOWSIGHT_ENV": "test",
@@ -44,14 +42,10 @@ def client(tmp_path: Path) -> TestClient:
             "FLOWSIGHT_VIDEOS_DIR": str(tmp_path),
         }
     )
-    config = Config(BACKEND_DIR / "alembic.ini")
-    command.downgrade(config, "base")
-    command.upgrade(config, "head")
     application = create_app()
     with TestClient(application) as test_client:
         yield test_client
     application.state.engine.dispose()
-    command.downgrade(config, "base")
 
 
 def test_history_uses_the_analysis_version_and_keeps_the_session_list(

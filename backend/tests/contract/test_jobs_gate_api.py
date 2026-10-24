@@ -17,13 +17,11 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from alembic.config import Config
-from conftest import destructive_database_url
+from conftest import prepare_empty_schema
 from fastapi.testclient import TestClient
 from httpx import Response
 from sqlalchemy import func, select
 
-from alembic import command
 from flowsight.api.main import create_app
 from flowsight.db.models import JobKind, JobStatus, ProcessingJob
 from flowsight.video.fixtures import write_clip
@@ -86,17 +84,8 @@ def clips(tmp_path_factory: pytest.TempPathFactory) -> dict[tuple[int, int], Pat
 
 
 @pytest.fixture()
-def database_url() -> Iterator[str]:
-    url = destructive_database_url()
-    config = Config(BACKEND_DIR / "alembic.ini")
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setenv("FLOWSIGHT_DATABASE_URL", url)
-        command.downgrade(config, "base")
-        command.upgrade(config, "head")
-    yield url
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setenv("FLOWSIGHT_DATABASE_URL", url)
-        command.downgrade(config, "base")
+def database_url() -> str:
+    return prepare_empty_schema()
 
 
 @pytest.fixture()

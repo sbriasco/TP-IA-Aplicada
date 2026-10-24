@@ -15,13 +15,10 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
-from alembic.config import Config
-from conftest import destructive_database_url
+from conftest import prepare_empty_schema
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import DBAPIError
-
-from alembic import command
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 SCENE_TABLES = ("scene_versions", "scene_version_shops", "scene_zones", "scene_entry_lines")
@@ -64,19 +61,14 @@ class SceneRows:
 
 @pytest.fixture(scope="module")
 def engine() -> Iterator[Engine]:
-    database_url = destructive_database_url()
     with pytest.MonkeyPatch.context() as monkeypatch:
-        monkeypatch.setenv("FLOWSIGHT_DATABASE_URL", database_url)
         monkeypatch.setattr(logging.config, "fileConfig", lambda *args, **kwargs: None)
-        config = Config(BACKEND_DIR / "alembic.ini")
-        command.downgrade(config, "base")
-        command.upgrade(config, "head")
+        database_url = prepare_empty_schema()
         engine = create_engine(database_url)
         try:
             yield engine
         finally:
             engine.dispose()
-            command.downgrade(config, "base")
 
 
 @pytest.fixture()

@@ -351,6 +351,7 @@ class SceneVersion(Base):
     reference_session_id: Mapped[uuid.UUID] = mapped_column(Uuid)
     frame_width: Mapped[int] = mapped_column(Integer)
     frame_height: Mapped[int] = mapped_column(Integer)
+    display_name: Mapped[str | None] = mapped_column(String(120))
     created_by_machine_id: Mapped[str | None] = mapped_column(String(40))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -545,6 +546,27 @@ class SceneEventKind(str, enum.Enum):
     STORE_ENTER = "store_enter"
     STORE_EXIT = "store_exit"
     DWELL = "dwell"
+    SHOWCASE_STOP = "showcase_stop"
+
+
+class ShopFunnelStageCode(str, enum.Enum):
+    OBSERVED_PASS = "observed_pass"
+    EXPOSURE = "exposure"
+    STOP = "stop"
+    ATTENTION = "attention"
+    LINKED_ENTRY = "linked_entry"
+
+
+class ShopFunnelRateCode(str, enum.Enum):
+    OBSERVED_PASS_TO_EXPOSURE = "observed_pass_to_exposure"
+    EXPOSURE_TO_STOP = "exposure_to_stop"
+    STOP_TO_ATTENTION = "stop_to_attention"
+    ATTENTION_TO_LINKED_ENTRY = "attention_to_linked_entry"
+
+
+class ShopFunnelLabel(str, enum.Enum):
+    NONE = "none"
+    ATTENTION_ESTIMATE = "attention_estimate"
 
 
 class SceneZoneRole(str, enum.Enum):
@@ -588,7 +610,7 @@ class SceneEvent(Base):
         CheckConstraint("frame_index >= 0", name="ck_scene_events_frame_index"),
         CheckConstraint("video_timestamp_seconds >= 0", name="ck_scene_events_video_timestamp"),
         CheckConstraint(
-            "(kind = 'dwell') = (duration_seconds IS NOT NULL)",
+            "(kind IN ('dwell', 'showcase_stop')) = (duration_seconds IS NOT NULL)",
             name="ck_scene_events_dwell_duration",
         ),
         CheckConstraint(
@@ -596,11 +618,20 @@ class SceneEvent(Base):
             name="ck_scene_events_duration_non_negative",
         ),
         CheckConstraint(
-            "(kind IN ('zone_enter', 'zone_exit', 'dwell')) = (zone_role IS NOT NULL)",
+            "(kind IN ('zone_enter', 'zone_exit', 'dwell', 'showcase_stop')) = "
+            "(zone_role IS NOT NULL)",
             name="ck_scene_events_zone_role",
         ),
         CheckConstraint(
             "kind <> 'dwell' OR zone_role = 'front'", name="ck_scene_events_dwell_front"
+        ),
+        CheckConstraint(
+            "kind <> 'showcase_stop' OR zone_role = 'window'",
+            name="ck_scene_events_showcase_window",
+        ),
+        CheckConstraint(
+            "kind <> 'showcase_stop' OR duration_seconds >= 3",
+            name="ck_scene_events_showcase_duration",
         ),
     )
 
@@ -656,6 +687,131 @@ class ShopMetric(Base):
     )
     label: Mapped[ShopMetricLabel] = mapped_column(
         Enum(ShopMetricLabel, name="shop_metric_label", values_callable=enum_values)
+    )
+    unavailable_reason: Mapped[str | None] = mapped_column(String(40))
+
+
+class ShopFunnel(Base):
+    __tablename__ = "shop_funnels"
+    __table_args__ = (
+        UniqueConstraint("job_id", "shop_id", name="uq_shop_funnels_job_id_shop_id"),
+        ForeignKeyConstraint(
+            ["job_id", "session_id"],
+            ["processing_jobs.id", "processing_jobs.session_id"],
+            name="fk_shop_funnels_job_session",
+        ),
+        CheckConstraint(
+            "stop_threshold_seconds = 3", name="ck_shop_funnels_stop_threshold"
+        ),
+        CheckConstraint(
+            "attention_threshold_seconds = 8",
+            name="ck_shop_funnels_attention_threshold",
+        ),
+        CheckConstraint(
+            "excluded_window_only >= 0", name="ck_shop_funnels_excluded_non_negative"
+        ),
+        CheckConstraint(
+            "precision_uncommitted IS TRUE", name="ck_shop_funnels_precision_uncommitted"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    job_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    session_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    shop_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("shops.id", name="fk_shop_funnels_shop_id")
+    )
+    stop_threshold_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    attention_threshold_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    excluded_window_only: Mapped[int] = mapped_column(Integer)
+    precision_uncommitted: Mapped[bool] = mapped_column(Boolean)
+
+
+class ShopFunnelStage(Base):
+    __tablename__ = "shop_funnel_stages"
+    __table_args__ = (
+        UniqueConstraint(
+            "job_id", "shop_id", "stage", name="uq_shop_funnel_stages_job_shop_stage"
+        ),
+        ForeignKeyConstraint(
+            ["job_id", "session_id"],
+            ["processing_jobs.id", "processing_jobs.session_id"],
+            name="fk_shop_funnel_stages_job_session",
+        ),
+        ForeignKeyConstraint(
+            ["job_id", "shop_id"],
+            ["shop_funnels.job_id", "shop_funnels.shop_id"],
+            name="fk_shop_funnel_stages_funnel",
+        ),
+        CheckConstraint(
+            "(availability = 'unavailable') = (count IS NULL)",
+            name="ck_shop_funnel_stages_count",
+        ),
+        CheckConstraint(
+            "count IS NULL OR count >= 0", name="ck_shop_funnel_stages_count_non_negative"
+        ),
+        CheckConstraint(
+            "(label = 'attention_estimate') = (stage = 'attention' AND availability = 'available')",
+            name="ck_shop_funnel_stages_attention_label",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    job_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    session_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    shop_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("shops.id", name="fk_shop_funnel_stages_shop_id")
+    )
+    stage: Mapped[ShopFunnelStageCode] = mapped_column(
+        Enum(ShopFunnelStageCode, name="shop_funnel_stage", values_callable=enum_values)
+    )
+    count: Mapped[int | None] = mapped_column(Integer)
+    availability: Mapped[MeasureAvailability] = mapped_column(
+        Enum(MeasureAvailability, name="measure_availability", values_callable=enum_values)
+    )
+    label: Mapped[ShopFunnelLabel] = mapped_column(
+        Enum(ShopFunnelLabel, name="shop_funnel_label", values_callable=enum_values)
+    )
+    unavailable_reason: Mapped[str | None] = mapped_column(String(40))
+
+
+class ShopFunnelRate(Base):
+    __tablename__ = "shop_funnel_rates"
+    __table_args__ = (
+        UniqueConstraint(
+            "job_id", "shop_id", "code", name="uq_shop_funnel_rates_job_shop_code"
+        ),
+        ForeignKeyConstraint(
+            ["job_id", "session_id"],
+            ["processing_jobs.id", "processing_jobs.session_id"],
+            name="fk_shop_funnel_rates_job_session",
+        ),
+        ForeignKeyConstraint(
+            ["job_id", "shop_id"],
+            ["shop_funnels.job_id", "shop_funnels.shop_id"],
+            name="fk_shop_funnel_rates_funnel",
+        ),
+        CheckConstraint(
+            "(availability = 'unavailable') = (value IS NULL)",
+            name="ck_shop_funnel_rates_value",
+        ),
+        CheckConstraint(
+            "value IS NULL OR value >= 0", name="ck_shop_funnel_rates_value_non_negative"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    job_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    session_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    shop_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("shops.id", name="fk_shop_funnel_rates_shop_id")
+    )
+    code: Mapped[ShopFunnelRateCode] = mapped_column(
+        Enum(ShopFunnelRateCode, name="shop_funnel_rate_code", values_callable=enum_values)
+    )
+    value: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    availability: Mapped[MeasureAvailability] = mapped_column(
+        Enum(MeasureAvailability, name="measure_availability", values_callable=enum_values)
     )
     unavailable_reason: Mapped[str | None] = mapped_column(String(40))
 

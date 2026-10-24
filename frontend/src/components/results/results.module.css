@@ -1,0 +1,14 @@
+.success, .warning, .neutral, .failed, .cancelled { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--fs-line); line-height: 1.4; font-size: 12px; }
+.success { color: var(--fs-success); background: var(--fs-success-bg); border-color: var(--fs-success-line); }
+.warning, .cancelled { color: var(--fs-warning); background: var(--fs-warning-bg); border-color: color-mix(in srgb, var(--fs-warning) 25%, transparent); }
+.failed { color: var(--fs-danger); background: var(--fs-danger-bg); border-color: color-mix(in srgb, var(--fs-danger) 25%, transparent); }
+.neutral { color: var(--fs-muted); background: var(--fs-surface); }
+.zone { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--fs-muted); font-size: 12px; }
+.zone select { min-height: 36px; max-width: 220px; padding: 6px 10px; font-size: 12px; }
+.empty { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 6px; padding: 20px; color: var(--fs-muted); }
+.empty h3 { margin: 8px 0 0; color: var(--fs-ink); font-size: 14px; }
+.empty p { margin: 0; max-width: 320px; font-size: 12px; }
+.tableScroll { max-height: min(520px, calc(100dvh - 230px)); overflow: auto; scrollbar-gutter: stable; }
+.tableScroll table { width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; }
+.tableScroll th, .tableScroll td { padding: 12px; border-bottom: 1px solid var(--fs-line); }
+.tableScroll thead th { position: sticky; top: 0; background: var(--fs-surface); color: var(--fs-muted); }

@@ -77,6 +77,7 @@ export function CameraPicker({ apiBaseUrl, value, onChange, compact = false, ter
     }
   }
 
+  const selectLabel = label ?? (location ? "Ubicación del análisis" : "Cámara");
   const createFields = (
       <fieldset className={styles.create}>
         <legend>{createLegend ?? (location ? "Nueva ubicación" : "Nueva cámara")}</legend>
@@ -91,9 +92,10 @@ export function CameraPicker({ apiBaseUrl, value, onChange, compact = false, ter
   );
   return (
     <div className={styles.picker}>
-      <label htmlFor={`${id}-camera`}>{label ?? (location ? "Ubicación del análisis" : "Cámara")}</label>
+      <label htmlFor={`${id}-camera`}>{selectLabel}</label>
       <select
         id={`${id}-camera`}
+        aria-label={selectLabel}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         disabled={loading}

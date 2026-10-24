@@ -8,6 +8,7 @@ import { AppShell } from "../components/AppShell";
 import { Link } from "../components/Link";
 import { WebcamPreparationForm } from "../components/WebcamPreparationForm";
 import { navigate } from "../navigation";
+import { configurationLabel } from "../presentation/configurationLabel";
 import type { LiveCheck } from "../types/live";
 import type { SceneVersionSummary } from "../types/scene";
 import type { SessionDetail } from "../types/session";
@@ -81,7 +82,7 @@ export function LivePreparationPage({ sessionId, apiBaseUrl = API_BASE_URL }: Pr
         <div className={styles.step}>
         {versions.length === 0 && <p className={styles.help}>Todavía no hay configuraciones. Abrí el editor para definir tus zonas y accesos.</p>}
         <div className={styles.field}><label htmlFor={id + "scene"}>Configuración de escena</label><select id={id + "scene"} disabled={busy || versions.length === 0} value={versionId} onChange={event => { setVersionId(event.target.value); setConfirmed(false); }}>
-          <option value="">Elegí una configuración</option>{versions.map(version => <option key={version.id} value={version.id}>Configuración {version.version_number}</option>)}
+          <option value="">Elegí una configuración</option>{versions.map(version => <option key={version.id} value={version.id}>{configurationLabel(version)}</option>)}
         </select></div>
         <Link className={styles.edit} href={`/sessions/${encodeURIComponent(session.id)}/editor`}><Layers size={16} aria-hidden="true" />Editar escena / polígonos</Link>
         {selectedVersion && <p className={styles.summary}>{selectedVersion.shop_count} zonas de análisis definidas</p>}

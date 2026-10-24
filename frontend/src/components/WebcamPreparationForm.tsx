@@ -49,7 +49,7 @@ export function WebcamPreparationForm({ apiBaseUrl, onPrepared }: Props) {
     <section className={styles.column} aria-labelledby={id + "capture-title"}>
     <h2 id={id + "capture-title"}><Camera size={18} aria-hidden="true" />Dispositivo de captura</h2>
     <div className={styles.deviceRow}><div className={styles.field}>
-    <label htmlFor={id + "device"}>Webcam</label><select id={id + "device"} disabled={loading || busy} value={device ?? ""} onChange={event => setDevice(event.target.value === "" ? null : Number(event.target.value))}>
+    <label htmlFor={id + "device"}>Webcam</label><select id={id + "device"} aria-label="Webcam" disabled={loading || busy} value={device ?? ""} onChange={event => setDevice(event.target.value === "" ? null : Number(event.target.value))}>
       <option value="">Elegí una webcam</option>
       {devices?.candidates.map(item => <option key={item.device_index} value={item.device_index}>{item.label}{devices.candidates.filter(other => other.label === item.label).length > 1 ? ` (${item.device_index + 1})` : ""}</option>)}
     </select>
@@ -71,7 +71,7 @@ export function WebcamPreparationForm({ apiBaseUrl, onPrepared }: Props) {
     <section className={styles.column} aria-labelledby={id + "session-title"}>
     <h2 id={id + "session-title"}>Datos del análisis</h2>
     <div className={styles.field}><label htmlFor={id + "name"}>Nombre de la sesión</label><input id={id + "name"} placeholder="Ej. Acceso Principal - Turno Tarde" disabled={busy} required maxLength={120} value={name} onChange={event => setName(event.target.value)} /></div>
-    <fieldset className={styles.location} disabled={busy}><legend className="sr-only">Asignación de ubicación</legend><MapPin className={styles.locationIcon} size={16} aria-hidden="true" /><CameraPicker apiBaseUrl={apiBaseUrl} value={camera} onChange={setCamera} compact terminology="location" label="Ubicación asignada" disclosureLabel="+ Agregar nueva ubicación" /></fieldset>
+    <fieldset className={styles.location} disabled={busy}><legend className="sr-only">Asignación de ubicación</legend><MapPin className={styles.locationIcon} size={16} aria-hidden="true" /><CameraPicker apiBaseUrl={apiBaseUrl} value={camera} onChange={setCamera} compact terminology="location" label="Cámara" disclosureLabel="+ Agregar nueva ubicación" /></fieldset>
     </section>
     </div>
     {error && <p role="alert">{error}</p>}

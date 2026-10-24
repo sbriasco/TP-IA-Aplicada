@@ -28,6 +28,8 @@ export interface SceneVersionCreate {
   reference_session_id: string;
   /** Versión cargada en el editor; solo sirve para advertir `newer_version_exists`. */
   base_version_id?: string | null;
+  /** Nombre visible. Se guarda con la versión y no se puede cambiar después. */
+  display_name?: string | null;
   shops: ShopInput[];
 }
 
@@ -38,6 +40,7 @@ export interface SceneVersionSummary {
   reference_session_id: string;
   frame_width: number;
   frame_height: number;
+  display_name?: string | null;
   created_by_machine_id: string | null;
   created_at: string;
   shop_count: number;

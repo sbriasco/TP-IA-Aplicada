@@ -6,12 +6,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from alembic.config import Config
-from conftest import destructive_database_url
+from conftest import prepare_empty_schema
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 
-from alembic import command
 from flowsight.db.models import (
     Event,
     JobKind,
@@ -39,16 +37,12 @@ FIXTURE_PATH = ROOT_DIR / "fixtures" / "synthetic" / "base-flow.json"
 
 @pytest.fixture()
 def session_factory(monkeypatch: pytest.MonkeyPatch):
-    database_url = destructive_database_url()
+    database_url = prepare_empty_schema()
     monkeypatch.setenv("FLOWSIGHT_DATABASE_URL", database_url)
-    config = Config(BACKEND_DIR / "alembic.ini")
-    command.downgrade(config, "base")
-    command.upgrade(config, "head")
     engine = create_engine(database_url)
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     yield factory
     engine.dispose()
-    command.downgrade(config, "base")
 
 
 def create_pending_job(factory, suffix: str = "1") -> uuid.UUID:

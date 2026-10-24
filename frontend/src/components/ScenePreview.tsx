@@ -4,6 +4,7 @@ import { getSceneVersion } from "../api/scenes";
 import { entryArrow } from "../editor/coordinates";
 import { ENTRY_LINE_COLOR, ZONE_COLORS } from "../editor/colors";
 import { ZONE_ROLE_OPTION } from "../editor/labels";
+import { configurationLabel } from "../presentation/configurationLabel";
 import type { Point, SceneVersion, ZoneRole } from "../types/scene";
 import styles from "./ScenePreview.module.css";
 
@@ -42,7 +43,7 @@ export function ScenePreview({ apiBaseUrl, versionId, frameUrl, width, height, l
   const status = versionId === "" ? null : current === null ? "Cargando zonas…" : current.failed
     ? "No se pudieron cargar las zonas. Volvé a seleccionar la configuración."
     : !compatible ? "Esta configuración tiene otro formato de imagen. Creá una para este video."
-    : `Configuración ${version?.version_number}`;
+    : configurationLabel(version!);
 
   return <div className={styles.preview}>
     <svg className={styles.canvas} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={label}>

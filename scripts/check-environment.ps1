@@ -16,10 +16,13 @@ $startedAt = [System.Diagnostics.Stopwatch]::StartNew()
 $checks = [System.Collections.Generic.List[object]]::new()
 
 function Add-Check {
-    param([string]$Component, [bool]$Passed, [string]$Message)
+    param([string]$Component, [bool]$Passed, [string]$Message, [string]$Status)
+    if ([string]::IsNullOrWhiteSpace($Status)) {
+        $Status = if ($Passed) { "ok" } else { "failed" }
+    }
     $checks.Add([pscustomobject]@{
         component = $Component
-        status = if ($Passed) { "ok" } else { "failed" }
+        status = $Status
         message = $Message
     })
 }
@@ -168,6 +171,59 @@ if ($psqlPath -and $missingVariables.Count -eq 0) {
     Add-Check "Base de datos" $databaseReady $databaseMessage
 } else {
     Add-Check "Base de datos" $false "No se verificó porque falta PostgreSQL o configuración."
+}
+
+if ($databaseReady -and (Test-Path -LiteralPath $PythonPath)) {
+    $previousDatabaseUrl = $env:FLOWSIGHT_DATABASE_URL
+    $env:FLOWSIGHT_DATABASE_URL = $configuration["FLOWSIGHT_DATABASE_URL"]
+    Push-Location (Join-Path $ProjectRoot "backend")
+    try {
+        $migrationState = & $PythonPath -c "from flowsight.core.startup_status import migration_status; import os; print(migration_status(os.environ['FLOWSIGHT_DATABASE_URL']))"
+        $migrationsReady = $LASTEXITCODE -eq 0 -and $migrationState -eq "current"
+    } catch {
+        $migrationsReady = $false
+        $migrationState = "unavailable"
+    } finally {
+        Pop-Location
+        $env:FLOWSIGHT_DATABASE_URL = $previousDatabaseUrl
+    }
+    if ($migrationsReady) {
+        Add-Check "Migraciones" $true "La base está en la última migración."
+    } else {
+        Add-Check "Migraciones" $false "Hay migraciones pendientes o no se pudieron leer. Ejecutá scripts/update-database.ps1."
+    }
+} else {
+    Add-Check "Migraciones" $false "No se revisaron porque la base no está conectada."
+}
+
+$detector = $configuration["FLOWSIGHT_DETECTOR"]
+if ([string]::IsNullOrWhiteSpace($detector)) { $detector = "fake" }
+Add-Check "Detector" $true ("Seleccionado: {0}." -f $detector)
+
+$apiUp = $false
+$workerMessage = "No se consultó porque la API no responde. Iniciá scripts/start-api.ps1 y scripts/start-worker.ps1."
+if ($missingVariables.Count -eq 0) {
+    $startupUrl = "http://{0}:{1}/startup" -f $configuration["FLOWSIGHT_API_HOST"], $configuration["FLOWSIGHT_API_PORT"]
+    try {
+        $startup = Invoke-RestMethod -Uri $startupUrl -TimeoutSec 2
+        $apiUp = $true
+        Add-Check "API" $true "Disponible."
+        $workerReady = $startup.worker -eq "available"
+        if ($workerReady) {
+            Add-Check "Worker" $true "Disponible."
+        } else {
+            Add-Check "Worker" $false "Sin latido reciente. Iniciá scripts/start-worker.ps1." "info"
+        }
+        if ($startup.detector) {
+            Add-Check "Detector en ejecución" $true ("La API usa {0}." -f $startup.detector)
+        }
+    } catch {
+        Add-Check "API" $false "No responde en $startupUrl. Iniciá scripts/start-api.ps1." "info"
+        Add-Check "Worker" $false $workerMessage "info"
+    }
+} else {
+    Add-Check "API" $false "No se consultó porque falta configuración."
+    Add-Check "Worker" $false "No se consultó porque falta configuración."
 }
 
 $startedAt.Stop()

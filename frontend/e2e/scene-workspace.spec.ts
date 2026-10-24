@@ -20,7 +20,7 @@ test("editor: capas, arrastre completo, sentidos, guardado y ambos temas", async
     if (route.request().method() === "POST") {
       saves += 1;
       payload = route.request().postDataJSON() as SceneVersionCreate;
-      version = { ...version, id: "v-2", version_number: 2, shops: payload.shops.map(shop => ({ ...shop, shop_id: shop.shop_id ?? "zone-1", entry_line: shop.entry_line! })) };
+      version = { ...version, id: "v-2", version_number: 2, display_name: payload.display_name ?? null, shops: payload.shops.map(shop => ({ ...shop, shop_id: shop.shop_id ?? "zone-1", entry_line: shop.entry_line! })) };
       await route.fulfill({ json: { ...version, warnings: [] } });
     } else await route.fulfill({ json: [version] });
   });
@@ -42,13 +42,14 @@ test("editor: capas, arrastre completo, sentidos, guardado y ambos temas", async
   await expect(page.getByRole("toolbar", { name: "Herramientas de escena" })).toHaveCount(0);
   await expect(page.locator("header [data-context]")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Volver a la sesión", exact: true })).toHaveCSS("border-radius", "8px");
+  await expect(page.getByText("El nombre se guarda en el servidor con esa versión.", { exact: false })).toBeVisible();
   await page.getByLabel("Título de la configuración", { exact: true }).fill("Acceso · turno mañana");
-  await expect(saveButton).toBeDisabled();
+  await expect(saveButton).toBeEnabled();
   await page.getByRole("button", { name: "Acceso central", exact: true }).click();
   await page.getByLabel("Nombre de la zona", { exact: true }).fill("Nombre temporal");
   await expect(saveButton).toBeEnabled();
   await page.getByLabel("Nombre de la zona", { exact: true }).fill("Acceso central");
-  await expect(saveButton).toBeDisabled();
+  await expect(saveButton).toBeEnabled();
   expect(saves).toBe(0);
   const canvasBox = (await page.getByRole("region", { name: "Definí tu escena" }).boundingBox())!;
   const sideBox = (await page.getByRole("complementary", { name: "Capas y propiedades" }).boundingBox())!;
@@ -74,7 +75,8 @@ test("editor: capas, arrastre completo, sentidos, guardado y ambos temas", async
   expect(saves).toBe(1);
   expect(payload?.shops[0]?.entry_line?.entry_direction).toBe("b_to_a");
   expect(payload?.shops[0]?.zones.front).toHaveLength(4);
-  expect(Object.keys(payload!)).toEqual(["reference_session_id", "base_version_id", "shops"]);
+  expect(Object.keys(payload!)).toEqual(["reference_session_id", "base_version_id", "shops", "display_name"]);
+  expect(payload?.display_name).toBe("Acceso · turno mañana");
   await page.getByRole("complementary", { name: "Capas y propiedades" }).evaluate(element => { element.scrollTop = 0; });
   await page.screenshot({ path: "test-results/scene-workspace-light.png", fullPage: true });
   await page.getByRole("button", { name: "Activar modo oscuro" }).click();
@@ -84,6 +86,13 @@ test("editor: capas, arrastre completo, sentidos, guardado y ambos temas", async
   await expect(page.getByRole("button", { name: "Vértice 1 de área externa de Acceso central" })).toBeVisible();
   await page.getByRole("button", { name: "Línea de entrada", exact: true }).click();
   await expect(page.getByRole("button", { name: "B → A es entrada", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Probar cruce", exact: true }).click();
+  await expect(page.getByText("Hacé dos clics sobre el frame", { exact: false })).toBeVisible();
+  const probeCanvas = page.getByRole("group", { name: "Frame de referencia con la escena" });
+  const probeBox = (await probeCanvas.boundingBox())!;
+  await page.mouse.click(probeBox.x + probeBox.width * 0.3, probeBox.y + probeBox.height * 0.92);
+  await page.mouse.click(probeBox.x + probeBox.width * 0.3, probeBox.y + probeBox.height * 0.2);
+  await expect(page.getByRole("status").filter({ hasText: /Entrada|Salida|Sin cruce|Sobre la línea|Sin línea/ })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: "test-results/scene-workspace-mobile.png", fullPage: true });

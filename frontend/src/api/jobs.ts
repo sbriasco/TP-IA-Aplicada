@@ -2,6 +2,7 @@ export interface JobState {
   id: string;
   session_id: string;
   status: "pending" | "processing" | "completed" | "failed" | "cancelled";
+  kind?: "synthetic_base_flow" | "video_analysis" | "live_analysis";
 }
 
 export interface PreviewMessage {

@@ -11,10 +11,12 @@ import { SceneCanvas } from "../components/SceneCanvas";
 import { SceneIssues } from "../components/SceneIssues";
 import { SceneLayers } from "../components/SceneLayers";
 import { Save, ArrowRight, ArrowLeft } from "lucide-react";
+import { frameToNormalized } from "../editor/coordinates";
+import { probeCrossing } from "../editor/crossingProbe";
 import { editorHistoryReducer } from "../editor/editorHistory";
 import { createEditorState, editorReducer, toSceneVersionCreate } from "../editor/editorState";
 import { addNavigationGuard } from "../navigation";
-import type { SceneVersion, SceneVersionSummary } from "../types/scene";
+import type { Point, SceneVersion, SceneVersionSummary } from "../types/scene";
 import type { ReferenceFrame, SessionDetail } from "../types/session";
 import styles from "./SceneEditorPage.module.css";
 
@@ -34,6 +36,10 @@ type LoadState =
 function errorMessage(reason: unknown): string {
   if (!(reason instanceof ApiRequestError)) return "Ocurrió un error inesperado.";
   return reason.error.code === "not_found" ? "Sesión inexistente." : reason.error.message;
+}
+
+function versionTitle(version: { version_number?: number; display_name?: string | null } | null): string {
+  return version?.display_name?.trim() || `Configuración ${version?.version_number ?? 1}`;
 }
 
 function latestVersion(versions: SceneVersionSummary[]): SceneVersionSummary | undefined {
@@ -126,12 +132,25 @@ function SceneEditor({ apiBaseUrl, session, frame, initialVersion, backLink }: S
   const state = history.present;
   const sceneContent = JSON.stringify(toSceneVersionCreate(state, session.id, frame.width, frame.height).shops);
   const [savedContent, setSavedContent] = useState(sceneContent);
-  const hasChanges = sceneContent !== savedContent;
-  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
+  const baselineTitle = versionTitle(initialVersion);
+  const [savedTitle, setSavedTitle] = useState(baselineTitle);
   const [configurationTitle, setConfigurationTitle] = useState(() => {
-    const fallback = `Configuración ${initialVersion?.version_number ?? 1}`;
-    try { return localStorage.getItem(`flowsight-scene-title:${session.camera.id}:${initialVersion?.version_number ?? "draft"}`) ?? fallback; } catch { return fallback; }
+    if (initialVersion?.display_name?.trim()) return initialVersion.display_name.trim();
+    try { return localStorage.getItem(`flowsight-scene-title:${session.camera.id}:${initialVersion?.version_number ?? "draft"}`) ?? baselineTitle; } catch { return baselineTitle; }
   });
+  const hasChanges = sceneContent !== savedContent || configurationTitle.trim() !== savedTitle.trim();
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
+  const [probing, setProbing] = useState(false);
+  const [probePoints, setProbePoints] = useState<Point[]>([]);
+  const probeShop = state.shops[state.selection?.shopIndex ?? 0] ?? state.shops[0];
+  const probeLine = probeShop?.entry_line ?? null;
+  const probeReading = probePoints.length === 2 ? probeCrossing(
+    frameToNormalized(probePoints[0], frame.width, frame.height),
+    frameToNormalized(probePoints[1], frame.width, frame.height),
+    probeLine ? frameToNormalized(probeLine.start, frame.width, frame.height) : null,
+    probeLine ? frameToNormalized(probeLine.end, frame.width, frame.height) : null,
+    probeLine?.entry_direction ?? null,
+  ) : null;
   const [baseNumber, setBaseNumber] = useState(initialVersion?.version_number ?? null);
   const [saving, setSaving] = useState(false);
   const [outcome, setOutcome] = useState<SaveOutcome | null>(null);
@@ -179,14 +198,16 @@ function SceneEditor({ apiBaseUrl, session, frame, initialVersion, backLink }: S
     setSaving(true);
     setOutcome(null);
     try {
-      const payload = toSceneVersionCreate(state, session.id, frame.width, frame.height);
+      const payload = { ...toSceneVersionCreate(state, session.id, frame.width, frame.height), display_name: configurationTitle.trim() || null };
       const result = await createSceneVersion(apiBaseUrl, session.camera.id, payload);
       if (result.ok) {
         const savedState = editorReducer(state, { type: "saveSucceeded", version: result.version, warnings: result.warnings });
         setSavedContent(JSON.stringify(toSceneVersionCreate(savedState, session.id, frame.width, frame.height).shops));
         dispatch({ type: "saveSucceeded", version: result.version, warnings: result.warnings });
         setBaseNumber(result.version.version_number);
-        setConfigurationTitle(current => /^Configuración \d+$/.test(current) ? `Configuración ${result.version.version_number}` : current);
+        const persisted = result.version.display_name?.trim() || configurationTitle.trim() || versionTitle(result.version);
+        setSavedTitle(persisted);
+        setConfigurationTitle(persisted);
         setOutcome({ kind: "saved", versionNumber: result.version.version_number });
       } else {
         // FR-034: los errores se marcan sobre los elementos y el dibujo se conserva.
@@ -211,8 +232,7 @@ function SceneEditor({ apiBaseUrl, session, frame, initialVersion, backLink }: S
           <div className="mb-2 flex flex-wrap items-center gap-3 text-xs">{backLink}<span className={styles.badge}>Paso 2: Editor de escena</span></div>
           <label className="sr-only" htmlFor="scene-configuration-title">Título de la configuración</label>
           <input id="scene-configuration-title" className={styles.configurationTitle} value={configurationTitle} maxLength={120} onChange={event => setConfigurationTitle(event.target.value)} aria-describedby="scene-title-help" />
-          <span id="scene-title-help" className="sr-only">Título de trabajo conservado en este navegador. La configuración se guarda en el servidor con su número de versión.</span>
-          <p className={styles.description}>{session.camera.name} · {baseNumber === null ? "Agregá una zona de análisis para marcar sus áreas y accesos." : `Editando la configuración ${baseNumber}. Al guardar, se crea una nueva.`}</p>
+          <p id="scene-title-help" className={styles.description}>{session.camera.name} · {baseNumber === null ? "Agregá una zona de análisis para marcar sus áreas y accesos." : `Editando la configuración ${baseNumber}. Al guardar, se crea una nueva.`} El nombre se guarda en el servidor con esa versión.</p>
         </div>
         <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           {baseNumber !== null && !hasChanges && state.drawing === null && continueHref !== null ? <Link className={styles.continueLink} href={continueHref}>Continuar a resultados<ArrowRight size={15} aria-hidden="true" /></Link> : <button type="button" disabled title={baseNumber === null || hasChanges || state.drawing !== null ? "Guardá la configuración para continuar" : "Consultando disponibilidad de resultados"}>Continuar a resultados</button>}
@@ -224,7 +244,7 @@ function SceneEditor({ apiBaseUrl, session, frame, initialVersion, backLink }: S
         <section className={styles.canvasPanel} aria-label="Definí tu escena">
           <div className={styles.canvasTop}><h2>Definí tu escena</h2></div>
           <div className={styles.canvasViewport}>
-            <SceneCanvas labelMode={session.live_source?.label_mode} state={state} dispatch={dispatch} hidden={hidden} onGestureStart={() => dispatch({ type: "beginGesture" })} onGestureEnd={() => dispatch({ type: "endGesture" })} frameUrl={referenceFrameUrl(apiBaseUrl, frame)} />
+            <SceneCanvas labelMode={session.live_source?.label_mode} state={state} dispatch={dispatch} hidden={hidden} onGestureStart={() => dispatch({ type: "beginGesture" })} onGestureEnd={() => dispatch({ type: "endGesture" })} frameUrl={referenceFrameUrl(apiBaseUrl, frame)} probe={probing ? { points: probePoints, onPlace: (point) => setProbePoints((current) => current.length >= 2 ? [point] : [...current, point]) } : null} />
           </div>
           <aside className={styles.guide} aria-label="Atajos del editor"><span><kbd>Esc</kbd> cancelar</span><span>Doble clic o <kbd>Enter</kbd> para cerrar polígono</span><span><kbd>← ↑ ↓ →</kbd> mover vértice · <kbd>Shift</kbd> 10 px</span></aside>
         </section>
@@ -234,6 +254,10 @@ function SceneEditor({ apiBaseUrl, session, frame, initialVersion, backLink }: S
           {outcome?.kind === "saved" && <p role="status">Se guardó la configuración {outcome.versionNumber}.</p>}
           {outcome?.kind === "invalid" && <p role="alert">No se guardó la configuración: {outcome.count === 1 ? "hay 1 error" : `hay ${outcome.count} errores`}. Los elementos afectados están marcados en rojo; el dibujo se conserva.</p>}
           {outcome?.kind === "error" && <p role="alert">{outcome.message}</p>}
+          <section aria-label="Prueba de cruce">
+            <button type="button" aria-pressed={probing} disabled={state.drawing !== null} onClick={() => { setProbing((current) => !current); setProbePoints([]); }}>Probar cruce</button>
+            {probing && <p role="status">{probeReading ? `${probeReading.label}. ${probeReading.detail}` : "Hacé dos clics sobre el frame: primero los pies de un lado de la línea y después del otro."}</p>}
+          </section>
           <SceneIssues state={state} dispatch={dispatch} />
           </div>
           <div className={styles.sidebarFooter}>
