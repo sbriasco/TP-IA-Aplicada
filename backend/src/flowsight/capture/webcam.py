@@ -15,7 +15,7 @@ _DEFAULT_TARGET_FPS = 60
 
 
 def device_reported_fps(capture) -> float | None:
-    """Read CAP_PROP_FPS after open/configure. Often 0/unreliable on Windows; prefer live Captura FPS."""
+    """Read CAP_PROP_FPS after open. Often 0 or unreliable on Windows."""
     try:
         value = float(capture.get(cv2.CAP_PROP_FPS))
     except (TypeError, ValueError):
