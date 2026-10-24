@@ -26,12 +26,14 @@ from flowsight.db.models import (
     SceneEntryLine,
     SceneVersionShop,
     SceneZone,
+    Session,
     VideoSource,
     ZoneRole,
 )
 from flowsight.db.session import database_url_is_remote
 from flowsight.preview.broker import PreviewUpdate
 from flowsight.preview.snapshot import snapshot_path, write_preview_snapshot
+from flowsight.services.funnel import persist_shop_funnel
 from flowsight.services.jobs import transition_job
 from flowsight.services.measures import close_measures, sync_measures
 from flowsight.services.scene_metrics import persist_completed_scene
@@ -384,16 +386,28 @@ def _run(
     evidence = None
     with factory.begin() as database_session:
         close_measures(database_session, job_id)
+        events = recorder.finish()
         persist_completed_scene(
             database_session,
             job_id=job_id,
             session_id=session_id,
-            events=recorder.finish(),
+            events=events,
             fps=float(fps),
             duration_seconds=frames_total / float(fps),
             front_by_shop={shop.shop_id: bool(shop.front_polygon) for shop in shops},
             line_by_shop={shop.shop_id: shop.line_start is not None for shop in shops},
         )
+        flow_session = database_session.get(Session, session_id)
+        if flow_session is not None:
+            persist_shop_funnel(
+                database_session,
+                job_id=job_id,
+                session_id=session_id,
+                events=events,
+                fps=float(fps),
+                windows={shop.shop_id: shop.window_polygon is not None for shop in shops},
+                source_kind=flow_session.source_kind.value,
+            )
         finished = transition_job(
             database_session,
             job_id=job_id,

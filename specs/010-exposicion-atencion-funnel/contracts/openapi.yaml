@@ -1,0 +1,156 @@
+openapi: 3.1.0
+info:
+  title: FlowSight API — funnel comercial (Feature #7)
+  version: 0.5.0
+  description: >
+    Lectura del funnel de un local en una sesión de archivo ya completada.
+    Extiende specs/006 y no modifica GET /sessions/{session_id}/shops/{shop_id}/metrics
+    ni la herramienta del chat. Errores: {"detail": {"code": string, "message": string}}.
+    Sin rutas absolutas, nombres de equipo ni secretos.
+servers:
+  - url: http://127.0.0.1:8000
+paths:
+  /sessions/{session_id}/shops/{shop_id}/funnel:
+    get:
+      operationId: getShopFunnel
+      description: >
+        Cinco etapas y cuatro tasas de toda la sesión. No acepta tramo.
+        No recalcula entradas oficiales ni la tasa de ingreso.
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/ShopId"
+      responses:
+        "200":
+          description: Funnel de ese local en toda la sesión.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopFunnel"
+        "404":
+          description: La sesión o el local no existen, o el local no es de esa sesión.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: >
+            result_incomplete si no hay un análisis completado.
+            live_funnel_unavailable si el origen es webcam.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  parameters:
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ShopId:
+      name: shop_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+    FunnelStage:
+      type: object
+      required: [stage, availability, label]
+      properties:
+        stage:
+          type: string
+          enum: [observed_pass, exposure, stop, attention, linked_entry]
+        count:
+          type: integer
+          minimum: 0
+          nullable: true
+        availability:
+          type: string
+          enum: [available, unavailable]
+        label:
+          type: string
+          enum: [none, attention_estimate]
+        unavailable_reason:
+          type: string
+          nullable: true
+          enum: [no_showcase, null]
+    FunnelRate:
+      type: object
+      required: [code, availability]
+      properties:
+        code:
+          type: string
+          enum:
+            - observed_pass_to_exposure
+            - exposure_to_stop
+            - stop_to_attention
+            - attention_to_linked_entry
+        value:
+          type: string
+          nullable: true
+          description: Decimal en texto. Null si no está disponible. No es la tasa de ingreso.
+        availability:
+          type: string
+          enum: [available, unavailable]
+        unavailable_reason:
+          type: string
+          nullable: true
+          enum: [no_previous_stage, no_showcase, null]
+    ShopFunnel:
+      type: object
+      required:
+        - session_id
+        - shop_id
+        - stop_threshold_seconds
+        - attention_threshold_seconds
+        - excluded_window_only
+        - precision_uncommitted
+        - stages
+        - rates
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        shop_id:
+          type: string
+          format: uuid
+        stop_threshold_seconds:
+          type: string
+          description: "3"
+        attention_threshold_seconds:
+          type: string
+          description: "8"
+        excluded_window_only:
+          type: integer
+          minimum: 0
+        precision_uncommitted:
+          type: boolean
+          enum: [true]
+        stages:
+          type: array
+          minItems: 5
+          maxItems: 5
+          items:
+            $ref: "#/components/schemas/FunnelStage"
+        rates:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items:
+            $ref: "#/components/schemas/FunnelRate"

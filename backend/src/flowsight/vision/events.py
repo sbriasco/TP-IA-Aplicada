@@ -1,4 +1,7 @@
-"""Zone, pass and front-zone dwell facts. Store enter and exit come from confirmed crossings."""
+"""Zone, pass, front dwell and showcase-stop facts.
+
+Store enter and exit come from confirmed crossings.
+"""
 
 from __future__ import annotations
 
@@ -13,8 +16,15 @@ from flowsight.vision.spatial import CrossingFact, ShopGeometry
 
 ZoneRoleName = Literal["front", "interior", "window"]
 EventKind = Literal[
-    "zone_enter", "zone_exit", "store_pass", "store_enter", "store_exit", "dwell"
+    "zone_enter",
+    "zone_exit",
+    "store_pass",
+    "store_enter",
+    "store_exit",
+    "dwell",
+    "showcase_stop",
 ]
+_SHOWCASE_STOP_SECONDS = Decimal("3")
 
 
 @dataclass(frozen=True)
@@ -29,13 +39,14 @@ class SceneEventFact:
 
 
 class SceneEventRecorder:
-    """One pass. A lost track does not close a dwell or a store exit."""
+    """One pass. A lost track does not close a dwell, a showcase stop or a store exit."""
 
     def __init__(self, shops: Sequence[ShopGeometry], *, fps: float) -> None:
         self._shops = list(shops)
         self._fps = fps
         self._inside: dict[tuple[uuid.UUID, int, ZoneRoleName], bool] = {}
         self._front_enter: dict[tuple[uuid.UUID, int], int] = {}
+        self._window_enter: dict[tuple[uuid.UUID, int], int] = {}
         self._first_front: dict[tuple[uuid.UUID, int], int] = {}
         self._entered: set[tuple[uuid.UUID, int]] = set()
         self._events: list[SceneEventFact] = []
@@ -59,10 +70,14 @@ class SceneEventRecorder:
                             pair = (shop.shop_id, track_id)
                             self._front_enter[pair] = frame_index
                             self._first_front.setdefault(pair, frame_index)
+                        elif role == "window":
+                            self._window_enter[(shop.shop_id, track_id)] = frame_index
                     elif was and not inside:
                         self._emit(shop.shop_id, track_id, "zone_exit", role, frame_index, None)
                         if role == "front":
                             self._close_dwell(shop.shop_id, track_id, frame_index)
+                        elif role == "window":
+                            self._close_showcase(shop.shop_id, track_id, frame_index)
                     self._inside[key] = inside
         self.accept_crossings(crossings)
 
@@ -96,10 +111,22 @@ class SceneEventRecorder:
         entered = self._front_enter.pop((shop_id, track_id), None)
         if entered is None:
             return
-        duration = (
+        duration = self._duration(entered, frame_index)
+        self._emit(shop_id, track_id, "dwell", "front", frame_index, duration)
+
+    def _close_showcase(self, shop_id: uuid.UUID, track_id: int, frame_index: int) -> None:
+        entered = self._window_enter.pop((shop_id, track_id), None)
+        if entered is None:
+            return
+        duration = self._duration(entered, frame_index)
+        if duration < _SHOWCASE_STOP_SECONDS:
+            return
+        self._emit(shop_id, track_id, "showcase_stop", "window", frame_index, duration)
+
+    def _duration(self, entered: int, frame_index: int) -> Decimal:
+        return (
             (Decimal(frame_index) - Decimal(entered)) / Decimal(str(self._fps))
         ).quantize(Decimal("0.000001"))
-        self._emit(shop_id, track_id, "dwell", "front", frame_index, duration)
 
     def _emit(
         self,

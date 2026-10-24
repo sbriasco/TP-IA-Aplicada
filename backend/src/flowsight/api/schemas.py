@@ -511,6 +511,38 @@ class ChatResponse(BaseModel):
     model_calls: int = Field(ge=0, le=2)
 
 
+class FunnelStageResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    stage: str
+    availability: str
+    label: str
+    count: int | None = None
+    unavailable_reason: str | None = None
+
+
+class FunnelRateResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    availability: str
+    value: str | None = None
+    unavailable_reason: str | None = None
+
+
+class ShopFunnelResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: uuid.UUID
+    shop_id: uuid.UUID
+    stop_threshold_seconds: str
+    attention_threshold_seconds: str
+    excluded_window_only: int
+    precision_uncommitted: Literal[True]
+    stages: list[FunnelStageResponse]
+    rates: list[FunnelRateResponse]
+
+
 class SceneEventResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

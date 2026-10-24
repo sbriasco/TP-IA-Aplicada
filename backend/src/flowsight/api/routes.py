@@ -43,6 +43,7 @@ from flowsight.api.schemas import (
     SessionCreate,
     SessionDetail,
     SessionSummary,
+    ShopFunnelResponse,
     ShopMetricsResponse,
     TrafficBucketResponse,
     TrimmedName,
@@ -80,6 +81,7 @@ from flowsight.services.cameras import (
 )
 from flowsight.services.chat import ChatAnswer, SessionMissing, ask
 from flowsight.services.chat_metrics import LiveChatUnavailable
+from flowsight.services.funnel import LiveFunnelUnavailable, load_shop_funnel
 from flowsight.services.jobs import (
     InvalidJobTransition,
     JobRequestError,
@@ -356,6 +358,67 @@ def get_shop_metrics(
         metrics=[MetricValueResponse.model_validate(row) for row in rows],
         flow=[TrafficBucketResponse.model_validate(bucket) for bucket in flow],
         peak=TrafficBucketResponse.model_validate(peak),
+    )
+
+
+def _threshold_text(value: Decimal) -> str:
+    text = format(value, "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text
+
+
+@router.get(
+    "/sessions/{session_id}/shops/{shop_id}/funnel",
+    response_model=ShopFunnelResponse,
+)
+def get_shop_funnel(
+    session_id: uuid.UUID, shop_id: uuid.UUID, database: Database
+) -> ShopFunnelResponse:
+    if get_active_session(database, session_id) is None:
+        raise not_found("La sesión no existe.")
+    try:
+        view = load_shop_funnel(database, session_id, shop_id)
+    except LiveFunnelUnavailable:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "live_funnel_unavailable",
+            "El funnel comercial no está disponible para una sesión de webcam.",
+        ) from None
+    except ResultIncomplete:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "result_incomplete",
+            "No hay un análisis completado para consultar.",
+        ) from None
+    except ShopNotInSession:
+        raise not_found("El local no pertenece a esta sesión.") from None
+    return ShopFunnelResponse(
+        session_id=session_id,
+        shop_id=shop_id,
+        stop_threshold_seconds=_threshold_text(view.stop_threshold_seconds),
+        attention_threshold_seconds=_threshold_text(view.attention_threshold_seconds),
+        excluded_window_only=view.excluded_window_only,
+        precision_uncommitted=True,
+        stages=[
+            {
+                "stage": row.stage.value,
+                "count": row.count,
+                "availability": row.availability.value,
+                "label": row.label.value,
+                "unavailable_reason": row.unavailable_reason,
+            }
+            for row in view.stages
+        ],
+        rates=[
+            {
+                "code": row.code.value,
+                "value": None if row.value is None else format(row.value, "f"),
+                "availability": row.availability.value,
+                "unavailable_reason": row.unavailable_reason,
+            }
+            for row in view.rates
+        ],
     )
 
 

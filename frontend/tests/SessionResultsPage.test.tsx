@@ -140,6 +140,23 @@ describe("SessionResultsPage", () => {
         if (url.endsWith("/sessions/s-1")) return Promise.resolve(json(detail("available")));
         if (url.includes("/scene-versions/")) return Promise.resolve(json({ shops: [{ shop_id: "shop-1", name: "Zona" }] }));
         if (url.includes("/metrics")) return Promise.resolve(json(metrics));
+        if (url.includes("/funnel")) return Promise.resolve(json({
+          session_id: "s-1", shop_id: "shop-1", stop_threshold_seconds: "3", attention_threshold_seconds: "8",
+          excluded_window_only: 0, precision_uncommitted: true,
+          stages: [
+            { stage: "observed_pass", count: 1, availability: "available", label: "none", unavailable_reason: null },
+            { stage: "exposure", count: 1, availability: "available", label: "none", unavailable_reason: null },
+            { stage: "stop", count: 0, availability: "available", label: "none", unavailable_reason: null },
+            { stage: "attention", count: 0, availability: "available", label: "attention_estimate", unavailable_reason: null },
+            { stage: "linked_entry", count: 0, availability: "available", label: "none", unavailable_reason: null },
+          ],
+          rates: [
+            { code: "observed_pass_to_exposure", value: "1.000000", availability: "available", unavailable_reason: null },
+            { code: "exposure_to_stop", value: "0.000000", availability: "available", unavailable_reason: null },
+            { code: "stop_to_attention", value: null, availability: "unavailable", unavailable_reason: "no_previous_stage" },
+            { code: "attention_to_linked_entry", value: null, availability: "unavailable", unavailable_reason: "no_previous_stage" },
+          ],
+        }));
         if (url.includes("/events")) return Promise.resolve(json([{ kind: "store_pass", zone_role: "front", track_id: 1, shop_id: "shop-1", video_timestamp_seconds: 10, duration_seconds: null }]));
         if (url.includes("/position-samples")) {
           return Promise.resolve(json({ job_id: "j-1", availability: "unavailable", samples: [] }));
@@ -155,7 +172,9 @@ describe("SessionResultsPage", () => {
     expect(container.textContent).toContain("observable");
     expect(container.textContent).toContain("no disponible");
     expect(container.textContent).toContain("Horario pico: 0:00–1:00, 4");
+    expect(container.textContent).toContain("La precisión de estas etapas no está comprometida.");
     const metricsBefore = calls.filter((url) => url.includes("/metrics")).length;
+    const funnelBefore = calls.filter((url) => url.includes("/funnel")).length;
 
     const from = container.querySelector('input[aria-label="Inicio del tramo"]') as HTMLInputElement;
     const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
@@ -166,6 +185,7 @@ describe("SessionResultsPage", () => {
     });
 
     expect(calls.filter((url) => url.includes("/metrics")).length).toBe(metricsBefore);
+    expect(calls.filter((url) => url.includes("/funnel")).length).toBe(funnelBefore);
     expect(calls.some((url) => url.includes("/events") && url.includes("from_seconds=50"))).toBe(true);
   });
 
@@ -211,6 +231,7 @@ describe("SessionResultsPage", () => {
     expect(text).toContain("parcial");
     expect(text).not.toContain("Tráfico");
     expect(text).not.toContain("Tasa de ingreso");
+    expect(text).not.toContain("Funnel comercial");
   });
 
   it("un análisis fallido muestra el motivo y ningún indicador", async () => {
@@ -342,5 +363,29 @@ describe("SessionResultsPage", () => {
 
     expect(container.textContent).toContain("La pregunta tardó demasiado. Podés volver a intentar.");
     expect(container.textContent).toContain("Tráfico");
+  });
+
+  it("una sesión webcam no muestra el funnel", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        calls.push(url);
+        if (url.endsWith("/processed-sessions")) return Promise.resolve(json([completedRow()]));
+        if (url.endsWith("/sessions/s-1")) {
+          return Promise.resolve(json({ ...detail("available"), source_kind: "webcam" }));
+        }
+        if (url.includes("/scene-versions/")) return Promise.resolve(json({ shops: [{ shop_id: "shop-1", name: "Zona" }] }));
+        if (url.includes("/metrics")) return Promise.resolve(json(metrics));
+        if (url.includes("/events")) return Promise.resolve(json([]));
+        if (url.includes("/position-samples")) {
+          return Promise.resolve(json({ job_id: "j-1", availability: "unavailable", samples: [] }));
+        }
+        return Promise.resolve(json({}));
+      }),
+    );
+    await act(async () => root.render(<SessionResultsPage sessionId="s-1" apiBaseUrl={API} />));
+    expect(container.textContent).not.toContain("Funnel comercial");
+    expect(calls.some((url) => url.includes("/funnel"))).toBe(false);
   });
 });

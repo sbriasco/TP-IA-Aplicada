@@ -5,6 +5,7 @@ import { Camera, Layers, ChevronRight } from "lucide-react";
 import { ScenePreview } from "../components/ScenePreview";
 
 import { API_BASE_URL } from "../api/config";
+import { getShopFunnel, type ShopFunnel } from "../api/funnel";
 import { ApiRequestError } from "../api/http";
 import {
   getJobMeasures,
@@ -24,6 +25,7 @@ import { AppShell } from "../components/AppShell";
 import { PositionHeatmap } from "../components/PositionHeatmap";
 import { SessionChatPanel } from "../components/SessionChatPanel";
 import { Link } from "../components/Link";
+import { FunnelPanel } from "../components/FunnelPanel";
 import { MetricCard } from "../components/MetricCard";
 import { EmptyState } from "../components/results/EmptyState";
 import { EventsTable } from "../components/results/EventsTable";
@@ -58,6 +60,7 @@ export function SessionResultsPage({
   const [fromSeconds, setFromSeconds] = useState(0);
   const [toSeconds, setToSeconds] = useState(0);
   const [metrics, setMetrics] = useState<ShopMetrics | null>(null);
+  const [funnel, setFunnel] = useState<ShopFunnel | null>(null);
   const [events, setEvents] = useState<SceneEvent[]>([]);
   const [measures, setMeasures] = useState<AnalysisMeasure[]>([]);
   const [positions, setPositions] = useState<PositionSamples | null>(null);
@@ -115,6 +118,25 @@ export function SessionResultsPage({
       active = false;
     };
   }, [apiBaseUrl, sessionId, shopId, row?.result_complete]);
+
+  useEffect(() => {
+    if (row?.result_complete !== true || shopId === null || session?.source_kind === "webcam") {
+      setFunnel(null);
+      return;
+    }
+    let active = true;
+    setFunnel(null);
+    getShopFunnel(apiBaseUrl, sessionId, shopId)
+      .then((result) => {
+        if (active) setFunnel(result);
+      })
+      .catch(() => {
+        if (active) setFunnel(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [apiBaseUrl, sessionId, shopId, row?.result_complete, session?.source_kind]);
 
   useEffect(() => {
     if (row?.result_complete !== true || shopId === null) return;
@@ -204,6 +226,12 @@ export function SessionResultsPage({
               <details className={styles.moreMetrics}><summary>Ver todos los indicadores</summary><ul className={styles.metrics}>{metrics.metrics.filter((metric) => !PRIMARY_CODES.has(metric.code)).map((metric) => <MetricCard key={metric.code} metric={metric} prominent />)}</ul></details>
             </>}
           </section>
+          {funnel !== null && session != null && session.source_kind !== "webcam" && (
+            <FunnelPanel
+              funnel={funnel}
+              officialEntries={metrics?.metrics.find((metric) => metric.code === "entries")?.value ?? null}
+            />
+          )}
           <div className={styles.analysisGrid}>
             <section className={`${styles.panel} ${styles.flowPanel}`} aria-labelledby="flow-title">
               <h2 id="flow-title">Flujo temporal</h2>
