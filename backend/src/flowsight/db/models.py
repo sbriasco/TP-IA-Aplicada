@@ -569,6 +569,10 @@ class ShopFunnelLabel(str, enum.Enum):
     ATTENTION_ESTIMATE = "attention_estimate"
 
 
+class VisitGroupLabel(str, enum.Enum):
+    GROUP_ESTIMATE = "group_estimate"
+
+
 class SceneZoneRole(str, enum.Enum):
     FRONT = "front"
     INTERIOR = "interior"
@@ -814,6 +818,195 @@ class ShopFunnelRate(Base):
         Enum(MeasureAvailability, name="measure_availability", values_callable=enum_values)
     )
     unavailable_reason: Mapped[str | None] = mapped_column(String(40))
+
+
+class VisitPatternReport(Base):
+    __tablename__ = "visit_pattern_reports"
+    __table_args__ = (
+        UniqueConstraint("job_id", name="uq_visit_pattern_reports_job_id"),
+        ForeignKeyConstraint(
+            ["job_id", "session_id"],
+            ["processing_jobs.id", "processing_jobs.session_id"],
+            name="fk_visit_pattern_reports_job_session",
+        ),
+        CheckConstraint(
+            "proximity_width_fraction = 0.08",
+            name="ck_visit_pattern_reports_proximity",
+        ),
+        CheckConstraint(
+            "direction_degrees = 45", name="ck_visit_pattern_reports_direction"
+        ),
+        CheckConstraint(
+            "minimum_seconds = 2", name="ck_visit_pattern_reports_minimum"
+        ),
+        CheckConstraint(
+            "motion_epsilon_width_fraction = 0.005",
+            name="ck_visit_pattern_reports_epsilon",
+        ),
+        CheckConstraint(
+            "precision_uncommitted IS TRUE",
+            name="ck_visit_pattern_reports_precision_uncommitted",
+        ),
+        CheckConstraint("group_count >= 0", name="ck_visit_pattern_reports_group_count"),
+        CheckConstraint(
+            "(patterns_availability = 'unavailable') = (patterns_unavailable_reason IS NOT NULL)",
+            name="ck_visit_pattern_reports_patterns_reason",
+        ),
+        CheckConstraint(
+            "patterns_unavailable_reason IS NULL OR patterns_unavailable_reason = 'no_areas'",
+            name="ck_visit_pattern_reports_reason_code",
+        ),
+        CheckConstraint(
+            "groups_availability = 'available'",
+            name="ck_visit_pattern_reports_groups_available",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    job_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    session_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    proximity_width_fraction: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    direction_degrees: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    minimum_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    motion_epsilon_width_fraction: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    patterns_availability: Mapped[MeasureAvailability] = mapped_column(
+        Enum(MeasureAvailability, name="measure_availability", values_callable=enum_values)
+    )
+    patterns_unavailable_reason: Mapped[str | None] = mapped_column(String(40))
+    groups_availability: Mapped[MeasureAvailability] = mapped_column(
+        Enum(MeasureAvailability, name="measure_availability", values_callable=enum_values)
+    )
+    group_count: Mapped[int] = mapped_column(Integer)
+    precision_uncommitted: Mapped[bool] = mapped_column(Boolean)
+
+
+class VisitAreaTransition(Base):
+    __tablename__ = "visit_area_transitions"
+    __table_args__ = (
+        UniqueConstraint(
+            "job_id",
+            "from_shop_id",
+            "from_zone_role",
+            "to_shop_id",
+            "to_zone_role",
+            name="uq_visit_area_transitions_pair",
+        ),
+        ForeignKeyConstraint(
+            ["job_id"],
+            ["visit_pattern_reports.job_id"],
+            name="fk_visit_area_transitions_report",
+        ),
+        CheckConstraint("track_count >= 1", name="ck_visit_area_transitions_track_count"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    job_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    from_shop_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("shops.id", name="fk_visit_area_transitions_from_shop")
+    )
+    to_shop_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("shops.id", name="fk_visit_area_transitions_to_shop")
+    )
+    from_zone_role: Mapped[SceneZoneRole] = mapped_column(
+        Enum(SceneZoneRole, name="scene_zone_role", values_callable=enum_values)
+    )
+    to_zone_role: Mapped[SceneZoneRole] = mapped_column(
+        Enum(SceneZoneRole, name="scene_zone_role", values_callable=enum_values)
+    )
+    track_count: Mapped[int] = mapped_column(Integer)
+
+
+class VisitSequence(Base):
+    __tablename__ = "visit_sequences"
+    __table_args__ = (
+        UniqueConstraint("job_id", "areas", name="uq_visit_sequences_job_areas"),
+        ForeignKeyConstraint(
+            ["job_id"],
+            ["visit_pattern_reports.job_id"],
+            name="fk_visit_sequences_report",
+        ),
+        CheckConstraint("track_count >= 1", name="ck_visit_sequences_track_count"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    job_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    areas: Mapped[list[dict[str, str]]] = mapped_column(JSONB)
+    track_count: Mapped[int] = mapped_column(Integer)
+
+
+class VisitShopTransition(Base):
+    __tablename__ = "visit_shop_transitions"
+    __table_args__ = (
+        UniqueConstraint(
+            "job_id",
+            "from_shop_id",
+            "to_shop_id",
+            name="uq_visit_shop_transitions_pair",
+        ),
+        ForeignKeyConstraint(
+            ["job_id"],
+            ["visit_pattern_reports.job_id"],
+            name="fk_visit_shop_transitions_report",
+        ),
+        CheckConstraint(
+            "from_shop_id <> to_shop_id", name="ck_visit_shop_transitions_distinct"
+        ),
+        CheckConstraint("track_count >= 1", name="ck_visit_shop_transitions_track_count"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    job_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    from_shop_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("shops.id", name="fk_visit_shop_transitions_from_shop")
+    )
+    to_shop_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("shops.id", name="fk_visit_shop_transitions_to_shop")
+    )
+    track_count: Mapped[int] = mapped_column(Integer)
+
+
+class VisitGroup(Base):
+    __tablename__ = "visit_groups"
+    __table_args__ = (
+        UniqueConstraint("job_id", "ordinal", name="uq_visit_groups_job_ordinal"),
+        ForeignKeyConstraint(
+            ["job_id"],
+            ["visit_pattern_reports.job_id"],
+            name="fk_visit_groups_report",
+        ),
+        CheckConstraint("ordinal >= 1", name="ck_visit_groups_ordinal"),
+        CheckConstraint(
+            "ended_video_timestamp_seconds >= started_video_timestamp_seconds",
+            name="ck_visit_groups_span",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    job_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    ordinal: Mapped[int] = mapped_column(Integer)
+    started_video_timestamp_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    ended_video_timestamp_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    label: Mapped[VisitGroupLabel] = mapped_column(
+        Enum(VisitGroupLabel, name="visit_group_label", values_callable=enum_values)
+    )
+
+
+class VisitGroupMember(Base):
+    __tablename__ = "visit_group_members"
+    __table_args__ = (
+        UniqueConstraint(
+            "group_id", "track_id", name="uq_visit_group_members_group_track"
+        ),
+        ForeignKeyConstraint(
+            ["group_id"],
+            ["visit_groups.id"],
+            name="fk_visit_group_members_group",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    group_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    track_id: Mapped[int] = mapped_column(Integer)
 
 
 class TrafficBucket(Base):

@@ -6,6 +6,7 @@ import { ScenePreview } from "../components/ScenePreview";
 
 import { API_BASE_URL } from "../api/config";
 import { getShopFunnel, type ShopFunnel } from "../api/funnel";
+import { getVisitPatterns, type VisitPatterns } from "../api/visitPatterns";
 import { ApiRequestError } from "../api/http";
 import {
   getJobMeasures,
@@ -26,6 +27,7 @@ import { PositionHeatmap } from "../components/PositionHeatmap";
 import { SessionChatPanel } from "../components/SessionChatPanel";
 import { Link } from "../components/Link";
 import { FunnelPanel } from "../components/FunnelPanel";
+import { VisitPatternsPanel } from "../components/VisitPatternsPanel";
 import { MetricCard } from "../components/MetricCard";
 import { EmptyState } from "../components/results/EmptyState";
 import { EventsTable } from "../components/results/EventsTable";
@@ -61,6 +63,7 @@ export function SessionResultsPage({
   const [toSeconds, setToSeconds] = useState(0);
   const [metrics, setMetrics] = useState<ShopMetrics | null>(null);
   const [funnel, setFunnel] = useState<ShopFunnel | null>(null);
+  const [visitPatterns, setVisitPatterns] = useState<VisitPatterns | null>(null);
   const [events, setEvents] = useState<SceneEvent[]>([]);
   const [measures, setMeasures] = useState<AnalysisMeasure[]>([]);
   const [positions, setPositions] = useState<PositionSamples | null>(null);
@@ -137,6 +140,25 @@ export function SessionResultsPage({
       active = false;
     };
   }, [apiBaseUrl, sessionId, shopId, row?.result_complete, session?.source_kind]);
+
+  useEffect(() => {
+    if (session == null || row?.result_complete !== true || session.source_kind === "webcam") {
+      setVisitPatterns(null);
+      return;
+    }
+    let active = true;
+    setVisitPatterns(null);
+    getVisitPatterns(apiBaseUrl, sessionId)
+      .then((result) => {
+        if (active) setVisitPatterns(result);
+      })
+      .catch(() => {
+        if (active) setVisitPatterns(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [apiBaseUrl, sessionId, row?.result_complete, session?.source_kind]);
 
   useEffect(() => {
     if (row?.result_complete !== true || shopId === null) return;
@@ -231,6 +253,9 @@ export function SessionResultsPage({
               funnel={funnel}
               officialEntries={metrics?.metrics.find((metric) => metric.code === "entries")?.value ?? null}
             />
+          )}
+          {visitPatterns !== null && session != null && session.source_kind !== "webcam" && (
+            <VisitPatternsPanel patterns={visitPatterns} shops={shops} />
           )}
           <div className={styles.analysisGrid}>
             <section className={`${styles.panel} ${styles.flowPanel}`} aria-labelledby="flow-title">

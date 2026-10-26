@@ -37,6 +37,7 @@ from flowsight.services.funnel import persist_shop_funnel
 from flowsight.services.jobs import transition_job
 from flowsight.services.measures import close_measures, sync_measures
 from flowsight.services.scene_metrics import persist_completed_scene
+from flowsight.services.visit_patterns import persist_visit_patterns
 from flowsight.video.decode import iter_video_frames
 from flowsight.video.storage import video_path
 from flowsight.vision.detector import Detection, Detector, ModelUnavailable, build_detector
@@ -51,6 +52,7 @@ from flowsight.vision.spatial import (
     normalized_foot,
 )
 from flowsight.vision.trajectory import TrajectoryWriter, trajectory_relative_path
+from flowsight.vision.visit_patterns import ConfiguredArea, VisitPatternRecorder
 
 logger = logging.getLogger(__name__)
 
@@ -301,6 +303,9 @@ def _run(
     )
     counter = SpatialCounter(shops, fps=float(fps))
     recorder = SceneEventRecorder(shops, fps=float(fps))
+    patterns = VisitPatternRecorder(
+        _configured_areas(shops), fps=float(fps), width=width, height=height
+    )
     frame_index = 0
     pending_facts: list[CrossingFact] = []
     flush_gate = _MeasureFlushGate(
@@ -330,6 +335,7 @@ def _run(
                 for detection in detections
             ]
             recorder.observe(frame_index, feet, facts)
+            patterns.observe(frame_index, feet)
             pending_facts.extend(facts)
             frames_analyzed = frame_index + 1
             if frames_analyzed == frames_total:
@@ -408,6 +414,13 @@ def _run(
                 windows={shop.shop_id: shop.window_polygon is not None for shop in shops},
                 source_kind=flow_session.source_kind.value,
             )
+            persist_visit_patterns(
+                database_session,
+                job_id=job_id,
+                session_id=session_id,
+                draft=patterns.finish(),
+                source_kind=flow_session.source_kind.value,
+            )
         finished = transition_job(
             database_session,
             job_id=job_id,
@@ -437,6 +450,18 @@ def _should_flush(frames_analyzed: int, frames_total: int) -> bool:
     """Persist every 15 frames and on the last frame; crossings ride the same batch."""
 
     return frames_analyzed == frames_total or frames_analyzed % FLUSH_EVERY_FRAMES == 0
+
+
+def _configured_areas(shops: Sequence[ShopGeometry]) -> list[ConfiguredArea]:
+    areas: list[ConfiguredArea] = []
+    for shop in shops:
+        if shop.front_polygon:
+            areas.append(ConfiguredArea(shop.shop_id, "front", shop.front_polygon))
+        if shop.interior_polygon:
+            areas.append(ConfiguredArea(shop.shop_id, "interior", shop.interior_polygon))
+        if shop.window_polygon:
+            areas.append(ConfiguredArea(shop.shop_id, "window", shop.window_polygon))
+    return areas
 
 
 def _scene_context(
