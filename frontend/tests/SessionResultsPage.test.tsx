@@ -138,7 +138,30 @@ describe("SessionResultsPage", () => {
         calls.push(url);
         if (url.endsWith("/processed-sessions")) return Promise.resolve(json([completedRow()]));
         if (url.endsWith("/sessions/s-1")) return Promise.resolve(json(detail("available")));
-        if (url.includes("/scene-versions/")) return Promise.resolve(json({ shops: [{ shop_id: "shop-1", name: "Zona" }] }));
+        if (url.includes("/scene-versions/")) {
+          return Promise.resolve(json({
+            shops: [
+              { shop_id: "shop-1", name: "Zona" },
+              { shop_id: "shop-2", name: "Otra" },
+            ],
+          }));
+        }
+        if (url.includes("/visit-patterns")) {
+          return Promise.resolve(json({
+            patterns_availability: "available",
+            patterns_unavailable_reason: null,
+            groups_availability: "available",
+            group_count: 0,
+            proximity_width_fraction: "0.08",
+            direction_degrees: "45",
+            minimum_seconds: "2",
+            area_transitions: [],
+            sequences: [],
+            shop_transitions: [],
+            groups: [],
+            precision_uncommitted: true,
+          }));
+        }
         if (url.includes("/metrics")) return Promise.resolve(json(metrics));
         if (url.includes("/funnel")) return Promise.resolve(json({
           session_id: "s-1", shop_id: "shop-1", stop_threshold_seconds: "3", attention_threshold_seconds: "8",
@@ -175,6 +198,9 @@ describe("SessionResultsPage", () => {
     expect(container.textContent).toContain("La precisión de estas etapas no está comprometida.");
     const metricsBefore = calls.filter((url) => url.includes("/metrics")).length;
     const funnelBefore = calls.filter((url) => url.includes("/funnel")).length;
+    const patternsBefore = calls.filter((url) => url.includes("/visit-patterns")).length;
+    expect(patternsBefore).toBe(1);
+    expect(container.textContent).toContain("0 grupos estimados");
 
     const from = container.querySelector('input[aria-label="Inicio del tramo"]') as HTMLInputElement;
     const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
@@ -186,7 +212,17 @@ describe("SessionResultsPage", () => {
 
     expect(calls.filter((url) => url.includes("/metrics")).length).toBe(metricsBefore);
     expect(calls.filter((url) => url.includes("/funnel")).length).toBe(funnelBefore);
+    expect(calls.filter((url) => url.includes("/visit-patterns")).length).toBe(patternsBefore);
     expect(calls.some((url) => url.includes("/events") && url.includes("from_seconds=50"))).toBe(true);
+
+    const zone = container.querySelector("select") as HTMLSelectElement;
+    const setSelect = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
+    await act(async () => {
+      setSelect?.call(zone, "shop-2");
+      zone.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    expect(calls.filter((url) => url.includes("/visit-patterns")).length).toBe(patternsBefore);
   });
 
   it("un resultado sintético sin escena informa indisponibilidad sin quedarse cargando", async () => {
@@ -202,9 +238,11 @@ describe("SessionResultsPage", () => {
   });
 
   it("en curso muestra solo las tres cifras parciales", async () => {
+    const calls: string[] = [];
     vi.stubGlobal(
       "fetch",
       vi.fn((url: string) => {
+        calls.push(url);
         if (url.endsWith("/processed-sessions")) {
           return Promise.resolve(json([completedRow({ status: "processing", result_complete: false, finished_at: null })]));
         }
@@ -232,6 +270,8 @@ describe("SessionResultsPage", () => {
     expect(text).not.toContain("Tráfico");
     expect(text).not.toContain("Tasa de ingreso");
     expect(text).not.toContain("Funnel comercial");
+    expect(text).not.toContain("Patrones de visita y grupos estimados");
+    expect(calls.some((url) => url.includes("/visit-patterns"))).toBe(false);
   });
 
   it("un análisis fallido muestra el motivo y ningún indicador", async () => {
@@ -386,6 +426,8 @@ describe("SessionResultsPage", () => {
     );
     await act(async () => root.render(<SessionResultsPage sessionId="s-1" apiBaseUrl={API} />));
     expect(container.textContent).not.toContain("Funnel comercial");
+    expect(container.textContent).not.toContain("Patrones de visita y grupos estimados");
     expect(calls.some((url) => url.includes("/funnel"))).toBe(false);
+    expect(calls.some((url) => url.includes("/visit-patterns"))).toBe(false);
   });
 });

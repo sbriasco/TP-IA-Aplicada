@@ -543,6 +543,65 @@ class ShopFunnelResponse(BaseModel):
     rates: list[FunnelRateResponse]
 
 
+class AreaRefResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    shop_id: uuid.UUID
+    zone_role: Literal["front", "interior", "window"]
+
+
+class AreaTransitionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    from_shop_id: uuid.UUID
+    from_zone_role: Literal["front", "interior", "window"]
+    to_shop_id: uuid.UUID
+    to_zone_role: Literal["front", "interior", "window"]
+    track_count: int
+
+
+class VisitSequenceResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    areas: list[AreaRefResponse]
+    track_count: int
+
+
+class ShopTransitionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    from_shop_id: uuid.UUID
+    to_shop_id: uuid.UUID
+    track_count: int
+
+
+class VisitGroupResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ordinal: int
+    started_video_timestamp_seconds: str
+    ended_video_timestamp_seconds: str
+    label: Literal["group_estimate"]
+    track_ids: list[int]
+
+
+class VisitPatternsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    patterns_availability: Literal["available", "unavailable"]
+    patterns_unavailable_reason: Literal["no_areas"] | None = None
+    groups_availability: Literal["available", "unavailable"]
+    group_count: int
+    proximity_width_fraction: str
+    direction_degrees: str
+    minimum_seconds: str
+    area_transitions: list[AreaTransitionResponse]
+    sequences: list[VisitSequenceResponse]
+    shop_transitions: list[ShopTransitionResponse]
+    groups: list[VisitGroupResponse]
+    precision_uncommitted: Literal[True]
+
+
 class SceneEventResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

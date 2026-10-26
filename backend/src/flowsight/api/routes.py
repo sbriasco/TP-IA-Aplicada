@@ -48,6 +48,7 @@ from flowsight.api.schemas import (
     TrafficBucketResponse,
     TrimmedName,
     VideoSourceResponse,
+    VisitPatternsResponse,
 )
 from flowsight.core.config import Settings
 from flowsight.db.models import (
@@ -121,6 +122,7 @@ from flowsight.services.video_sessions import (
     register_video_session,
     relink_video,
 )
+from flowsight.services.visit_patterns import LivePatternsUnavailable, load_visit_patterns
 from flowsight.video.probe import VideoRejected
 from flowsight.video.storage import StorageError, check_availability
 
@@ -419,6 +421,77 @@ def get_shop_funnel(
             }
             for row in view.rates
         ],
+    )
+
+
+@router.get("/sessions/{session_id}/visit-patterns", response_model=VisitPatternsResponse)
+def get_visit_patterns(session_id: uuid.UUID, database: Database) -> VisitPatternsResponse:
+    if get_active_session(database, session_id) is None:
+        raise not_found("La sesión no existe.")
+    try:
+        view = load_visit_patterns(database, session_id)
+    except LivePatternsUnavailable:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "live_patterns_unavailable",
+            "Los patrones y los grupos no están disponibles para una sesión de webcam.",
+        ) from None
+    except ResultIncomplete:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "result_incomplete",
+            "No hay un análisis completado para consultar.",
+        ) from None
+    report = view.report
+    return VisitPatternsResponse(
+        patterns_availability=report.patterns_availability.value,  # type: ignore[arg-type]
+        patterns_unavailable_reason=report.patterns_unavailable_reason,  # type: ignore[arg-type]
+        groups_availability=report.groups_availability.value,  # type: ignore[arg-type]
+        group_count=report.group_count,
+        proximity_width_fraction=_threshold_text(report.proximity_width_fraction),
+        direction_degrees=_threshold_text(report.direction_degrees),
+        minimum_seconds=_threshold_text(report.minimum_seconds),
+        area_transitions=[
+            {
+                "from_shop_id": row.from_shop_id,
+                "from_zone_role": row.from_zone_role.value,
+                "to_shop_id": row.to_shop_id,
+                "to_zone_role": row.to_zone_role.value,
+                "track_count": row.track_count,
+            }
+            for row in view.area_transitions
+        ],
+        sequences=[
+            {
+                "areas": [
+                    {"shop_id": area["shop_id"], "zone_role": area["zone_role"]}
+                    for area in row.areas
+                ],
+                "track_count": row.track_count,
+            }
+            for row in view.sequences
+        ],
+        shop_transitions=[
+            {
+                "from_shop_id": row.from_shop_id,
+                "to_shop_id": row.to_shop_id,
+                "track_count": row.track_count,
+            }
+            for row in view.shop_transitions
+        ],
+        groups=[
+            {
+                "ordinal": group.ordinal,
+                "started_video_timestamp_seconds": format(
+                    group.started_video_timestamp_seconds, "f"
+                ),
+                "ended_video_timestamp_seconds": format(group.ended_video_timestamp_seconds, "f"),
+                "label": group.label.value,
+                "track_ids": list(track_ids),
+            }
+            for group, track_ids in view.groups
+        ],
+        precision_uncommitted=True,
     )
 
 

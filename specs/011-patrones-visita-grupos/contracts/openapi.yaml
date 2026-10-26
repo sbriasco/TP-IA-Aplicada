@@ -1,0 +1,192 @@
+openapi: 3.1.0
+info:
+  title: FlowSight API — patrones de visita y grupos estimados (Feature #8)
+  version: 0.6.0
+  description: >
+    Lectura de patrones y grupos de una sesión de archivo ya completada.
+    Extiende el cierre del análisis y no modifica
+    GET /sessions/{session_id}/shops/{shop_id}/metrics,
+    GET /sessions/{session_id}/shops/{shop_id}/funnel
+    ni la herramienta del chat.
+    Errores: {"detail": {"code": string, "message": string}}.
+    Sin rutas absolutas, nombres de equipo ni secretos.
+servers:
+  - url: http://127.0.0.1:8000
+paths:
+  /sessions/{session_id}/visit-patterns:
+    get:
+      operationId: getVisitPatterns
+      description: >
+        Transiciones, secuencias, cambios de local y grupos estimados de toda
+        la sesión. No acepta tramo ni local. No recalcula métricas ni funnel.
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: Patrones y grupos de toda la sesión.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VisitPatterns"
+        "404":
+          description: La sesión no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: >
+            result_incomplete si no hay un análisis completado.
+            live_patterns_unavailable si el origen es webcam.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  parameters:
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+    AreaRef:
+      type: object
+      required: [shop_id, zone_role]
+      properties:
+        shop_id:
+          type: string
+          format: uuid
+        zone_role:
+          type: string
+          enum: [front, interior, window]
+    AreaTransition:
+      type: object
+      required: [from_shop_id, from_zone_role, to_shop_id, to_zone_role, track_count]
+      properties:
+        from_shop_id:
+          type: string
+          format: uuid
+        from_zone_role:
+          type: string
+          enum: [front, interior, window]
+        to_shop_id:
+          type: string
+          format: uuid
+        to_zone_role:
+          type: string
+          enum: [front, interior, window]
+        track_count:
+          type: integer
+          minimum: 1
+    VisitSequence:
+      type: object
+      required: [areas, track_count]
+      properties:
+        areas:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/AreaRef"
+        track_count:
+          type: integer
+          minimum: 1
+    ShopTransition:
+      type: object
+      required: [from_shop_id, to_shop_id, track_count]
+      properties:
+        from_shop_id:
+          type: string
+          format: uuid
+        to_shop_id:
+          type: string
+          format: uuid
+        track_count:
+          type: integer
+          minimum: 1
+    VisitGroup:
+      type: object
+      required: [ordinal, started_video_timestamp_seconds, ended_video_timestamp_seconds, label, track_ids]
+      properties:
+        ordinal:
+          type: integer
+          minimum: 1
+        started_video_timestamp_seconds:
+          type: string
+        ended_video_timestamp_seconds:
+          type: string
+        label:
+          type: string
+          enum: [group_estimate]
+        track_ids:
+          type: array
+          minItems: 2
+          items:
+            type: integer
+    VisitPatterns:
+      type: object
+      required:
+        - patterns_availability
+        - groups_availability
+        - group_count
+        - proximity_width_fraction
+        - direction_degrees
+        - minimum_seconds
+        - area_transitions
+        - sequences
+        - shop_transitions
+        - groups
+        - precision_uncommitted
+      properties:
+        patterns_availability:
+          type: string
+          enum: [available, unavailable]
+        patterns_unavailable_reason:
+          type: string
+          enum: [no_areas]
+          nullable: true
+        groups_availability:
+          type: string
+          enum: [available, unavailable]
+        group_count:
+          type: integer
+          minimum: 0
+        proximity_width_fraction:
+          type: string
+        direction_degrees:
+          type: string
+        minimum_seconds:
+          type: string
+        area_transitions:
+          type: array
+          items:
+            $ref: "#/components/schemas/AreaTransition"
+        sequences:
+          type: array
+          items:
+            $ref: "#/components/schemas/VisitSequence"
+        shop_transitions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShopTransition"
+        groups:
+          type: array
+          items:
+            $ref: "#/components/schemas/VisitGroup"
+        precision_uncommitted:
+          type: boolean
+          const: true

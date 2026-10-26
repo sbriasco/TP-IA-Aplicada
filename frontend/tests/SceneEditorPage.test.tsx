@@ -209,6 +209,8 @@ describe("SceneEditorPage", () => {
     await changeValue(byLabel<HTMLInputElement>(container, "Nombre de la zona"), "Local A");
     expect(button.disabled).toBe(true);
     await changeValue(byLabel<HTMLInputElement>(container, "Título de la configuración"), "Otro título local");
+    expect(button.disabled).toBe(false);
+    await changeValue(byLabel<HTMLInputElement>(container, "Título de la configuración"), "Configuración 2");
     expect(button.disabled).toBe(true);
     await click(button);
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
