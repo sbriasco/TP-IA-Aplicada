@@ -5,6 +5,7 @@ import { SceneEditorPage } from "./pages/SceneEditorPage";
 import { SessionDetailPage } from "./pages/SessionDetailPage";
 import { SessionResultsPage } from "./pages/SessionResultsPage";
 import { SessionsPage } from "./pages/SessionsPage";
+import { ComparisonPage } from "./pages/ComparisonPage";
 import { LivePreparationPage } from "./pages/LivePreparationPage";
 import { LiveAnalysisPage } from "./pages/LiveAnalysisPage";
 import { LiveResultsPage } from "./pages/LiveResultsPage";
@@ -23,6 +24,8 @@ export function App() {
       return <JobPreviewPage jobId={route.jobId} />;
     case "sessions":
       return <SessionsPage />;
+    case "comparisons":
+      return <ComparisonPage />;
     case "session":
       return <SessionDetailPage key={route.sessionId} sessionId={route.sessionId} />;
     case "results":

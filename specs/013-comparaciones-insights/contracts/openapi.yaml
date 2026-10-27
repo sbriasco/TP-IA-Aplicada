@@ -1,0 +1,191 @@
+openapi: 3.1.0
+info:
+  title: FlowSight API — comparaciones e insights (Feature #10)
+  version: 0.8.0
+  description: >
+    Contraste de cifras ya guardadas entre sesiones de archivo completadas.
+    No modifica GET /sessions/{session_id}/shops/{shop_id}/metrics,
+    GET .../funnel, GET .../visit-patterns, GET .../possible-purchases
+    ni la herramienta del chat mínimo.
+    Errores: {"detail": {"code": string, "message": string}}.
+    Sin rutas absolutas, nombres de equipo ni secretos.
+servers:
+  - url: http://127.0.0.1:8000
+paths:
+  /comparisons:
+    post:
+      operationId: createComparison
+      description: >
+        Arma una comparación de solo lectura. No recalcula desde el video.
+        axis=session es el compromiso P1. day, time_of_day y zone son P2.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComparisonRequest"
+      responses:
+        "200":
+          description: Comparación e insights.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComparisonResponse"
+        "400":
+          description: >
+            comparison_invalid_request si faltan session_ids, zone_name
+            o el axis no es reconocido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: >
+            comparison_insufficient_sessions si tras deduplicar y filtrar
+            quedan menos de dos sesiones elegibles (archivo completado).
+            comparison_axis_unavailable si un eje P2 no tiene grupos suficientes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  schemas:
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+    ComparisonRequest:
+      type: object
+      additionalProperties: false
+      required: [session_ids, zone_name, axis]
+      properties:
+        session_ids:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uuid
+        zone_name:
+          type: string
+          minLength: 1
+          description: Nombre visible de zona; resuelve el local en cada sesión.
+        axis:
+          type: string
+          enum: [session, day, time_of_day, zone]
+    ComparisonResponse:
+      type: object
+      additionalProperties: false
+      required: [axis, zone_name, columns, figures, insights]
+      properties:
+        axis:
+          type: string
+          enum: [session, day, time_of_day, zone]
+        zone_name:
+          type: string
+        columns:
+          type: array
+          minItems: 2
+          items:
+            $ref: "#/components/schemas/ComparableColumn"
+        figures:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContrastedFigure"
+        insights:
+          type: array
+          items:
+            $ref: "#/components/schemas/DerivedInsight"
+    ComparableColumn:
+      type: object
+      additionalProperties: false
+      required: [key, label, session_ids, camera_label, resolved_shop_id]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        session_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        camera_label:
+          type: string
+          nullable: true
+        resolved_shop_id:
+          type: string
+          format: uuid
+          nullable: true
+    ContrastedFigure:
+      type: object
+      additionalProperties: false
+      required: [family, code, label, cells, relation]
+      properties:
+        family:
+          type: string
+          enum:
+            - shop_metrics
+            - peak
+            - funnel
+            - visit_patterns
+            - possible_purchase
+        code:
+          type: string
+        label:
+          type: string
+        cells:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComparisonCell"
+        relation:
+          type: string
+          enum: [greater, less, equal, unavailable]
+          description: >
+            Para dos columnas, mayor/menor/igual de la primera respecto de la
+            segunda cuando ambas están available; unavailable en caso contrario.
+            Con más de dos columnas, unavailable si no hay un par comparable
+            único destacado (detalle en implementación/tests).
+        delta:
+          type: number
+          nullable: true
+          description: cells[0].value - cells[1].value si relation no es unavailable; si no, null.
+    ComparisonCell:
+      type: object
+      additionalProperties: false
+      required: [availability, value, unavailable_reason]
+      properties:
+        availability:
+          type: string
+          enum: [available, unavailable]
+        value:
+          type: number
+          nullable: true
+        unavailable_reason:
+          type: string
+          nullable: true
+        start_seconds:
+          type: number
+          nullable: true
+          description: Solo pico u horarios de video cuando aplica.
+    DerivedInsight:
+      type: object
+      additionalProperties: false
+      required: [code, message, figure_code, estimation]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        figure_code:
+          type: string
+          nullable: true
+        estimation:
+          type: boolean

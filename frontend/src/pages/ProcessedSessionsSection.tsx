@@ -45,6 +45,9 @@ export function ProcessedSessionsSection({ apiBaseUrl }: ProcessedSessionsSectio
     <section className={styles.section} aria-labelledby="processed-sessions-title">
       <h2 id="processed-sessions-title">Sesiones procesadas</h2>
       <p className={styles.description}>Consultá los resultados y el estado del último análisis de cada sesión.</p>
+      <p>
+        <Link href="/comparisons">Comparar sesiones</Link>
+      </p>
       {error !== null && <p role="alert">{error}</p>}
       {error === null && rows === null && <p role="status">Cargando sesiones procesadas…</p>}
       {rows !== null && rows.length === 0 && <p>Todavía no hay sesiones procesadas.</p>}
