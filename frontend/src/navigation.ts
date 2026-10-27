@@ -6,6 +6,7 @@ export type Route =
   | { name: "session"; sessionId: string }
   | { name: "editor"; sessionId: string }
   | { name: "results"; sessionId: string }
+  | { name: "comparisons" }
   | { name: "live_preparation"; sessionId?: string }
   | { name: "live_analysis"; jobId: string }
   | { name: "live_results"; jobId: string }
@@ -27,6 +28,9 @@ export function matchRoute(pathname: string, search: string): Route {
   }
   if (pathname === "/" || pathname === "") {
     return { name: "sessions" };
+  }
+  if (pathname === "/comparisons" || pathname === "/comparisons/") {
+    return { name: "comparisons" };
   }
   const match = SESSION_PATH.exec(pathname);
   if (match === null) {

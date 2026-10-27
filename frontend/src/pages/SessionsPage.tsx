@@ -79,7 +79,7 @@ export function SessionsPage({ apiBaseUrl = API_BASE_URL }: SessionsPageProps) {
 
   return (
     <AppShell title="Tus análisis" subtitle="Cargá un video, configurá la escena y consultá lo que sucede en tu espacio." actions={
-      <div className={styles.headingActions}><Link href="/live" className={styles.outlineAction}><Video size={16} aria-hidden="true" />Webcam en vivo</Link><button type="button" onClick={() => setManagingCameras(true)}><Camera size={16} aria-hidden="true" />Cámaras</button><button type="button" data-primary onClick={() => setUploading(true)}><Plus size={18} aria-hidden="true" />Nuevo análisis</button></div>
+      <div className={styles.headingActions}><Link href="/comparisons" className={styles.outlineAction}>Comparar</Link><Link href="/live" className={styles.outlineAction}><Video size={16} aria-hidden="true" />Webcam en vivo</Link><button type="button" onClick={() => setManagingCameras(true)}><Camera size={16} aria-hidden="true" />Cámaras</button><button type="button" data-primary onClick={() => setUploading(true)}><Plus size={18} aria-hidden="true" />Nuevo análisis</button></div>
     }>
       <DashboardSteps onUpload={() => setUploading(true)} configureHref={editable ? `/sessions/${encodeURIComponent(editable.id)}/editor` : undefined} resultsHref={items.find(item => item.ready)?.href} />
       {error && <p role="alert">{error}</p>}

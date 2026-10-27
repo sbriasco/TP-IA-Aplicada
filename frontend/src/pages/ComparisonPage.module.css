@@ -1,0 +1,39 @@
+.section {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.controls {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 40rem;
+}
+
+.sessionList {
+  display: grid;
+  gap: 0.35rem;
+  max-height: 14rem;
+  overflow: auto;
+  border: 1px solid var(--border, #d0d4dc);
+  padding: 0.5rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.tableWrap {
+  overflow: auto;
+}
+
+.insights {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.insights li {
+  margin-left: 1.25rem;
+}

@@ -24,6 +24,12 @@ from flowsight.api.schemas import (
     ChatFigure,
     ChatRequest,
     ChatResponse,
+    ComparableColumnResponse,
+    ComparisonCellResponse,
+    ComparisonRequest,
+    ComparisonResponse,
+    ContrastedFigureResponse,
+    DerivedInsightResponse,
     JobCreate,
     JobResponse,
     JobTraceResponse,
@@ -83,6 +89,12 @@ from flowsight.services.cameras import (
 )
 from flowsight.services.chat import ChatAnswer, SessionMissing, ask
 from flowsight.services.chat_metrics import LiveChatUnavailable
+from flowsight.services.comparison import (
+    ComparisonAxisUnavailable,
+    ComparisonInsufficientSessions,
+    ComparisonInvalidRequest,
+    build_comparison,
+)
 from flowsight.services.funnel import LiveFunnelUnavailable, load_shop_funnel
 from flowsight.services.jobs import (
     InvalidJobTransition,
@@ -338,6 +350,78 @@ def delete_session(session_id: uuid.UUID, database: Database) -> Response:
         ) from None
     database.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/comparisons", response_model=ComparisonResponse)
+def post_comparison(payload: ComparisonRequest, database: Database) -> ComparisonResponse:
+    try:
+        result = build_comparison(
+            database,
+            session_ids=list(payload.session_ids),
+            zone_name=payload.zone_name,
+            axis=payload.axis,
+        )
+    except ComparisonInvalidRequest as error:
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "comparison_invalid_request",
+            str(error) or "La petición de comparación no es válida.",
+        ) from None
+    except ComparisonInsufficientSessions as error:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "comparison_insufficient_sessions",
+            str(error)
+            or "Hacen falta al menos dos sesiones de archivo completadas para comparar.",
+        ) from None
+    except ComparisonAxisUnavailable as error:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "comparison_axis_unavailable",
+            str(error) or "Ese eje no tiene suficientes grupos comparables.",
+        ) from None
+    return ComparisonResponse(
+        axis=result.axis,
+        zone_name=result.zone_name,
+        columns=[
+            ComparableColumnResponse(
+                key=column.key,
+                label=column.label,
+                session_ids=list(column.session_ids),
+                camera_label=column.camera_label,
+                resolved_shop_id=column.resolved_shop_id,
+            )
+            for column in result.columns
+        ],
+        figures=[
+            ContrastedFigureResponse(
+                family=figure.family,
+                code=figure.code,
+                label=figure.label,
+                cells=[
+                    ComparisonCellResponse(
+                        availability=cell.availability,
+                        value=cell.value,
+                        unavailable_reason=cell.unavailable_reason,
+                        start_seconds=cell.start_seconds,
+                    )
+                    for cell in figure.cells
+                ],
+                relation=figure.relation,
+                delta=figure.delta,
+            )
+            for figure in result.figures
+        ],
+        insights=[
+            DerivedInsightResponse(
+                code=insight.code,
+                message=insight.message,
+                figure_code=insight.figure_code,
+                estimation=insight.estimation,
+            )
+            for insight in result.insights
+        ],
+    )
 
 
 @router.get(

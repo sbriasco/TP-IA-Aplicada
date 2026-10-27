@@ -612,6 +612,65 @@ class PossiblePurchasesResponse(BaseModel):
     track_ids: list[int]
 
 
+class ComparisonRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_ids: list[uuid.UUID] = Field(min_length=1)
+    zone_name: TrimmedName
+    axis: Literal["session", "day", "time_of_day", "zone"]
+
+
+class ComparisonCellResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    availability: Literal["available", "unavailable"]
+    value: float | None = None
+    unavailable_reason: str | None = None
+    start_seconds: float | None = None
+
+
+class ComparableColumnResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    key: str
+    label: str
+    session_ids: list[uuid.UUID]
+    camera_label: str | None = None
+    resolved_shop_id: uuid.UUID | None = None
+
+
+class ContrastedFigureResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    family: Literal[
+        "shop_metrics", "peak", "funnel", "visit_patterns", "possible_purchase"
+    ]
+    code: str
+    label: str
+    cells: list[ComparisonCellResponse]
+    relation: Literal["greater", "less", "equal", "unavailable"]
+    delta: float | None = None
+
+
+class DerivedInsightResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    message: str
+    figure_code: str | None = None
+    estimation: bool
+
+
+class ComparisonResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    axis: Literal["session", "day", "time_of_day", "zone"]
+    zone_name: str
+    columns: list[ComparableColumnResponse]
+    figures: list[ContrastedFigureResponse]
+    insights: list[DerivedInsightResponse]
+
+
 class SceneEventResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
