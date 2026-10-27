@@ -32,6 +32,7 @@ from flowsight.api.schemas import (
     MetricValueResponse,
     PositionSampleResponse,
     PositionSamplesResponse,
+    PossiblePurchasesResponse,
     ProcessedSessionResponse,
     ReferenceFrameResponse,
     SceneEventResponse,
@@ -94,6 +95,10 @@ from flowsight.services.position_samples import (
     JobNotFound,
     LivePositionSampleSet,
     list_position_samples,
+)
+from flowsight.services.possible_purchase import (
+    LivePurchaseUnavailable,
+    load_possible_purchase,
 )
 from flowsight.services.processed_sessions import list_processed_sessions
 from flowsight.services.scene_metrics import (
@@ -421,6 +426,39 @@ def get_shop_funnel(
             }
             for row in view.rates
         ],
+    )
+
+
+@router.get(
+    "/sessions/{session_id}/possible-purchases",
+    response_model=PossiblePurchasesResponse,
+)
+def get_possible_purchases(
+    session_id: uuid.UUID, database: Database
+) -> PossiblePurchasesResponse:
+    if get_active_session(database, session_id) is None:
+        raise not_found("La sesión no existe.")
+    try:
+        view = load_possible_purchase(database, session_id)
+    except LivePurchaseUnavailable:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "live_purchase_unavailable",
+            "La posible compra estimada no está disponible para una sesión de webcam.",
+        ) from None
+    except ResultIncomplete:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "result_incomplete",
+            "No hay un análisis completado para consultar.",
+        ) from None
+    report = view.report
+    return PossiblePurchasesResponse(
+        availability=report.availability.value,  # type: ignore[arg-type]
+        visit_count=report.visit_count,
+        minimum_seconds=_threshold_text(report.minimum_seconds),
+        precision_uncommitted=True,
+        track_ids=list(view.track_ids),
     )
 
 

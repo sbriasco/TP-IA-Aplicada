@@ -1,0 +1,94 @@
+openapi: 3.1.0
+info:
+  title: FlowSight API — posible compra estimada (Feature #9)
+  version: 0.7.0
+  description: >
+    Lectura de la posible compra estimada de una sesión de archivo ya completada.
+    Extiende el cierre del análisis y no modifica
+    GET /sessions/{session_id}/shops/{shop_id}/metrics,
+    GET /sessions/{session_id}/shops/{shop_id}/funnel,
+    GET /sessions/{session_id}/visit-patterns
+    ni la herramienta del chat.
+    Errores: {"detail": {"code": string, "message": string}}.
+    Sin rutas absolutas, nombres de equipo ni secretos.
+servers:
+  - url: http://127.0.0.1:8000
+paths:
+  /sessions/{session_id}/possible-purchases:
+    get:
+      operationId: getPossiblePurchases
+      description: >
+        Cantidad de visitas con posible compra estimada de toda la sesión.
+        No acepta tramo ni local. No recalcula métricas, funnel ni patrones.
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: Estimación de toda la sesión.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PossiblePurchases"
+        "404":
+          description: La sesión no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: >
+            result_incomplete si no hay un análisis completado.
+            live_purchase_unavailable si el origen es webcam.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  parameters:
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+    PossiblePurchases:
+      type: object
+      additionalProperties: false
+      required:
+        - availability
+        - visit_count
+        - minimum_seconds
+        - precision_uncommitted
+        - track_ids
+      properties:
+        availability:
+          type: string
+          enum: [available]
+        visit_count:
+          type: integer
+          minimum: 0
+        minimum_seconds:
+          type: string
+          description: Umbral en segundos de video, texto decimal (por ejemplo "1").
+        precision_uncommitted:
+          type: boolean
+          enum: [true]
+        track_ids:
+          type: array
+          items:
+            type: integer
+          description: Identificadores temporales que contaron una vez, ordenados.

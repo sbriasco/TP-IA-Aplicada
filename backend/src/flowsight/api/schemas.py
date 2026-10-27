@@ -602,6 +602,16 @@ class VisitPatternsResponse(BaseModel):
     precision_uncommitted: Literal[True]
 
 
+class PossiblePurchasesResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    availability: Literal["available"]
+    visit_count: int
+    minimum_seconds: str
+    precision_uncommitted: Literal[True]
+    track_ids: list[int]
+
+
 class SceneEventResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

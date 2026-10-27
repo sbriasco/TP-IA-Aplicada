@@ -6,6 +6,7 @@ import { ScenePreview } from "../components/ScenePreview";
 
 import { API_BASE_URL } from "../api/config";
 import { getShopFunnel, type ShopFunnel } from "../api/funnel";
+import { getPossiblePurchases, type PossiblePurchases } from "../api/possiblePurchases";
 import { getVisitPatterns, type VisitPatterns } from "../api/visitPatterns";
 import { ApiRequestError } from "../api/http";
 import {
@@ -28,6 +29,7 @@ import { SessionChatPanel } from "../components/SessionChatPanel";
 import { Link } from "../components/Link";
 import { FunnelPanel } from "../components/FunnelPanel";
 import { VisitPatternsPanel } from "../components/VisitPatternsPanel";
+import { PossiblePurchasePanel } from "../components/PossiblePurchasePanel";
 import { MetricCard } from "../components/MetricCard";
 import { EmptyState } from "../components/results/EmptyState";
 import { EventsTable } from "../components/results/EventsTable";
@@ -64,6 +66,7 @@ export function SessionResultsPage({
   const [metrics, setMetrics] = useState<ShopMetrics | null>(null);
   const [funnel, setFunnel] = useState<ShopFunnel | null>(null);
   const [visitPatterns, setVisitPatterns] = useState<VisitPatterns | null>(null);
+  const [possiblePurchases, setPossiblePurchases] = useState<PossiblePurchases | null>(null);
   const [events, setEvents] = useState<SceneEvent[]>([]);
   const [measures, setMeasures] = useState<AnalysisMeasure[]>([]);
   const [positions, setPositions] = useState<PositionSamples | null>(null);
@@ -154,6 +157,25 @@ export function SessionResultsPage({
       })
       .catch(() => {
         if (active) setVisitPatterns(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [apiBaseUrl, sessionId, row?.result_complete, session?.source_kind]);
+
+  useEffect(() => {
+    if (session == null || row?.result_complete !== true || session.source_kind === "webcam") {
+      setPossiblePurchases(null);
+      return;
+    }
+    let active = true;
+    setPossiblePurchases(null);
+    getPossiblePurchases(apiBaseUrl, sessionId)
+      .then((result) => {
+        if (active) setPossiblePurchases(result);
+      })
+      .catch(() => {
+        if (active) setPossiblePurchases(null);
       });
     return () => {
       active = false;
@@ -256,6 +278,9 @@ export function SessionResultsPage({
           )}
           {visitPatterns !== null && session != null && session.source_kind !== "webcam" && (
             <VisitPatternsPanel patterns={visitPatterns} shops={shops} />
+          )}
+          {possiblePurchases !== null && session != null && session.source_kind !== "webcam" && (
+            <PossiblePurchasePanel purchases={possiblePurchases} />
           )}
           <div className={styles.analysisGrid}>
             <section className={`${styles.panel} ${styles.flowPanel}`} aria-labelledby="flow-title">
