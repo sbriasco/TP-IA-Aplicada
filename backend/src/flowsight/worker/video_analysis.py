@@ -36,6 +36,7 @@ from flowsight.preview.snapshot import snapshot_path, write_preview_snapshot
 from flowsight.services.funnel import persist_shop_funnel
 from flowsight.services.jobs import transition_job
 from flowsight.services.measures import close_measures, sync_measures
+from flowsight.services.possible_purchase import persist_possible_purchase
 from flowsight.services.scene_metrics import persist_completed_scene
 from flowsight.services.visit_patterns import persist_visit_patterns
 from flowsight.video.decode import iter_video_frames
@@ -44,6 +45,7 @@ from flowsight.vision.detector import Detection, Detector, ModelUnavailable, bui
 from flowsight.vision.events import SceneEventRecorder
 from flowsight.vision.evidence import build_reference_summary, write_reference_summary
 from flowsight.vision.overlay import render_overlay_jpeg
+from flowsight.vision.possible_purchase import PossiblePurchaseRecorder
 from flowsight.vision.spatial import (
     CrossingFact,
     ShopCounts,
@@ -306,6 +308,7 @@ def _run(
     patterns = VisitPatternRecorder(
         _configured_areas(shops), fps=float(fps), width=width, height=height
     )
+    purchases = PossiblePurchaseRecorder(fps=float(fps))
     frame_index = 0
     pending_facts: list[CrossingFact] = []
     flush_gate = _MeasureFlushGate(
@@ -322,6 +325,7 @@ def _run(
                 break
             timestamp = (Decimal(frame_index) / Decimal(str(fps))).quantize(Decimal("0.000001"))
             detections = detector.detect(frame_index, width, height, frame)
+            bags = detector.detect_bags(frame_index, width, height, frame)
             writer.observe(
                 frame_index,
                 timestamp,
@@ -336,6 +340,7 @@ def _run(
             ]
             recorder.observe(frame_index, feet, facts)
             patterns.observe(frame_index, feet)
+            purchases.observe(frame_index, detections, bags)
             pending_facts.extend(facts)
             frames_analyzed = frame_index + 1
             if frames_analyzed == frames_total:
@@ -419,6 +424,13 @@ def _run(
                 job_id=job_id,
                 session_id=session_id,
                 draft=patterns.finish(),
+                source_kind=flow_session.source_kind.value,
+            )
+            persist_possible_purchase(
+                database_session,
+                job_id=job_id,
+                session_id=session_id,
+                draft=purchases.finish(),
                 source_kind=flow_session.source_kind.value,
             )
         finished = transition_job(

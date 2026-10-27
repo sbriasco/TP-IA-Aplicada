@@ -1009,6 +1009,60 @@ class VisitGroupMember(Base):
     track_id: Mapped[int] = mapped_column(Integer)
 
 
+class PossiblePurchaseReport(Base):
+    __tablename__ = "possible_purchase_reports"
+    __table_args__ = (
+        UniqueConstraint("job_id", name="uq_possible_purchase_reports_job_id"),
+        ForeignKeyConstraint(
+            ["job_id", "session_id"],
+            ["processing_jobs.id", "processing_jobs.session_id"],
+            name="fk_possible_purchase_reports_job_session",
+        ),
+        CheckConstraint(
+            "minimum_seconds = 1", name="ck_possible_purchase_reports_minimum"
+        ),
+        CheckConstraint(
+            "visit_count >= 0", name="ck_possible_purchase_reports_visit_count"
+        ),
+        CheckConstraint(
+            "availability = 'available'",
+            name="ck_possible_purchase_reports_available",
+        ),
+        CheckConstraint(
+            "precision_uncommitted IS TRUE",
+            name="ck_possible_purchase_reports_precision_uncommitted",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    job_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    session_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    minimum_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    visit_count: Mapped[int] = mapped_column(Integer)
+    availability: Mapped[MeasureAvailability] = mapped_column(
+        Enum(MeasureAvailability, name="measure_availability", values_callable=enum_values)
+    )
+    precision_uncommitted: Mapped[bool] = mapped_column(Boolean)
+
+
+class PossiblePurchaseMember(Base):
+    __tablename__ = "possible_purchase_members"
+    __table_args__ = (
+        UniqueConstraint(
+            "report_id", "track_id", name="uq_possible_purchase_members_report_track"
+        ),
+        ForeignKeyConstraint(
+            ["report_id"],
+            ["possible_purchase_reports.id"],
+            name="fk_possible_purchase_members_report",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    report_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    track_id: Mapped[int] = mapped_column(Integer)
+
+
 class TrafficBucket(Base):
     __tablename__ = "traffic_buckets"
     __table_args__ = (

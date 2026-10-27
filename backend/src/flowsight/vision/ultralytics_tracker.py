@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flowsight.vision.detector import Detection, ModelUnavailable
+from flowsight.vision.detector import BagBox, Detection, ModelUnavailable
 
 DETECTOR_VERSION = "8.4.153"
 WEIGHT_FILENAME = "yolo11m.pt"
+# COCO: backpack, handbag, suitcase — detect without tracking.
+BAG_CLASS_IDS = (24, 26, 28)
 
 
 class UltralyticsTracker:
@@ -71,6 +73,37 @@ class UltralyticsTracker:
             )
         return detections
 
+    def detect_bags(
+        self,
+        frame_index: int,
+        width: int,
+        height: int,
+        frame: object | None = None,
+    ) -> list[BagBox]:
+        del frame_index, width, height
+        if frame is None:
+            return []
+        model = self._ensure_model()
+        try:
+            results = self._predict_bags(model, frame)
+        except Exception:
+            if self._device != "cuda":
+                raise
+            self._device = "cpu"
+            self.execution_mode = "cpu"
+            self._remember("El procesador gráfico falló al usarse; el análisis siguió en CPU.")
+            results = self._predict_bags(model, frame)
+        if not results:
+            return []
+        boxes = results[0].boxes
+        if boxes is None or boxes.xyxy is None:
+            return []
+        bags: list[BagBox] = []
+        for xyxy in boxes.xyxy.tolist():
+            x1, y1, x2, y2 = xyxy
+            bags.append(BagBox(bbox=(x1, y1, x2, y2)))
+        return bags
+
     def _ensure_model(self) -> object:
         if self._model is not None:
             return self._model
@@ -109,6 +142,17 @@ class UltralyticsTracker:
         if self._device == "cuda":
             kwargs["quantize"] = 16
         return model.track(**kwargs)  # type: ignore[attr-defined]
+
+    def _predict_bags(self, model: object, frame: object) -> object:
+        kwargs: dict[str, object] = {
+            "source": frame,
+            "device": self._device,
+            "verbose": False,
+            "classes": list(BAG_CLASS_IDS),
+        }
+        if self._device == "cuda":
+            kwargs["quantize"] = 16
+        return model.predict(**kwargs)  # type: ignore[attr-defined]
 
     def _remember(self, limitation: str) -> None:
         if limitation not in self.limitations:

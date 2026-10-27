@@ -30,6 +30,35 @@ function json(body: unknown) {
   return { ok: true, status: 200, text: async () => JSON.stringify(body) };
 }
 
+const emptyVisitPatterns = {
+  patterns_availability: "available",
+  patterns_unavailable_reason: null,
+  groups_availability: "available",
+  group_count: 0,
+  proximity_width_fraction: "0.08",
+  direction_degrees: "45",
+  minimum_seconds: "2",
+  area_transitions: [],
+  sequences: [],
+  shop_transitions: [],
+  groups: [],
+  precision_uncommitted: true,
+};
+
+const emptyPossiblePurchases = {
+  availability: "available",
+  visit_count: 0,
+  minimum_seconds: "1",
+  precision_uncommitted: true,
+  track_ids: [],
+};
+
+function sessionExtras(url: string) {
+  if (url.includes("/visit-patterns")) return json(emptyVisitPatterns);
+  if (url.includes("/possible-purchases")) return json(emptyPossiblePurchases);
+  return null;
+}
+
 function completedRow(overrides: Record<string, unknown> = {}) {
   return {
     session_id: "s-1",
@@ -162,6 +191,15 @@ describe("SessionResultsPage", () => {
             precision_uncommitted: true,
           }));
         }
+        if (url.includes("/possible-purchases")) {
+          return Promise.resolve(json({
+            availability: "available",
+            visit_count: 0,
+            minimum_seconds: "1",
+            precision_uncommitted: true,
+            track_ids: [],
+          }));
+        }
         if (url.includes("/metrics")) return Promise.resolve(json(metrics));
         if (url.includes("/funnel")) return Promise.resolve(json({
           session_id: "s-1", shop_id: "shop-1", stop_threshold_seconds: "3", attention_threshold_seconds: "8",
@@ -199,8 +237,11 @@ describe("SessionResultsPage", () => {
     const metricsBefore = calls.filter((url) => url.includes("/metrics")).length;
     const funnelBefore = calls.filter((url) => url.includes("/funnel")).length;
     const patternsBefore = calls.filter((url) => url.includes("/visit-patterns")).length;
+    const purchasesBefore = calls.filter((url) => url.includes("/possible-purchases")).length;
     expect(patternsBefore).toBe(1);
+    expect(purchasesBefore).toBe(1);
     expect(container.textContent).toContain("0 grupos estimados");
+    expect(container.textContent).toContain("0 visitas con posible compra estimada");
 
     const from = container.querySelector('input[aria-label="Inicio del tramo"]') as HTMLInputElement;
     const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
@@ -213,6 +254,7 @@ describe("SessionResultsPage", () => {
     expect(calls.filter((url) => url.includes("/metrics")).length).toBe(metricsBefore);
     expect(calls.filter((url) => url.includes("/funnel")).length).toBe(funnelBefore);
     expect(calls.filter((url) => url.includes("/visit-patterns")).length).toBe(patternsBefore);
+    expect(calls.filter((url) => url.includes("/possible-purchases")).length).toBe(purchasesBefore);
     expect(calls.some((url) => url.includes("/events") && url.includes("from_seconds=50"))).toBe(true);
 
     const zone = container.querySelector("select") as HTMLSelectElement;
@@ -223,6 +265,7 @@ describe("SessionResultsPage", () => {
     });
 
     expect(calls.filter((url) => url.includes("/visit-patterns")).length).toBe(patternsBefore);
+    expect(calls.filter((url) => url.includes("/possible-purchases")).length).toBe(purchasesBefore);
   });
 
   it("un resultado sintético sin escena informa indisponibilidad sin quedarse cargando", async () => {
@@ -271,7 +314,9 @@ describe("SessionResultsPage", () => {
     expect(text).not.toContain("Tasa de ingreso");
     expect(text).not.toContain("Funnel comercial");
     expect(text).not.toContain("Patrones de visita y grupos estimados");
+    expect(text).not.toContain("Posible compra estimada");
     expect(calls.some((url) => url.includes("/visit-patterns"))).toBe(false);
+    expect(calls.some((url) => url.includes("/possible-purchases"))).toBe(false);
   });
 
   it("un análisis fallido muestra el motivo y ningún indicador", async () => {
@@ -336,6 +381,8 @@ describe("SessionResultsPage", () => {
         if (url.includes("/position-samples")) {
           return Promise.resolve(json({ job_id: "j-1", availability: "unavailable", samples: [] }));
         }
+        const extras = sessionExtras(url);
+        if (extras) return Promise.resolve(extras);
         return Promise.resolve(json({}));
       }),
     );
@@ -388,6 +435,8 @@ describe("SessionResultsPage", () => {
         if (url.includes("/position-samples")) {
           return Promise.resolve(json({ job_id: "j-1", availability: "unavailable", samples: [] }));
         }
+        const extras = sessionExtras(url);
+        if (extras) return Promise.resolve(extras);
         return Promise.resolve(json({}));
       }),
     );
@@ -427,7 +476,9 @@ describe("SessionResultsPage", () => {
     await act(async () => root.render(<SessionResultsPage sessionId="s-1" apiBaseUrl={API} />));
     expect(container.textContent).not.toContain("Funnel comercial");
     expect(container.textContent).not.toContain("Patrones de visita y grupos estimados");
+    expect(container.textContent).not.toContain("Posible compra estimada");
     expect(calls.some((url) => url.includes("/funnel"))).toBe(false);
     expect(calls.some((url) => url.includes("/visit-patterns"))).toBe(false);
+    expect(calls.some((url) => url.includes("/possible-purchases"))).toBe(false);
   });
 });

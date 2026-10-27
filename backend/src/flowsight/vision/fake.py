@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from flowsight.vision.detector import Detection
+from flowsight.vision.detector import BagBox, Detection
 
 
 class FakeDetector:
@@ -20,3 +20,13 @@ class FakeDetector:
     ) -> list[Detection]:
         del frame_index, width, height, frame
         return [Detection(track_id=1, bbox=(10, 20, 40, 80))]
+
+    def detect_bags(
+        self,
+        frame_index: int,
+        width: int,
+        height: int,
+        frame: object | None = None,
+    ) -> list[BagBox]:
+        del frame_index, width, height, frame
+        return []
