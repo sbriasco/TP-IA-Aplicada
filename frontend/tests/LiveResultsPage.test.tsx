@@ -25,7 +25,9 @@ function mockApi(status = "completed", overrides = {}, emptySamples = false) {
     url.includes("position-samples") ? { job_id: "job-1", source_kind: "webcam", time_basis: "capture",
       availability: "available", sample_count: 20000, returned_count: 1, candidate_count: 90000,
       capacity: 20000, samples: emptySamples ? [] : [{ capture_timestamp_seconds: 5, foot: [0.5, 0.4] }] } :
-    url.includes("live-events") ? { events: [], next_cursor: null } : { ...result(status), ...overrides }) })));
+    url.includes("live-events") ? { events: [], next_cursor: null } :
+    url.includes("chat-threads") ? [] :
+    { ...result(status), ...overrides }) })));
 }
 
 it("muestra entradas y salidas en resultados sin confundirlas con los lados A/B", async () => {
@@ -35,7 +37,7 @@ it("muestra entradas y salidas en resultados sin confundirlas con los lados A/B"
   expect(container.textContent).toContain("Entradas: 2 · Salidas: 1");
   expect(container.textContent).not.toContain("A → B:");
 });
-it("muestra cruces, cobertura y muestra acotada sin reproducción ni chat", async () => {
+it("muestra cruces, cobertura y muestra acotada sin reproducción", async () => {
   mockApi(); await act(async () => root.render(<LiveResultsPage jobId="job-1" apiBaseUrl="http://api.test" />));
   expect(container.textContent).toContain("Sin grabación");
   expect(container.textContent).toContain("Cobertura parcial");
@@ -43,7 +45,8 @@ it("muestra cruces, cobertura y muestra acotada sin reproducción ni chat", asyn
   expect(container.querySelector('[aria-label="Total de cruces"]')?.textContent).toBe("3");
   expect(container.querySelector('svg[aria-label="Mapa de calor"]')).not.toBeNull();
   expect(container.querySelector("video")).toBeNull();
-  expect(container.querySelector('textarea, input[placeholder*="pregunta"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Chat de la sesión"]')).not.toBeNull();
+  expect(container.querySelector('input[placeholder*="pregunta"], input[placeholder*="Pregunt"]')).not.toBeNull();
 });
 it("conserva la duración del último checkpoint y hace visible el final desconocido", async () => {
   mockApi("failed"); await act(async () => root.render(<LiveResultsPage jobId="job-1" apiBaseUrl="http://api.test" />));
@@ -69,7 +72,7 @@ it("resume cobertura real y oculta la auditoría hasta expandirla", async () => 
   expect(diagnosis).toBeDefined();
   expect(diagnosis?.open).toBe(false);
   expect(diagnosis?.textContent).toContain("Cruces sin confirmar descartados");
-  expect(diagnosis?.textContent).toContain("Asistente analítico no disponible");
+  expect(diagnosis?.textContent).toContain("Disponible sobre el reporte guardado");
 });
 it("no inventa un porcentaje sin duración y conserva la estadía observada", async () => {
   mockApi("completed", { elapsed_capture_seconds: 0, observed_seconds: 0, missing_seconds: 0,
@@ -89,4 +92,12 @@ it("distingue una captura cancelada y una estadía sin duración suficiente", as
   expect(container.textContent).not.toContain("Captura finalizada");
   expect(container.textContent).toContain("Sin visitas con duración suficiente");
   expect(container.textContent).not.toContain("Sin tracks observados");
+  expect(container.querySelector('[aria-label="Chat de la sesión"]')).not.toBeNull();
+});
+
+it("no monta el chat mientras la captura sigue en curso", async () => {
+  mockApi("processing", { status: "processing", result_complete: false });
+  await act(async () => root.render(<LiveResultsPage jobId="job-1" apiBaseUrl="http://api.test" />));
+  expect(container.querySelector('[aria-label="Chat de la sesión"]')).toBeNull();
+  expect(container.textContent).toContain("no durante la captura en vivo");
 });

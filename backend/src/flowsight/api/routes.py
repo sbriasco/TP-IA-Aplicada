@@ -693,7 +693,9 @@ def post_chat(payload: ChatRequest, request: Request, database: Database) -> Cha
         raise not_found("La conversación no pertenece a esta sesión o zona.") from None
     except LiveChatUnavailable:
         raise api_error(
-            409, "live_chat_unavailable", "El chat no está disponible para análisis de webcam."
+            409,
+            "live_chat_unavailable",
+            "El chat solo está disponible cuando el reporte de webcam ya está guardado.",
         ) from None
     except ShopNotInSession:
         raise not_found("El local no pertenece a esta sesión.") from None

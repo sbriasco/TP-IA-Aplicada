@@ -2,6 +2,11 @@ export const METRIC_NAME: Record<string, string> = {
   traffic_total: "Tráfico", store_pass: "Pasos", entries: "Entradas", exits: "Salidas",
   entry_rate: "Tasa de ingreso", dwell_mean_seconds: "Permanencia media",
   dwell_median_seconds: "Permanencia mediana", visible_occupancy: "Ocupación visible",
+  total_crossings: "Cruces totales",
+  dwell_interior_mean_seconds: "Permanencia interna",
+  dwell_front_mean_seconds: "Permanencia externa",
+  coverage_percent: "Cobertura",
+  elapsed_capture_seconds: "Duración de captura",
 };
 
 export const METRIC_DESCRIPTION: Record<string, string> = {
@@ -29,6 +34,7 @@ export const UNAVAILABLE_REASON: Record<string, string> = {
 const number = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 });
 export function formatMetric(code: string, value: number): string {
   if (code === "entry_rate") return `${number.format(value * 100)} %`;
+  if (code === "coverage_percent") return `${number.format(value)} %`;
   if (code.endsWith("_seconds")) return `${number.format(value)} s`;
   return number.format(value);
 }
