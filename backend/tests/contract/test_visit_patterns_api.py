@@ -207,13 +207,20 @@ def test_completed_patterns_ignore_range_and_leave_closed_figures(
         "attention",
         "linked_entry",
     }
+    # Closed chat catalog (specs/014): group_count cites patterns; not the GET body shape.
     assert set(_FIGURE_NAMES) == {
         "traffic_total",
         "entries",
+        "exits",
+        "store_pass",
+        "entry_rate",
         "visible_occupancy",
         "dwell_mean_seconds",
         "dwell_median_seconds",
         "peak",
+        "funnel_entries",
+        "group_count",
+        "visit_count",
     }
     missing = client.get(f"/sessions/{uuid.uuid4()}/visit-patterns")
     assert missing.status_code == 404

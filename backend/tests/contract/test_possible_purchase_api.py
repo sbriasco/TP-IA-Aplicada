@@ -209,13 +209,20 @@ def test_completed_purchases_ignore_range_and_leave_closed_figures(
     assert patterns.json()["precision_uncommitted"] is True
     assert "possible_purchase" not in _FIGURE_NAMES
     assert "posible_compra" not in _FIGURE_NAMES
+    # Closed chat catalog (specs/014): visit_count cites possible-purchase; not the GET body shape.
     assert set(_FIGURE_NAMES) == {
         "traffic_total",
         "entries",
+        "exits",
+        "store_pass",
+        "entry_rate",
         "visible_occupancy",
         "dwell_mean_seconds",
         "dwell_median_seconds",
         "peak",
+        "funnel_entries",
+        "group_count",
+        "visit_count",
     }
     missing = client.get(f"/sessions/{uuid.uuid4()}/possible-purchases")
     assert missing.status_code == 404

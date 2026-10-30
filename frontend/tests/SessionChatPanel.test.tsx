@@ -2,11 +2,12 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { ChatFigure } from "../src/api/chat";
 import { SessionChatPanel } from "../src/components/SessionChatPanel";
 
 const API = "http://api.test";
 
-const figures = [
+const figures: ChatFigure[] = [
   {
     code: "traffic_total",
     label: "visit_estimate",
@@ -43,7 +44,7 @@ function json(body: unknown) {
   return { ok: true, status: 200, text: async () => JSON.stringify(body) };
 }
 
-function reply(status: string, message: string, shownFigures = figures) {
+function reply(status: string, message: string, shownFigures: ChatFigure[] = figures) {
   return {
     status,
     message,
