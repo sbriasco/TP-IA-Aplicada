@@ -100,7 +100,12 @@ def resolve_thread(
     """Return an existing thread or create one. Rejects cross-session / deleted ids."""
 
     if thread_id is None:
-        return _create_thread(database_session, session_id=session_id, shop_id=shop_id, question=question)
+        return _create_thread(
+            database_session,
+            session_id=session_id,
+            shop_id=shop_id,
+            question=question,
+        )
     thread = database_session.get(ChatThread, thread_id)
     if thread is None or thread.deleted_at is not None or thread.session_id != session_id:
         raise ThreadMissing
@@ -111,7 +116,10 @@ def resolve_thread(
     return thread
 
 
-def history_for_model(database_session: DatabaseSession, thread_id: uuid.UUID) -> list[dict[str, str]]:
+def history_for_model(
+    database_session: DatabaseSession,
+    thread_id: uuid.UUID,
+) -> list[dict[str, str]]:
     messages = database_session.scalars(
         select(ChatMessage)
         .where(ChatMessage.thread_id == thread_id)
@@ -160,7 +168,11 @@ def append_turn(
     database_session.flush()
 
 
-def soft_delete_thread(database_session: DatabaseSession, thread_id: uuid.UUID, session_id: uuid.UUID) -> None:
+def soft_delete_thread(
+    database_session: DatabaseSession,
+    thread_id: uuid.UUID,
+    session_id: uuid.UUID,
+) -> None:
     thread = database_session.get(ChatThread, thread_id)
     if thread is None or thread.deleted_at is not None or thread.session_id != session_id:
         raise ThreadMissing

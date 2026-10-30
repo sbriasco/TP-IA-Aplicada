@@ -30,7 +30,6 @@ from flowsight.services.chat_metrics import (
     read_figures,
 )
 from flowsight.services.chat_threads import (
-    ThreadMissing,
     append_turn,
     history_for_model,
     resolve_thread,

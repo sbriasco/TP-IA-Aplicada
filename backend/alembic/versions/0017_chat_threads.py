@@ -7,6 +7,7 @@ with a downgrade.
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "0017_chat_threads_v2"
