@@ -214,16 +214,26 @@ def test_live_positions_are_bounded_and_use_capture_time(results_client):
     )
 
 
-def test_webcam_chat_is_rejected_before_reading_figures_or_calling_model(
+def test_running_webcam_chat_is_rejected_before_reading_figures_or_calling_model(
     results_client, monkeypatch
 ):
     import flowsight.services.chat as chat_service
 
     client, factory, job_id = results_client
-    session_id, shop_id = seed_results(factory, job_id)
+    with factory.begin() as database:
+        job = database.get(ProcessingJob, job_id)
+        session_id, shop_id = job.session_id, database.scalar(
+            select(SceneVersionShop).where(
+                SceneVersionShop.scene_version_id == job.scene_version_id
+            )
+        ).shop_id
+        if job.status != JobStatus.PROCESSING:
+            transition_job(
+                database, job_id=job_id, target=JobStatus.PROCESSING, occurred_at=datetime.now(UTC)
+            )
 
     def unexpected(*args, **kwargs):
-        raise AssertionError("A webcam must never invoke the model or commercial metrics")
+        raise AssertionError("A running webcam must never invoke the model")
 
     monkeypatch.setattr(chat_service, "read_figures", unexpected)
     monkeypatch.setattr(chat_service, "azure_draft", unexpected)
@@ -232,8 +242,39 @@ def test_webcam_chat_is_rejected_before_reading_figures_or_calling_model(
         json={
             "session_id": str(session_id),
             "shop_id": str(shop_id),
-            "question": "Cuántas visitas hubo?",
+            "question": "Cuántas entradas hubo?",
         },
     )
     assert response.status_code == 409, response.text
     assert response.json()["detail"]["code"] == "live_chat_unavailable"
+
+
+def test_completed_webcam_chat_cites_live_crossings(results_client):
+    from flowsight.services.chat import Draft
+
+    client, factory, job_id = results_client
+    session_id, shop_id = seed_results(factory, job_id)
+
+    def drafter(**kwargs):
+        crossings = next(figure for figure in kwargs["figures"] if figure.code == "total_crossings")
+        return Draft(text=f"Hubo {crossings.value} cruces confirmados.", model_calls=1)
+
+    client.app.state.chat_drafter = drafter
+    response = client.post(
+        "/chat",
+        json={
+            "session_id": str(session_id),
+            "shop_id": str(shop_id),
+            "question": "¿Cuántos cruces hubo?",
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "answered"
+    assert body["scope"] == "whole_session"
+    assert body["thread_id"] is not None
+    crossings = next(figure for figure in body["figures"] if figure["code"] == "total_crossings")
+    assert crossings["value"] == 3
+    assert "3" in body["message"]
+    funnel = next(figure for figure in body["figures"] if figure["code"] == "funnel_entries")
+    assert funnel["availability"] == "unavailable"

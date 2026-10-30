@@ -14,10 +14,8 @@
 .toolbarButton svg { flex-shrink: 0; }
 .history { width: 148px; flex-shrink: 0; border-right: 1px solid var(--fs-line); padding: 10px 8px; overflow: auto; scrollbar-width: thin; }
 .historyHeading { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 8px; font-size: 11px; font-weight: 600; color: var(--fs-muted); }
-.historyActions { display: flex; align-items: center; gap: 4px; }
-.historyHeading button { font-size: 11px; padding: 4px 8px; min-height: 28px; border-radius: 6px; border: 1px solid var(--fs-line); background: var(--fs-raised); color: var(--fs-ink); }
-.iconButton { display: inline-grid; place-items: center; width: 28px; padding: 0 !important; color: var(--fs-muted) !important; }
-.iconButton:hover { color: var(--fs-ink) !important; }
+.iconButton { display: inline-grid; place-items: center; width: 28px; min-height: 28px; padding: 0; border-radius: 6px; border: 1px solid var(--fs-line); background: var(--fs-raised); color: var(--fs-muted); }
+.iconButton:hover { color: var(--fs-ink); }
 .history ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .history ul button { width: 100%; text-align: left; font-size: 11px; line-height: 1.35; padding: 8px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: var(--fs-muted); overflow-wrap: anywhere; }
 .history ul button:hover:not(:disabled) { color: var(--fs-ink); background: var(--fs-raised); }

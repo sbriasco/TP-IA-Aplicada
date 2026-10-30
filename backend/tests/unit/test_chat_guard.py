@@ -34,6 +34,8 @@ def test_expanded_catalog_questions_are_allowed() -> None:
         "¿cuál es la tasa de ingreso?",
         "¿cuántas posibles compras estimadas?",
         "¿cuál sesión tuvo más tráfico que la última?",
+        "¿cuántos cruces hubo?",
+        "¿qué cobertura tuvo la captura?",
     ):
         assert question_refusal(question) is None
 

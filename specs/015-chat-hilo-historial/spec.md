@@ -37,12 +37,12 @@ Como analista, quiero ver conversaciones anteriores de esta sesión de análisis
 
 Como equipo, quiero que el historial no permita inventar cifras ni ampliar el alcance prohibido, para conservar las garantías del chat ampliado.
 
-**Independent Test**: Un número solo del historial sin lectura del turno no se muestra; compra/identidad/SQL siguen rechazados; webcam sin chat comercial.
+**Independent Test**: Un número solo del historial sin lectura del turno no se muestra; compra/identidad/SQL siguen rechazados; webcam en vivo (running) sin chat.
 
 **Acceptance Scenarios**:
 
 1. **Given** un borrador que copia un número del historial no presente en las figures del turno, **When** se filtra, **Then** no se muestra esa respuesta.
-2. **Given** webcam, **When** se usa el chat, **Then** sigue indisponible como hoy.
+2. **Given** webcam aún en captura, **When** se usa el chat, **Then** sigue indisponible; el chat sobre reporte webcam guardado queda en specs/016.
 
 ### Edge Cases
 
@@ -61,7 +61,7 @@ Como equipo, quiero que el historial no permita inventar cifras ni ampliar el al
 - **FR-004**: Todo número mostrado MUST provenir de una lectura/contraste del turno actual. El historial MUST NOT ser fuente de verdad de cifras.
 - **FR-005**: Al cambiar de sesión, MUST mostrarse solo el historial de esa sesión. Al cambiar de zona, MUST NOT presentar un hilo de otra zona como contexto activo.
 - **FR-006**: Credenciales y llamadas al modelo MUST permanecer en el backend; presupuesto máximo de llamadas por pregunta MUST ser el del chat ampliado (2).
-- **FR-007**: Webcam, compra confirmada, identidad y multi-cámara MUST conservar las mismas exclusiones/rechazos del chat ampliado.
+- **FR-007**: Compra confirmada, identidad y multi-cámara MUST conservar las mismas exclusiones/rechazos del chat ampliado. Webcam en captura (running) sigue sin chat; reporte webcam guardado se define en specs/016.
 - **FR-008**: Esta feature supersede el diferido US3 de specs/014: el hilo con memoria pasa a estar comprometido.
 
 ### Key Entities

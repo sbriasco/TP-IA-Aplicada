@@ -62,6 +62,13 @@ _ALLOWED = (
     " vs",
     "dia",
     "franja",
+    "cruce",
+    "cruces",
+    "cobertura",
+    "duracion",
+    "estadia",
+    "webcam",
+    "captura",
 )
 _ESTIMATE_AS_FACT = (
     "no es una estimacion",

@@ -16,6 +16,7 @@ interface SessionChatPanelProps {
   sessionId: string;
   shopId: string | null;
   shopName?: string;
+  sourceKind?: "video_file" | "webcam";
 }
 interface Turn {
   id: number;
@@ -23,14 +24,28 @@ interface Turn {
   answer: ChatResponse | null;
 }
 
-const SUGGESTIONS = [
+const VIDEO_SUGGESTIONS = [
   "¿Cuántos ingresos hubo?",
   "¿Cuál fue la tasa de ingreso?",
   "¿Hubo posible compra estimada?",
   "Compará el tráfico con la última",
 ];
 
-export function SessionChatPanel({ apiBaseUrl, sessionId, shopId, shopName }: SessionChatPanelProps) {
+const LIVE_SUGGESTIONS = [
+  "¿Cuántas entradas hubo?",
+  "¿Cuál fue la permanencia interna?",
+  "¿Qué cobertura tuvo el análisis?",
+  "¿Hubo un minuto pico de cruces?",
+];
+
+export function SessionChatPanel({
+  apiBaseUrl,
+  sessionId,
+  shopId,
+  shopName,
+  sourceKind = "video_file",
+}: SessionChatPanelProps) {
+  const suggestions = sourceKind === "webcam" ? LIVE_SUGGESTIONS : VIDEO_SUGGESTIONS;
   const [question, setQuestion] = useState("");
   const [waiting, setWaiting] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -195,21 +210,16 @@ export function SessionChatPanel({ apiBaseUrl, sessionId, shopId, shopName }: Se
           >
             <div className={styles.historyHeading}>
               <span>Historial</span>
-              <div className={styles.historyActions}>
-                <button type="button" onClick={startNewConversation}>
-                  Nueva
-                </button>
-                <button
-                  type="button"
-                  className={styles.iconButton}
-                  aria-label="Ocultar historial"
-                  aria-expanded={true}
-                  aria-controls="session-chat-history"
-                  onClick={() => setHistoryOpen(false)}
-                >
-                  <PanelLeftClose size={16} aria-hidden="true" />
-                </button>
-              </div>
+              <button
+                type="button"
+                className={styles.iconButton}
+                aria-label="Ocultar historial"
+                aria-expanded={true}
+                aria-controls="session-chat-history"
+                onClick={() => setHistoryOpen(false)}
+              >
+                <PanelLeftClose size={16} aria-hidden="true" />
+              </button>
             </div>
             {loadingThreads && <p className={styles.historyEmpty}>Cargando…</p>}
             {!loadingThreads && threads.length === 0 && (
@@ -270,14 +280,15 @@ export function SessionChatPanel({ apiBaseUrl, sessionId, shopId, shopName }: Se
               <div className={styles.welcome}>
                 <span className={styles.author}>Agente FlowSight</span>
                 <p>
-                  Hola, puedo citar métricas guardadas de esta zona y contrastar con otras sesiones.
-                  Los seguimientos usan el hilo abierto.
+                  {sourceKind === "webcam"
+                    ? "Hola, puedo citar cruces, permanencia observable, cobertura y duración de este reporte guardado. Los seguimientos usan el hilo abierto."
+                    : "Hola, puedo citar métricas guardadas de esta zona y contrastar con otras sesiones. Los seguimientos usan el hilo abierto."}
                 </p>
                 <p className={styles.hint}>
                   Cada pregunta usa la zona seleccionada. Elegí un hilo del historial o empezá uno nuevo.
                 </p>
                 <div className={styles.suggestions}>
-                  {SUGGESTIONS.map((text) => (
+                  {suggestions.map((text) => (
                     <button
                       type="button"
                       key={text}

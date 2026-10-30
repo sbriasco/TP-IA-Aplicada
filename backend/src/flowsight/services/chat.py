@@ -18,14 +18,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as DatabaseSession
 
 from flowsight.core.config import Settings
-from flowsight.db.models import ChatThread, ProcessingJob, SceneVersionShop
+from flowsight.db.models import ChatThread, ProcessingJob, SceneVersionShop, SourceKind
 from flowsight.llm.client import build_client
 from flowsight.llm.settings import AzureLlmConfigurationError, load_azure_llm_settings
 from flowsight.services.chat_guard import draft_refusal, question_refusal
 from flowsight.services.chat_metrics import (
     AnalysisNotFinal,
     ChatFigure,
-    LiveChatUnavailable,
     ensure_chat_source,
     read_figures,
 )
@@ -58,6 +57,11 @@ _FIGURE_NAMES = {
     "visible_occupancy": "Ocupación visible",
     "dwell_mean_seconds": "Permanencia media observable",
     "dwell_median_seconds": "Permanencia mediana observable",
+    "total_crossings": "Cruces totales",
+    "dwell_interior_mean_seconds": "Permanencia media interna observable",
+    "dwell_front_mean_seconds": "Permanencia media externa observable",
+    "coverage_percent": "Cobertura del análisis",
+    "elapsed_capture_seconds": "Duración de captura",
     "peak": "Horario pico",
     "funnel_entries": "Funnel: entradas vinculadas",
     "group_count": "Grupos estimados",
@@ -286,13 +290,12 @@ def _ask_comparison(
             shop_name=zone_name,
         )
     for sid in session_ids:
-        try:
-            ensure_chat_source(database_session, sid)
-        except LiveChatUnavailable:
+        contrasted = get_active_session(database_session, sid)
+        if contrasted is not None and contrasted.source_kind == SourceKind.WEBCAM:
             _log(0, "comparison_live_excluded")
             return _answer(
                 "needs_clarification",
-                "Esa sesión no es comparable (por ejemplo cámara en vivo).",
+                "Las sesiones de webcam no entran en el contraste comercial entre archivos.",
                 session_id=open_id,
                 shop_id=shop_id,
                 shop_name=zone_name,
@@ -623,12 +626,18 @@ def suite_drafter(
             return Draft(text="El tráfico no está disponible en el contraste.", model_calls=1)
         return Draft(text="Contraste de tráfico — " + "; ".join(parts) + ".", model_calls=1)
     traffic = next((figure for figure in figures if figure.code == "traffic_total"), None)
-    if traffic is None or traffic.value is None:
-        return Draft(text="El tráfico no está disponible.", model_calls=1)
-    shown = format(traffic.value, "f")
-    if "." in shown:
-        shown = shown.rstrip("0").rstrip(".")
-    return Draft(text=f"El tráfico es {shown or '0'}.", model_calls=1)
+    if traffic is not None and traffic.value is not None:
+        shown = format(traffic.value, "f")
+        if "." in shown:
+            shown = shown.rstrip("0").rstrip(".")
+        return Draft(text=f"El tráfico es {shown or '0'}.", model_calls=1)
+    crossings = next((figure for figure in figures if figure.code == "total_crossings"), None)
+    if crossings is not None and crossings.value is not None:
+        shown = format(crossings.value, "f")
+        if "." in shown:
+            shown = shown.rstrip("0").rstrip(".")
+        return Draft(text=f"Hubo {shown or '0'} cruces confirmados.", model_calls=1)
+    return Draft(text="El tráfico no está disponible.", model_calls=1)
 
 
 def azure_draft(
@@ -672,7 +681,9 @@ def azure_draft(
                 "El tráfico es una estimación de visitas, no personas únicas; "
                 "la ocupación es visible y la permanencia es observable. "
                 "Grupos y posible compra son estimaciones, nunca una venta confirmada. "
-                "Los tiempos son segundos desde el inicio del video. "
+                "Los tiempos son segundos desde el inicio del video o de la captura en webcam. "
+                "En webcam citá cruces, permanencia observable, cobertura y duración; "
+                "no inventes funnel, grupos ni posible compra si aparecen no disponibles. "
                 "Una cifra no disponible no es cero: usá la explicación de la herramienta. "
                 "Usá los nombres de métricas y unidades en lenguaje cotidiano. "
                 "Si no hay métricas guardadas, no afirmes que el video no fue procesado, "
@@ -778,9 +789,17 @@ def _public_figures(figures: list[ChatFigure]) -> list[dict[str, object]]:
             "value": _decimal_text(figure.value),
             "estimation": figure.estimation,
             "unit": (
-                "segundos"
-                if figure.code.startswith("dwell_") or figure.code == "peak"
-                else "cantidad"
+                "porcentaje"
+                if figure.code == "coverage_percent"
+                else (
+                    "segundos"
+                    if (
+                        figure.code.startswith("dwell_")
+                        or figure.code.endswith("_seconds")
+                        or figure.code == "peak"
+                    )
+                    else "cantidad"
+                )
             ),
             "unavailable_reason": (
                 None
