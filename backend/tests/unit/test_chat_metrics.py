@@ -36,10 +36,16 @@ SIX = Decimal("0.000001")
 CHAT_CODES = {
     "traffic_total",
     "entries",
+    "exits",
+    "store_pass",
+    "entry_rate",
     "visible_occupancy",
     "dwell_mean_seconds",
     "dwell_median_seconds",
     "peak",
+    "funnel_entries",
+    "group_count",
+    "visit_count",
 }
 
 
@@ -130,8 +136,15 @@ def test_five_figures_match_the_stored_session_and_ignore_a_stretch(database) ->
     assert by_code["traffic_total"].value == Decimal("17.000000")
     assert by_code["traffic_total"].label == "visit_estimate"
     assert by_code["entries"].value == Decimal("9.000000")
+    assert by_code["exits"].value == Decimal("4.000000")
+    assert by_code["store_pass"].value == Decimal("3.000000")
+    assert by_code["entry_rate"].value == Decimal("3.000000")
+    assert by_code["traffic_total"].estimation is True
     assert by_code["visible_occupancy"].value == Decimal("2.000000")
     assert by_code["visible_occupancy"].label == "visible"
+    assert by_code["funnel_entries"].availability == "unavailable"
+    assert by_code["group_count"].availability == "unavailable"
+    assert by_code["visit_count"].availability == "unavailable"
     dwell = by_code["dwell_mean_seconds"]
     assert dwell.availability == "unavailable"
     assert dwell.value is None

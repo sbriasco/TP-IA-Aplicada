@@ -175,6 +175,41 @@ describe("SessionChatPanel", () => {
     expect(log?.querySelectorAll('[aria-label="Respuesta"]')).toHaveLength(2);
   });
 
+  it("muestra contraste y eje cuando el alcance es comparison", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        json({
+          ...reply("answered", "Primera tuvo más tráfico (17 vs 5).", [
+            {
+              code: "traffic_total",
+              label: "visit_estimate",
+              availability: "available",
+              value: 17,
+              unavailable_reason: null,
+              estimation: true,
+            },
+          ]),
+          scope: "comparison",
+          comparison: {
+            axis: "session",
+            column_labels: ["Primera", "Segunda"],
+            insight_codes: ["higher_traffic_total"],
+          },
+        }),
+      ),
+    );
+    await act(async () =>
+      root.render(<SessionChatPanel apiBaseUrl={API} sessionId="s-1" shopId="shop-1" />),
+    );
+    await ask(container, "compará el tráfico con la última");
+    const text = container.textContent ?? "";
+    expect(text).toContain("contraste");
+    expect(text).toContain("session");
+    expect(text).toContain("Primera vs Segunda");
+    expect(text).toContain("estimación");
+  });
+
   it("descarta una respuesta pendiente al cambiar el local", async () => {
     let finish: (value: unknown) => void = () => undefined;
     const pending = new Promise((resolve) => { finish = resolve; });

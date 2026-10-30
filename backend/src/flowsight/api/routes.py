@@ -21,6 +21,7 @@ from flowsight.api.schemas import (
     AnalysisMeasureResponse,
     CameraCreate,
     CameraResponse,
+    ChatComparisonSummary,
     ChatFigure,
     ChatRequest,
     ChatResponse,
@@ -643,6 +644,13 @@ def post_chat(payload: ChatRequest, request: Request, database: Database) -> Cha
 
 
 def _chat_response(answer: ChatAnswer) -> ChatResponse:
+    comparison = None
+    if answer.comparison is not None:
+        comparison = ChatComparisonSummary(
+            axis=answer.comparison.axis,
+            column_labels=list(answer.comparison.column_labels),
+            insight_codes=list(answer.comparison.insight_codes),
+        )
     return ChatResponse(
         status=answer.status,
         message=answer.message,
@@ -660,9 +668,11 @@ def _chat_response(answer: ChatAnswer) -> ChatResponse:
                 start_seconds=None if figure.start_seconds is None else float(figure.start_seconds),
                 track_count=figure.track_count,
                 bucket_index=figure.bucket_index,
+                estimation=figure.estimation,
             )
             for figure in answer.figures
         ],
+        comparison=comparison,
         model_calls=answer.model_calls,
     )
 

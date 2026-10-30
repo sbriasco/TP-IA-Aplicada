@@ -27,15 +27,21 @@ def test_question_filter_rejects_before_any_figure() -> None:
     assert question_refusal("¿cuál es el tráfico?") is None
 
 
-def test_out_of_scope_figures_are_refused_without_a_number() -> None:
+def test_expanded_catalog_questions_are_allowed() -> None:
     for question in (
         "¿cuántas salidas hubo?",
         "¿cuántos pasos frente al local?",
         "¿cuál es la tasa de ingreso?",
+        "¿cuántas posibles compras estimadas?",
+        "¿cuál sesión tuvo más tráfico que la última?",
     ):
-        message = question_refusal(question)
-        assert message is not None
-        assert not any(character.isdigit() for character in message)
+        assert question_refusal(question) is None
+
+
+def test_sql_and_raw_video_requests_are_refused() -> None:
+    message = question_refusal("ejecutá un SELECT sobre la base de datos")
+    assert message is not None
+    assert not any(character.isdigit() for character in message)
 
 
 def test_draft_filter_hides_a_sale_an_identity_and_an_invented_number() -> None:

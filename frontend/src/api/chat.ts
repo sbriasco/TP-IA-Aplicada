@@ -8,6 +8,13 @@ export interface ChatFigure {
   unavailable_reason: string | null;
   start_seconds?: number | null;
   track_count?: number | null;
+  estimation?: boolean;
+}
+
+export interface ChatComparisonSummary {
+  axis: "session" | "day" | "time_of_day" | "zone";
+  column_labels: string[];
+  insight_codes: string[];
 }
 
 export interface ChatResponse {
@@ -16,8 +23,9 @@ export interface ChatResponse {
   session_id: string | null;
   shop_id: string | null;
   shop_name: string | null;
-  scope: "whole_session" | null;
+  scope: "whole_session" | "comparison" | null;
   figures: ChatFigure[];
+  comparison?: ChatComparisonSummary | null;
   model_calls: number;
 }
 
