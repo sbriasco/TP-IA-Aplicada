@@ -60,20 +60,9 @@ Como analista, quiero nombrar sesiones (o usar «la última» junto a la que est
 
 ---
 
-### User Story 3 - Seguir un hilo breve sin perder el grounding (Priority: P2) · Diferido
+### User Story 3 - Seguir un hilo breve sin perder el grounding (Priority: P2) · Movido a 015
 
-Como analista, quiero hacer una pregunta de seguimiento en el mismo panel (por ejemplo «¿y la permanencia?») sin repetir toda la sesión y la zona, y que la respuesta siga anclada a lecturas consultadas, para conversar con menos fricción en la demo.
-
-**Why this priority**: Mejora la sensación de «agente», pero **no está comprometida en esta entrega**. US1 y US2 con preguntas independientes bastan para cerrar Feature #11.
-
-**Independent Test** (cuando se implemente): Tras una pregunta contestada, un seguimiento sin repetir contexto usa la misma sesión/zona y solo cifras consultadas. Cambiar de sesión limpia el hilo.
-
-**Acceptance Scenarios** (no bloquean el cierre de esta feature):
-
-1. **Given** una respuesta ya mostrada sobre la sesión y zona abiertas, **When** el analista hace un seguimiento que no nombra otra sesión, **Then** el chat mantiene ese contexto y no mezcla otra sesión.
-2. **Given** un seguimiento que pide una cifra nueva, **When** se responde, **Then** esa cifra también proviene de una lectura consultada (no de memoria inventada del modelo).
-3. **Given** el analista abre otra sesión o cambia de zona, **When** mira el chat, **Then** el hilo anterior no se presenta como contexto de la nueva selección.
-4. **Given** un seguimiento ambiguo, **When** se envía, **Then** el chat pide aclaración en lugar de adivinar.
+El hilo con memoria e historial de conversaciones quedó comprometido en [specs/015-chat-hilo-historial](../015-chat-hilo-historial/spec.md). Esta feature 014 cerró con preguntas independientes; 015 supersede este diferido.
 
 ---
 
@@ -119,7 +108,7 @@ Como equipo, quiero que el chat ampliado siga negándose a confirmar compras, id
 - **FR-008**: El panel MUST mostrar espera y errores claros. Un fallo del chat MUST NOT impedir usar el tablero ni la pantalla de comparaciones.
 - **FR-009**: MUST ser posible demostrar que no se inventan cifras sin llamar al servicio de redacción de pago. Una prueba manual con ese servicio es deseable y no bloquea la aceptación de grounding.
 - **FR-010**: Preguntas fuera de analytics del producto, o que pidan SQL libre / acceso al video crudo, MUST rechazarse con un mensaje claro.
-- **FR-011**: El hilo de seguimiento (US3) queda **diferido**: MUST NOT bloquear el cierre de esta feature. Cada pregunta de esta entrega MUST tratarse como independiente respecto del historial de chat (el panel puede mostrar mensajes previos solo como UI local, sin exigir memoria de cifras entre turnos).
+- **FR-011**: En 014 el hilo de seguimiento quedó diferido; el compromiso de hilo + historial está en specs/015-chat-hilo-historial. Para 014, cada pregunta independiente respecto del historial bastaba para cerrar Feature #11.
 - **FR-012**: El chat ampliado MUST reemplazar el contrato de cifras citables del panel de resultados del chat mínimo: un solo panel, mismas reglas de aislamiento por sesión/zona, grounding, rechazo de compra/identidad y exclusión de webcam. MUST NOT mantener un segundo modo «solo cinco cifras» en esa UI. Las garantías de no inventar cifras y de prueba sin servicio de pago MUST conservarse.
 
 ### Key Entities

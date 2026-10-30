@@ -25,6 +25,9 @@ from flowsight.api.schemas import (
     ChatFigure,
     ChatRequest,
     ChatResponse,
+    ChatThreadDetailResponse,
+    ChatThreadMessageResponse,
+    ChatThreadSummaryResponse,
     ComparableColumnResponse,
     ComparisonCellResponse,
     ComparisonRequest,
@@ -90,6 +93,7 @@ from flowsight.services.cameras import (
 )
 from flowsight.services.chat import ChatAnswer, SessionMissing, ask
 from flowsight.services.chat_metrics import LiveChatUnavailable
+from flowsight.services.chat_threads import ThreadMissing, get_thread, list_threads
 from flowsight.services.comparison import (
     ComparisonAxisUnavailable,
     ComparisonInsufficientSessions,
@@ -618,6 +622,56 @@ def get_visit_patterns(session_id: uuid.UUID, database: Database) -> VisitPatter
     )
 
 
+@router.get(
+    "/sessions/{session_id}/chat-threads",
+    response_model=list[ChatThreadSummaryResponse],
+)
+def get_session_chat_threads(
+    session_id: uuid.UUID, database: Database
+) -> list[ChatThreadSummaryResponse]:
+    if get_active_session(database, session_id) is None:
+        raise not_found("La sesión no existe.")
+    return [
+        ChatThreadSummaryResponse(
+            id=row.id,
+            session_id=row.session_id,
+            shop_id=row.shop_id,
+            title=row.title,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+        for row in list_threads(database, session_id)
+    ]
+
+
+@router.get("/chat-threads/{thread_id}", response_model=ChatThreadDetailResponse)
+def get_chat_thread(thread_id: uuid.UUID, database: Database) -> ChatThreadDetailResponse:
+    try:
+        detail = get_thread(database, thread_id)
+    except ThreadMissing:
+        raise not_found("La conversación no existe.") from None
+    return ChatThreadDetailResponse(
+        thread=ChatThreadSummaryResponse(
+            id=detail.summary.id,
+            session_id=detail.summary.session_id,
+            shop_id=detail.summary.shop_id,
+            title=detail.summary.title,
+            created_at=detail.summary.created_at,
+            updated_at=detail.summary.updated_at,
+        ),
+        messages=[
+            ChatThreadMessageResponse(
+                id=message.id,
+                role=message.role,  # type: ignore[arg-type]
+                content=message.content,
+                created_at=message.created_at,
+                answer=_answer_from_payload(message.answer_payload),
+            )
+            for message in detail.messages
+        ],
+    )
+
+
 @router.post("/chat", response_model=ChatResponse)
 def post_chat(payload: ChatRequest, request: Request, database: Database) -> ChatResponse:
     if not payload.question.strip():
@@ -631,15 +685,19 @@ def post_chat(payload: ChatRequest, request: Request, database: Database) -> Cha
             timeout_seconds=request.app.state.settings.chat_timeout_seconds,
             settings=request.app.state.settings,
             drafter=getattr(request.app.state, "chat_drafter", None),
+            thread_id=payload.thread_id,
         )
     except SessionMissing:
         raise not_found("La sesión no existe.") from None
+    except ThreadMissing:
+        raise not_found("La conversación no pertenece a esta sesión o zona.") from None
     except LiveChatUnavailable:
         raise api_error(
             409, "live_chat_unavailable", "El chat no está disponible para análisis de webcam."
         ) from None
     except ShopNotInSession:
         raise not_found("El local no pertenece a esta sesión.") from None
+    database.commit()
     return _chat_response(answer)
 
 
@@ -674,6 +732,80 @@ def _chat_response(answer: ChatAnswer) -> ChatResponse:
         ],
         comparison=comparison,
         model_calls=answer.model_calls,
+        thread_id=answer.thread_id,
+    )
+
+
+def _answer_from_payload(payload: dict | None) -> ChatResponse | None:
+    if not payload or not isinstance(payload, dict):
+        return None
+    status_value = payload.get("status")
+    if status_value not in {
+        "answered",
+        "refused",
+        "needs_clarification",
+        "unavailable",
+        "error",
+    }:
+        return None
+    figures_raw = payload.get("figures") or []
+    figures: list[ChatFigure] = []
+    if isinstance(figures_raw, list):
+        for item in figures_raw:
+            if not isinstance(item, dict):
+                continue
+            figures.append(
+                ChatFigure(
+                    code=str(item.get("code") or ""),
+                    label=str(item.get("label") or "none"),
+                    availability=str(item.get("availability") or "unavailable"),
+                    value=item.get("value"),
+                    unavailable_reason=item.get("unavailable_reason"),
+                    start_seconds=item.get("start_seconds"),
+                    track_count=item.get("track_count"),
+                    bucket_index=item.get("bucket_index"),
+                    estimation=bool(item.get("estimation") or False),
+                )
+            )
+    comparison = None
+    comparison_raw = payload.get("comparison")
+    if isinstance(comparison_raw, dict) and comparison_raw.get("axis") in {
+        "session",
+        "day",
+        "time_of_day",
+        "zone",
+    }:
+        comparison = ChatComparisonSummary(
+            axis=comparison_raw["axis"],
+            column_labels=list(comparison_raw.get("column_labels") or []),
+            insight_codes=list(comparison_raw.get("insight_codes") or []),
+        )
+    thread_raw = payload.get("thread_id")
+    try:
+        thread_id = uuid.UUID(str(thread_raw)) if thread_raw else None
+    except ValueError:
+        thread_id = None
+    session_raw = payload.get("session_id")
+    shop_raw = payload.get("shop_id")
+    try:
+        session_id = uuid.UUID(str(session_raw)) if session_raw else None
+    except ValueError:
+        session_id = None
+    try:
+        shop_id = uuid.UUID(str(shop_raw)) if shop_raw else None
+    except ValueError:
+        shop_id = None
+    return ChatResponse(
+        status=status_value,
+        message=str(payload.get("message") or ""),
+        session_id=session_id,
+        shop_id=shop_id,
+        shop_name=payload.get("shop_name"),
+        scope=payload.get("scope"),
+        figures=figures,
+        comparison=comparison,
+        model_calls=int(payload.get("model_calls") or 0),
+        thread_id=thread_id,
     )
 
 

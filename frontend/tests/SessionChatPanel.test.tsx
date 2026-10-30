@@ -54,7 +54,31 @@ function reply(status: string, message: string, shownFigures: ChatFigure[] = fig
     scope: status === "answered" ? "whole_session" : null,
     figures: shownFigures,
     model_calls: status === "answered" ? 1 : 0,
+    thread_id: "thread-1",
   };
+}
+
+function mockFetch(postImpl: () => Promise<unknown>) {
+  return vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("/sessions/") && url.includes("/chat-threads")) {
+      return json([]);
+    }
+    if (url.includes("/chat-threads/")) {
+      return json({
+        thread: {
+          id: "thread-1",
+          session_id: "s-1",
+          shop_id: "shop-1",
+          title: "Hilo",
+          created_at: "2026-10-30T00:00:00Z",
+          updated_at: "2026-10-30T00:00:00Z",
+        },
+        messages: [],
+      });
+    }
+    return postImpl();
+  });
 }
 
 async function ask(container: HTMLDivElement, question = "¿cuál es el tráfico?") {
@@ -91,7 +115,7 @@ describe("SessionChatPanel", () => {
     });
     vi.stubGlobal(
       "fetch",
-      vi.fn(() => pending.then(() => json(reply("answered", "El tráfico es 17.")))),
+      mockFetch(() => pending.then(() => json(reply("answered", "El tráfico es 17.")))),
     );
 
     await act(async () =>
@@ -113,7 +137,7 @@ describe("SessionChatPanel", () => {
   });
 
   it("una respuesta contestada muestra el local, toda la sesión y los rótulos", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => json(reply("answered", "El tráfico es 17."))));
+    vi.stubGlobal("fetch", mockFetch(async () => json(reply("answered", "El tráfico es 17."))));
     await act(async () =>
       root.render(<SessionChatPanel apiBaseUrl={API} sessionId="s-1" shopId="shop-1" />),
     );
@@ -135,7 +159,7 @@ describe("SessionChatPanel", () => {
     async (status) => {
       vi.stubGlobal(
         "fetch",
-        vi.fn(async () => json(reply(status, "No hay cifras para mostrar."))),
+        mockFetch(async () => json(reply(status, "No hay cifras para mostrar."))),
       );
       await act(async () =>
         root.render(<SessionChatPanel apiBaseUrl={API} sessionId="s-1" shopId="shop-1" />),
@@ -152,7 +176,7 @@ describe("SessionChatPanel", () => {
   it("un error muestra el mensaje", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
+      mockFetch(async () =>
         json(reply("error", "La pregunta tardó demasiado. Podés volver a intentar.", [])),
       ),
     );
@@ -164,7 +188,7 @@ describe("SessionChatPanel", () => {
   });
 
   it("se identifica como agente de IA y conserva los turnos de la conversación", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => json(reply("answered", "El tráfico es 17."))));
+    vi.stubGlobal("fetch", mockFetch(async () => json(reply("answered", "El tráfico es 17."))));
     await act(async () => root.render(<SessionChatPanel apiBaseUrl={API} sessionId="s-1" shopId="shop-1" />));
     expect(container.textContent).toContain("Agente FlowSight");
     expect(container.textContent).toContain("Consultas sobre este análisis");
@@ -179,7 +203,7 @@ describe("SessionChatPanel", () => {
   it("muestra contraste y eje cuando el alcance es comparison", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
+      mockFetch(async () =>
         json({
           ...reply("answered", "Primera tuvo más tráfico (17 vs 5).", [
             {
@@ -214,7 +238,7 @@ describe("SessionChatPanel", () => {
   it("descarta una respuesta pendiente al cambiar el local", async () => {
     let finish: (value: unknown) => void = () => undefined;
     const pending = new Promise((resolve) => { finish = resolve; });
-    vi.stubGlobal("fetch", vi.fn(() => pending.then(() => json(reply("answered", "Respuesta del local anterior")))));
+    vi.stubGlobal("fetch", mockFetch(() => pending.then(() => json(reply("answered", "Respuesta del local anterior")))));
     await act(async () => root.render(<SessionChatPanel apiBaseUrl={API} sessionId="s-1" shopId="shop-1" />));
     await ask(container);
     await act(async () => root.render(<SessionChatPanel apiBaseUrl={API} sessionId="s-1" shopId="shop-2" />));
