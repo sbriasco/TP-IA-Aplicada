@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as DatabaseSession
 
 from flowsight.core.config import Settings
-from flowsight.db.models import ProcessingJob, SceneVersionShop
+from flowsight.db.models import ChatThread, ProcessingJob, SceneVersionShop
 from flowsight.llm.client import build_client
 from flowsight.llm.settings import AzureLlmConfigurationError, load_azure_llm_settings
 from flowsight.services.chat_guard import draft_refusal, question_refusal
@@ -28,6 +28,11 @@ from flowsight.services.chat_metrics import (
     LiveChatUnavailable,
     ensure_chat_source,
     read_figures,
+)
+from flowsight.services.chat_threads import (
+    append_turn,
+    history_for_model,
+    resolve_thread,
 )
 from flowsight.services.comparison import (
     ComparisonAxis,
@@ -102,6 +107,7 @@ class ChatAnswer:
     figures: list[ChatFigure]
     model_calls: int
     comparison: ChatComparisonSummaryData | None = None
+    thread_id: uuid.UUID | None = None
 
 
 Drafter = Callable[..., Draft]
@@ -116,73 +122,119 @@ def ask(
     timeout_seconds: float,
     settings: Settings,
     drafter: Drafter | None = None,
+    thread_id: uuid.UUID | None = None,
 ) -> ChatAnswer:
     """Cite the open session/shop or a contrast. A stretch does not change figures."""
 
     if get_active_session(database_session, session_id) is None:
         raise SessionMissing
     ensure_chat_source(database_session, session_id)
+    thread = resolve_thread(
+        database_session,
+        session_id=session_id,
+        shop_id=shop_id,
+        thread_id=thread_id,
+        question=question,
+    )
+    history = history_for_model(database_session, thread.id)
     refusal = question_refusal(question)
     if refusal is not None:
         _log(0, "refused")
-        return _answer("refused", refusal, session_id=session_id, shop_id=shop_id)
+        return _persist(
+            database_session,
+            thread,
+            question,
+            _answer("refused", refusal, session_id=session_id, shop_id=shop_id),
+        )
     rows = list_processed_sessions(database_session, settings)
     catalog = _catalog(rows)
     if _wants_comparison(question):
-        return _ask_comparison(
+        return _persist(
             database_session,
-            open_id=session_id,
-            shop_id=shop_id,
-            question=question,
-            timeout_seconds=timeout_seconds,
-            rows=rows,
-            catalog=catalog,
-            drafter=drafter,
+            thread,
+            question,
+            _ask_comparison(
+                database_session,
+                open_id=session_id,
+                shop_id=shop_id,
+                question=question,
+                timeout_seconds=timeout_seconds,
+                rows=rows,
+                catalog=catalog,
+                drafter=drafter,
+                history=history,
+            ),
         )
     session_id, stop = _resolve_session(question, session_id, rows)
     if session_id is not None:
         ensure_chat_source(database_session, session_id)
     if stop == "empty":
         _log(0, "no_processed_sessions")
-        return _answer("unavailable", "No hay sesiones procesadas.")
+        return _persist(
+            database_session,
+            thread,
+            question,
+            _answer("unavailable", "No hay sesiones procesadas."),
+        )
     if stop == "ambiguous":
         _log(0, "ambiguous_session")
-        return _answer(
-            "needs_clarification",
-            "Hay más de una sesión con ese nombre. Decime cuál.",
+        return _persist(
+            database_session,
+            thread,
+            question,
+            _answer(
+                "needs_clarification",
+                "Hay más de una sesión con ese nombre. Decime cuál.",
+            ),
         )
     if shop_id is None:
         _log(0, "needs_shop")
-        return _answer(
-            "needs_clarification",
-            "Decime de qué local es la pregunta.",
-            session_id=session_id,
+        return _persist(
+            database_session,
+            thread,
+            question,
+            _answer(
+                "needs_clarification",
+                "Decime de qué local es la pregunta.",
+                session_id=session_id,
+            ),
         )
     try:
         figures = read_figures(database_session, session_id, shop_id)
     except AnalysisNotFinal:
         _log(0, "result_incomplete")
-        return _answer(
-            "unavailable",
-            "No hay un resultado final para esta sesión.",
-            session_id=session_id,
-            shop_id=shop_id,
+        return _persist(
+            database_session,
+            thread,
+            question,
+            _answer(
+                "unavailable",
+                "No hay un resultado final para esta sesión.",
+                session_id=session_id,
+                shop_id=shop_id,
+            ),
         )
     except ShopNotInSession:
         raise
     shop_name = _shop_name(database_session, session_id, shop_id)
-    return _draft_answer(
-        question=question,
-        figures=figures,
-        shop_name=shop_name,
-        session_id=session_id,
-        shop_id=shop_id,
-        scope="whole_session",
-        catalog=catalog,
-        rows=rows,
-        timeout_seconds=timeout_seconds,
-        drafter=drafter,
-        comparison=None,
+    return _persist(
+        database_session,
+        thread,
+        question,
+        _draft_answer(
+            question=question,
+            figures=figures,
+            shop_name=shop_name,
+            session_id=session_id,
+            shop_id=shop_id,
+            scope="whole_session",
+            catalog=catalog,
+            rows=rows,
+            timeout_seconds=timeout_seconds,
+            drafter=drafter,
+            comparison=None,
+            history=history,
+        ),
     )
 
 
@@ -196,6 +248,7 @@ def _ask_comparison(
     rows: list[ProcessedSessionRow],
     catalog: list[dict[str, object]],
     drafter: Drafter | None,
+    history: list[dict[str, str]] | None = None,
 ) -> ChatAnswer:
     if shop_id is None:
         _log(0, "needs_shop")
@@ -298,6 +351,7 @@ def _ask_comparison(
         drafter=drafter,
         comparison=summary,
         comparison_result=result,
+        history=history,
     )
 
 
@@ -315,6 +369,7 @@ def _draft_answer(
     drafter: Drafter | None,
     comparison: ChatComparisonSummaryData | None,
     comparison_result: ComparisonResult | None = None,
+    history: list[dict[str, str]] | None = None,
 ) -> ChatAnswer:
     writer = drafter or azure_draft
     try:
@@ -326,6 +381,7 @@ def _draft_answer(
             shop_name=shop_name or "",
             sessions=catalog,
             comparison=comparison_result,
+            history=history or [],
         )
     except AzureLlmConfigurationError:
         _log(0, "not_configured")
@@ -547,10 +603,11 @@ def suite_drafter(
     timeout_seconds: float,
     sessions: list[dict[str, object]] | None = None,
     comparison: ComparisonResult | None = None,
+    history: list[dict[str, str]] | None = None,
 ) -> Draft:
     """Cite traffic already loaded. Used by the e2e suite, never by Azure."""
 
-    del question, shop_name, timeout_seconds, sessions
+    del question, shop_name, timeout_seconds, sessions, history
     if comparison is not None:
         traffic = next(
             (figure for figure in comparison.figures if figure.code == "traffic_total"),
@@ -582,6 +639,7 @@ def azure_draft(
     timeout_seconds: float,
     sessions: list[dict[str, object]] | None = None,
     comparison: ComparisonResult | None = None,
+    history: list[dict[str, str]] | None = None,
 ) -> Draft:
     """Two rounds at most, using the Foundry client already validated in specs/003."""
 
@@ -608,6 +666,8 @@ def azure_draft(
                 "siempre entre esas comillas y conservando el nombre exacto. "
                 f"Consultá {tool_name} antes de responder sobre cifras. "
                 f"{scope_line} "
+                "El historial previo orienta el seguimiento; no uses cifras del historial "
+                "salvo que la herramienta de este turno las devuelva otra vez. "
                 "No calcules cifras, conversiones ni redondeos nuevos. "
                 "El tráfico es una estimación de visitas, no personas únicas; "
                 "la ocupación es visible y la permanencia es observable. "
@@ -628,8 +688,13 @@ def azure_draft(
                 "No copies literalmente la explicación técnica ni agregues ofertas de ayuda."
             ),
         },
-        {"role": "user", "content": question},
     ]
+    for turn in history or []:
+        role = turn.get("role")
+        content = turn.get("content")
+        if role in {"user", "assistant"} and isinstance(content, str) and content.strip():
+            messages.append({"role": role, "content": content})
+    messages.append({"role": "user", "content": question})
     tools = [
         {
             "type": "function",
@@ -803,6 +868,7 @@ def _answer(
     figures: list[ChatFigure] | None = None,
     model_calls: int = 0,
     comparison: ChatComparisonSummaryData | None = None,
+    thread_id: uuid.UUID | None = None,
 ) -> ChatAnswer:
     return ChatAnswer(
         status=status,
@@ -814,6 +880,67 @@ def _answer(
         figures=figures or [],
         model_calls=model_calls,
         comparison=comparison,
+        thread_id=thread_id,
+    )
+
+
+def _persist(
+    database_session: DatabaseSession,
+    thread: ChatThread,
+    question: str,
+    answer: ChatAnswer,
+) -> ChatAnswer:
+    payload = {
+        "status": answer.status,
+        "message": answer.message,
+        "session_id": None if answer.session_id is None else str(answer.session_id),
+        "shop_id": None if answer.shop_id is None else str(answer.shop_id),
+        "shop_name": answer.shop_name,
+        "scope": answer.scope,
+        "figures": [
+            {
+                "code": figure.code,
+                "label": figure.label,
+                "availability": figure.availability,
+                "value": None if figure.value is None else float(figure.value),
+                "unavailable_reason": figure.unavailable_reason,
+                "start_seconds": (
+                    None if figure.start_seconds is None else float(figure.start_seconds)
+                ),
+                "track_count": figure.track_count,
+                "bucket_index": figure.bucket_index,
+                "estimation": figure.estimation,
+            }
+            for figure in answer.figures
+        ],
+        "comparison": None
+        if answer.comparison is None
+        else {
+            "axis": answer.comparison.axis,
+            "column_labels": list(answer.comparison.column_labels),
+            "insight_codes": list(answer.comparison.insight_codes),
+        },
+        "model_calls": answer.model_calls,
+        "thread_id": str(thread.id),
+    }
+    append_turn(
+        database_session,
+        thread,
+        question=question,
+        answer_message=answer.message,
+        answer_payload=payload,
+    )
+    return ChatAnswer(
+        status=answer.status,
+        message=answer.message,
+        session_id=answer.session_id,
+        shop_id=answer.shop_id,
+        shop_name=answer.shop_name,
+        scope=answer.scope,
+        figures=answer.figures,
+        model_calls=answer.model_calls,
+        comparison=answer.comparison,
+        thread_id=thread.id,
     )
 
 

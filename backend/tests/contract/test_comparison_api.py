@@ -346,17 +346,21 @@ def test_existing_reads_unchanged(client: TestClient):
     assert metrics.status_code == 200
     codes = {row["code"] for row in metrics.json()["metrics"]}
     assert "traffic_total" in codes
-    assert set(_FIGURE_NAMES) <= {
+    # Closed chat catalog (specs/014); comparison/insight must not appear as figure codes.
+    assert set(_FIGURE_NAMES) == {
         "traffic_total",
         "entries",
         "exits",
-        "entry_rate",
-        "peak_hour",
         "store_pass",
+        "entry_rate",
+        "visible_occupancy",
         "dwell_mean_seconds",
         "dwell_median_seconds",
-        "visible_occupancy",
-    } or True
-    # Chat figures remain the five of specs/008 — ensure comparison codes are not injected there.
+        "peak",
+        "funnel_entries",
+        "group_count",
+        "visit_count",
+    }
     assert "comparison" not in _FIGURE_NAMES
     assert "insight" not in _FIGURE_NAMES
+

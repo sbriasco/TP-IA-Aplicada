@@ -22,6 +22,7 @@ from sqlalchemy import (
     LargeBinary,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
     Uuid,
     func,
@@ -1332,3 +1333,43 @@ class LivePositionSample(_LiveJobColumns, Base):
     capture_timestamp_seconds: Mapped[Decimal] = mapped_column(Numeric(12, 6))
     foot_x: Mapped[Decimal] = mapped_column(Numeric(9, 6))
     foot_y: Mapped[Decimal] = mapped_column(Numeric(9, 6))
+
+
+class ChatThread(Base):
+    __tablename__ = "chat_threads"
+    __table_args__ = (
+        Index("ix_chat_threads_session_updated", "session_id", "updated_at"),
+        ForeignKeyConstraint(
+            ["session_id"],
+            ["sessions.id"],
+            name="fk_chat_threads_session",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    shop_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    title: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+    __table_args__ = (
+        Index("ix_chat_messages_thread_created", "thread_id", "created_at"),
+        CheckConstraint("role IN ('user', 'assistant')", name="ck_chat_messages_role"),
+        ForeignKeyConstraint(
+            ["thread_id"],
+            ["chat_threads.id"],
+            name="fk_chat_messages_thread",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    thread_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    role: Mapped[str] = mapped_column(Text)
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    answer_payload: Mapped[str | None] = mapped_column(Text)
