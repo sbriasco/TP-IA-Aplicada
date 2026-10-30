@@ -195,21 +195,16 @@ export function SessionChatPanel({ apiBaseUrl, sessionId, shopId, shopName }: Se
           >
             <div className={styles.historyHeading}>
               <span>Historial</span>
-              <div className={styles.historyActions}>
-                <button type="button" onClick={startNewConversation}>
-                  Nueva
-                </button>
-                <button
-                  type="button"
-                  className={styles.iconButton}
-                  aria-label="Ocultar historial"
-                  aria-expanded={true}
-                  aria-controls="session-chat-history"
-                  onClick={() => setHistoryOpen(false)}
-                >
-                  <PanelLeftClose size={16} aria-hidden="true" />
-                </button>
-              </div>
+              <button
+                type="button"
+                className={styles.iconButton}
+                aria-label="Ocultar historial"
+                aria-expanded={true}
+                aria-controls="session-chat-history"
+                onClick={() => setHistoryOpen(false)}
+              >
+                <PanelLeftClose size={16} aria-hidden="true" />
+              </button>
             </div>
             {loadingThreads && <p className={styles.historyEmpty}>Cargando…</p>}
             {!loadingThreads && threads.length === 0 && (
