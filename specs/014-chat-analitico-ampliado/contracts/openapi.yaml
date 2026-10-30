@@ -1,0 +1,147 @@
+openapi: 3.1.0
+info:
+  title: FlowSight API — chat analítico ampliado (Feature #11)
+  version: 0.9.0
+  description: >
+    Amplía POST /chat: catálogo cerrado de cifras y contraste vía tools internas.
+    No agrega tablas. No usa RAG ni SQL libre. No modifica el cuerpo de
+    GET métricas/funnel/patrones/possible-purchases ni POST /comparisons
+    más allá de reutilizar su ensamblado desde el backend.
+    Errores de aplicación del chat vienen en el cuerpo ChatResponse (status),
+    no como 500 por fallo del modelo.
+servers:
+  - url: http://127.0.0.1:8000
+paths:
+  /chat:
+    post:
+      operationId: postChatExpanded
+      description: >
+        Una pregunta independiente. El backend resuelve sesión/zona, aplica
+        filtros, ejecuta hasta dos rondas de modelo con tools acotadas y
+        devuelve texto + cifras que respaldan. Webcam o análisis incompleto
+        → unavailable. Contraste insuficiente o ambiguo → needs_clarification
+        o mensaje sin columnas inventadas.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+      responses:
+        "200":
+          description: Resultado del chat (incluye refused/error/unavailable como status).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatResponse"
+        "400":
+          description: Pedido inválido (pregunta vacía, UUID mal formado, etc.).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Sesión no encontrada o retirada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  schemas:
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+    ChatRequest:
+      type: object
+      additionalProperties: false
+      required: [question, session_id]
+      properties:
+        question:
+          type: string
+          minLength: 1
+        session_id:
+          type: string
+          format: uuid
+        shop_id:
+          type: string
+          format: uuid
+          description: Zona/local elegido en resultados; omitir o null si no hay selección.
+    ChatFigure:
+      type: object
+      required: [code, label, availability]
+      properties:
+        code:
+          type: string
+        label:
+          type: string
+        availability:
+          type: string
+          enum: [available, unavailable]
+        value:
+          type: number
+          nullable: true
+        unavailable_reason:
+          type: string
+          nullable: true
+        estimation:
+          type: boolean
+    ChatComparisonSummary:
+      type: object
+      properties:
+        axis:
+          type: string
+          enum: [session, day, time_of_day, zone]
+        column_labels:
+          type: array
+          items:
+            type: string
+        insight_codes:
+          type: array
+          items:
+            type: string
+    ChatResponse:
+      type: object
+      required: [status, message]
+      properties:
+        status:
+          type: string
+          enum:
+            - answered
+            - refused
+            - needs_clarification
+            - unavailable
+            - error
+        message:
+          type: string
+        session_id:
+          type: string
+          format: uuid
+          nullable: true
+        shop_id:
+          type: string
+          format: uuid
+          nullable: true
+        shop_name:
+          type: string
+          nullable: true
+        scope:
+          type: string
+          enum: [whole_session, comparison]
+          nullable: true
+        figures:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatFigure"
+        comparison:
+          allOf:
+            - $ref: "#/components/schemas/ChatComparisonSummary"
+          nullable: true

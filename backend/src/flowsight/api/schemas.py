@@ -488,6 +488,15 @@ class ChatFigure(BaseModel):
     start_seconds: float | None = None
     track_count: int | None = None
     bucket_index: int | None = None
+    estimation: bool = False
+
+
+class ChatComparisonSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    axis: Literal["session", "day", "time_of_day", "zone"]
+    column_labels: list[str]
+    insight_codes: list[str]
 
 
 class ChatRequest(BaseModel):
@@ -506,8 +515,9 @@ class ChatResponse(BaseModel):
     session_id: uuid.UUID | None
     shop_id: uuid.UUID | None
     shop_name: str | None
-    scope: Literal["whole_session"] | None
+    scope: Literal["whole_session", "comparison"] | None
     figures: list[ChatFigure]
+    comparison: ChatComparisonSummary | None = None
     model_calls: int = Field(ge=0, le=2)
 
 

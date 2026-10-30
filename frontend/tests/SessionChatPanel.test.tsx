@@ -2,11 +2,12 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { ChatFigure } from "../src/api/chat";
 import { SessionChatPanel } from "../src/components/SessionChatPanel";
 
 const API = "http://api.test";
 
-const figures = [
+const figures: ChatFigure[] = [
   {
     code: "traffic_total",
     label: "visit_estimate",
@@ -43,7 +44,7 @@ function json(body: unknown) {
   return { ok: true, status: 200, text: async () => JSON.stringify(body) };
 }
 
-function reply(status: string, message: string, shownFigures = figures) {
+function reply(status: string, message: string, shownFigures: ChatFigure[] = figures) {
   return {
     status,
     message,
@@ -173,6 +174,41 @@ describe("SessionChatPanel", () => {
     expect(log?.textContent).toContain("¿cuál es el tráfico?");
     expect(log?.textContent).toContain("¿cuál fue el horario pico?");
     expect(log?.querySelectorAll('[aria-label="Respuesta"]')).toHaveLength(2);
+  });
+
+  it("muestra contraste y eje cuando el alcance es comparison", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        json({
+          ...reply("answered", "Primera tuvo más tráfico (17 vs 5).", [
+            {
+              code: "traffic_total",
+              label: "visit_estimate",
+              availability: "available",
+              value: 17,
+              unavailable_reason: null,
+              estimation: true,
+            },
+          ]),
+          scope: "comparison",
+          comparison: {
+            axis: "session",
+            column_labels: ["Primera", "Segunda"],
+            insight_codes: ["higher_traffic_total"],
+          },
+        }),
+      ),
+    );
+    await act(async () =>
+      root.render(<SessionChatPanel apiBaseUrl={API} sessionId="s-1" shopId="shop-1" />),
+    );
+    await ask(container, "compará el tráfico con la última");
+    const text = container.textContent ?? "";
+    expect(text).toContain("contraste");
+    expect(text).toContain("session");
+    expect(text).toContain("Primera vs Segunda");
+    expect(text).toContain("estimación");
   });
 
   it("descarta una respuesta pendiente al cambiar el local", async () => {

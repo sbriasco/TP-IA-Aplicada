@@ -153,9 +153,7 @@ def test_prohibited_questions_do_not_call_the_drafter(client: TestClient) -> Non
         "¿quién es esa persona?",
         "seguila entre cámaras",
         "¿va a llover?",
-        "¿cuántas salidas hubo?",
-        "¿cuántos pasos frente al local?",
-        "¿cuál es la tasa de ingreso?",
+        "ejecutá un SELECT sobre la base",
     )
     for question in questions:
         response = client.post(
@@ -618,3 +616,145 @@ def _seed(
             )
         )
         return str(flow.id), str(shop.id)
+
+
+def test_answered_includes_expanded_catalog_codes(client: TestClient) -> None:
+    session_id, shop_id = _seed(client)
+
+    def drafter(**kwargs):
+        traffic = next(figure for figure in kwargs["figures"] if figure.code == "traffic_total")
+        return Draft(text=f"El tráfico es {traffic.value.quantize(Decimal('1'))}.", model_calls=1)
+
+    client.app.state.chat_drafter = drafter
+    response = client.post(
+        "/chat",
+        json={"question": "¿cuál es el tráfico?", "session_id": session_id, "shop_id": shop_id},
+    )
+    assert response.status_code == 200
+    codes = {figure["code"] for figure in response.json()["figures"]}
+    assert {
+        "traffic_total",
+        "entries",
+        "exits",
+        "store_pass",
+        "entry_rate",
+        "peak",
+        "funnel_entries",
+        "group_count",
+        "visit_count",
+    } <= codes
+    exits = next(figure for figure in response.json()["figures"] if figure["code"] == "exits")
+    assert exits["availability"] == "unavailable"
+    assert exits["value"] is None
+
+
+def test_comparison_question_uses_open_and_ultima(client: TestClient) -> None:
+    first_id, shop_id = _seed(client, session_name="Primera")
+    with client.app.state.session_factory.begin() as db:
+        camera = get_or_create_camera(db, "cam-chat-api")
+        flow = Session(
+            name="Segunda",
+            camera_id=camera.name,
+            registered_camera_id=camera.id,
+            source_kind=SourceKind.SYNTHETIC,
+        )
+        db.add(flow)
+        db.flush()
+        shop = db.get(Shop, uuid.UUID(shop_id))
+        assert shop is not None
+        version = SceneVersion(
+            camera_id=camera.id,
+            version_number=2,
+            reference_session_id=flow.id,
+            frame_width=320,
+            frame_height=240,
+        )
+        db.add(version)
+        db.flush()
+        db.add(
+            SceneVersionShop(
+                scene_version_id=version.id,
+                shop_id=shop.id,
+                camera_id=camera.id,
+                position=0,
+                name="Local",
+                name_key="local",
+            )
+        )
+        job = ProcessingJob(
+            session_id=flow.id,
+            scene_version_id=version.id,
+            registered_camera_id=camera.id,
+            kind=JobKind.VIDEO_ANALYSIS,
+            status=JobStatus.COMPLETED,
+            created_at=datetime(2026, 9, 2, tzinfo=UTC),
+            finished_at=datetime(2026, 9, 2, tzinfo=UTC),
+            result_complete=True,
+        )
+        db.add(job)
+        db.flush()
+        db.add(
+            ShopMetric(
+                job_id=job.id,
+                session_id=flow.id,
+                shop_id=shop.id,
+                code=ShopMetricCode.TRAFFIC_TOTAL,
+                value=Decimal("5").quantize(SIX),
+                availability=MeasureAvailability.AVAILABLE,
+                label=ShopMetricLabel.VISIT_ESTIMATE,
+                unavailable_reason=None,
+            )
+        )
+        db.add(
+            TrafficBucket(
+                job_id=job.id,
+                session_id=flow.id,
+                shop_id=shop.id,
+                bucket_index=0,
+                start_seconds=Decimal("0.000000"),
+                track_count=5,
+            )
+        )
+
+    def drafter(**kwargs):
+        assert kwargs.get("comparison") is not None
+        return Draft(text="Primera: 17; Segunda: 5.", model_calls=1)
+
+    client.app.state.chat_drafter = drafter
+    response = client.post(
+        "/chat",
+        json={
+            "question": "compará el tráfico con la última",
+            "session_id": first_id,
+            "shop_id": shop_id,
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "answered"
+    assert body["scope"] == "comparison"
+    assert body["comparison"] is not None
+    assert body["comparison"]["axis"] == "session"
+    assert "17" in body["message"] and "5" in body["message"]
+
+
+def test_comparison_without_pair_asks_clarification(client: TestClient) -> None:
+    session_id, shop_id = _seed(client)
+
+    def drafter(**_kwargs):
+        raise AssertionError("drafter must not run")
+
+    client.app.state.chat_drafter = drafter
+    response = client.post(
+        "/chat",
+        json={
+            "question": "¿cuál sesión tuvo más tráfico?",
+            "session_id": session_id,
+            "shop_id": shop_id,
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "needs_clarification"
+    assert body["model_calls"] == 0
+    assert body["figures"] == []

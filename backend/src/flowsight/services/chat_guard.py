@@ -11,49 +11,92 @@ from flowsight.services.chat_metrics import ChatFigure
 
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
 _PURCHASE = ("compra", "compro", "venta", "vender", "vendio", "ticket")
+_PURCHASE_SOFT = (
+    "posible compra",
+    "posibles compra",
+    "compra estimad",
+    "compras estimad",
+    "bolsa",
+)
 _IDENTITY = ("quien es", "identificar", "identidad", "se llama", "su nombre", "cara", "rostro")
 _CAMERAS = ("entre camaras", "otra camara", "seguirla", "seguirlo")
-_OUT_OF_SCOPE = (
-    ("salida", "No puedo citar salidas."),
-    ("pasos", "No puedo citar pasos."),
-    ("paso frente", "No puedo citar pasos."),
-    ("tasa", "No puedo citar la tasa de ingreso."),
-    ("flujo", "No puedo citar el detalle del flujo."),
+_SQL_VIDEO = (
+    "sql",
+    "base de datos",
+    "select ",
+    "frame a frame",
+    "mirar el video",
+    "exportar la base",
 )
+_OUT_OF_SCOPE_HARD = (("flujo por minuto", "No puedo citar el detalle del flujo."),)
 _ALLOWED = (
     "trafico",
     "visita",
     "ingreso",
     "entrada",
+    "salida",
+    "paso",
+    "pasos",
+    "tasa",
     "ocupacion",
     "permanencia",
     "pico",
     "horario",
     "sesion",
     "local",
+    "zona",
     "ultima",
+    "funnel",
+    "grupo",
+    "grupos",
+    "patron",
+    "patrones",
+    "bolsa",
+    "posible",
+    "estimad",
+    "compar",
+    "mejor",
+    "peor",
+    "diferencia",
+    "versus",
+    " vs",
+    "dia",
+    "franja",
 )
-_ESTIMATE_AS_FACT = ("no es una estimacion", "visita real", "dato exacto", "no es estimada")
+_ESTIMATE_AS_FACT = (
+    "no es una estimacion",
+    "visita real",
+    "dato exacto",
+    "no es estimada",
+    "venta confirmada",
+    "compro seguro",
+    "es una venta",
+)
 
 
 def question_refusal(question: str) -> str | None:
     """Return a refusal with no digits, or None when the question may continue."""
 
     plain = _plain(question)
-    if any(word in plain for word in _PURCHASE):
+    if any(word in plain for word in _SQL_VIDEO):
+        return "No puedo ejecutar consultas libres ni analizar el video desde el chat."
+    # Soft purchase questions (estimations) are allowed; hard confirmations are not.
+    if any(word in plain for word in _PURCHASE) and not any(
+        soft in plain for soft in _PURCHASE_SOFT
+    ):
         return "No puedo confirmar una compra."
     if any(word in plain for word in _IDENTITY):
         return "No puedo identificar a una persona."
     if any(word in plain for word in _CAMERAS):
         return "No puedo seguir a una persona entre cámaras."
-    for word, message in _OUT_OF_SCOPE:
+    for word, message in _OUT_OF_SCOPE_HARD:
         if word in plain:
             return message
     if any(word in plain for word in _ALLOWED):
         return None
     return (
-        "Solo puedo hablar del tráfico, los ingresos, la ocupación, "
-        "la permanencia y el horario pico."
+        "Solo puedo hablar de las cifras comerciales guardadas de la sesión "
+        "o de un contraste entre sesiones elegibles."
     )
 
 
@@ -63,8 +106,11 @@ def draft_refusal(
     """Return a refusal when the draft must not be shown."""
 
     plain = _plain(text)
-    if any(word in plain for word in _PURCHASE):
-        return "No puedo mostrar esa respuesta."
+    if any(word in plain for word in _PURCHASE) and not any(
+        soft in plain for soft in _PURCHASE_SOFT
+    ):
+        if "estim" not in plain and "posible" not in plain:
+            return "No puedo mostrar esa respuesta."
     if any(word in plain for word in _IDENTITY):
         return "No puedo mostrar esa respuesta."
     if any(phrase in plain for phrase in _ESTIMATE_AS_FACT):
@@ -86,7 +132,9 @@ def _without_context_names(text: str, names: Sequence[str]) -> str:
         )
         text = re.sub(
             r"(?<!\w)(?:local|sesi[oó]n|para)\s+(?:" + quoted + r")(?!\w)",
-            "", text, flags=re.IGNORECASE,
+            "",
+            text,
+            flags=re.IGNORECASE,
         )
     return text
 
