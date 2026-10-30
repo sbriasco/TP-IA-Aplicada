@@ -8,9 +8,9 @@ No agrega tablas. Reutiliza sesiones, trabajos, métricas, funnel, patrones, pos
 |---|---|---|
 | `question` | string | pregunta del analista; no vacía |
 | `session_id` | UUID | sesión abierta del panel |
-| `shop_id` | UUID \| null / omitido | zona/local elegido; vacío si no hay selección |
+| `shop_id` | UUID \| null / omitido | identificador histórico de la zona de análisis elegida (compatibilidad de escenas); vacío si no hay selección |
 
-Sin historial de turnos en el body (US3 diferido).
+Sin historial de turnos en el body (US3 diferido). En UI el concepto se llama zona de análisis; en contratos y persistencia se conserva `shop_id`.
 
 ## ChatFigure (cifra que respalda)
 
@@ -21,7 +21,7 @@ Sin historial de turnos en el body (US3 diferido).
 | `availability` | `available` \| `unavailable` | |
 | `value` | number \| null | null iff unavailable |
 | `unavailable_reason` | string \| null | |
-| `estimation` | boolean | true si tráfico / grupos / posible compra / atención u otro rótulo de estimación |
+| `estimation` | boolean | true si tráfico / grupos / posible compra u otro rótulo de estimación del catálogo del chat |
 
 ## SessionAnalyticsBundle (payload tool de una sesión)
 

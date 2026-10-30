@@ -12,7 +12,12 @@ interface SessionChatPanelProps {
   shopName?: string;
 }
 interface Turn { id: number; question: string; answer: ChatResponse | null; }
-const SUGGESTIONS = ["¿Cuántos ingresos hubo?", "¿Cuál fue el horario pico?", "¿Cuál fue la permanencia media?"];
+const SUGGESTIONS = [
+  "¿Cuántos ingresos hubo?",
+  "¿Cuál fue la tasa de ingreso?",
+  "¿Hubo posible compra estimada?",
+  "Compará el tráfico con la última",
+];
 
 export function SessionChatPanel({ apiBaseUrl, sessionId, shopId, shopName }: SessionChatPanelProps) {
   const [question, setQuestion] = useState("");
@@ -66,8 +71,8 @@ export function SessionChatPanel({ apiBaseUrl, sessionId, shopId, shopName }: Se
       <div className={styles.conversation} role="log" aria-label="Conversación con el agente" ref={log} aria-busy={waiting}>
         {turns.length === 0 && <div className={styles.welcome}>
           <span className={styles.author}>Agente FlowSight</span>
-          <p>Hola, puedo ayudarte a interpretar el tráfico, los ingresos y la permanencia de este análisis.</p>
-          <p className={styles.hint}>Cada pregunta consulta la zona seleccionada. Incluí lo que querés comparar o medir.</p>
+          <p>Hola, puedo citar métricas guardadas de esta zona (tráfico, ingresos, salidas, tasa, funnel, patrones, posible compra) y contrastar con otras sesiones.</p>
+          <p className={styles.hint}>Cada pregunta usa la zona seleccionada y toda la sesión. Nombrá la otra sesión o pedí «la última» para un contraste.</p>
           <div className={styles.suggestions}>{SUGGESTIONS.map((text) => <button type="button" key={text} disabled={shopId === null} onClick={() => { setQuestion(text); input.current?.focus(); }}>{text}</button>)}</div>
         </div>}
         {turns.map((turn) => <div className={styles.turn} key={turn.id}>
