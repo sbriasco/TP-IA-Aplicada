@@ -247,4 +247,104 @@ describe("SessionChatPanel", () => {
     expect(container.textContent).not.toContain("¿cuál es el tráfico?");
     expect(container.querySelector('button[type="submit"]')?.hasAttribute("disabled")).toBe(true);
   });
+
+  it("oculta el historial por defecto y lo muestra al abrirlo", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/sessions/") && url.includes("/chat-threads")) {
+          return json([
+            {
+              id: "thread-1",
+              session_id: "s-1",
+              shop_id: "shop-1",
+              title: "Tráfico de la mañana",
+              created_at: "2026-10-30T00:00:00Z",
+              updated_at: "2026-10-30T00:00:00Z",
+            },
+          ]);
+        }
+        return json({
+          thread: {
+            id: "thread-1",
+            session_id: "s-1",
+            shop_id: "shop-1",
+            title: "Tráfico de la mañana",
+            created_at: "2026-10-30T00:00:00Z",
+            updated_at: "2026-10-30T00:00:00Z",
+          },
+          messages: [],
+        });
+      }),
+    );
+
+    await act(async () =>
+      root.render(<SessionChatPanel apiBaseUrl={API} sessionId="s-1" shopId="shop-1" />),
+    );
+    await act(async () => undefined);
+
+    expect(container.querySelector('[aria-label="Conversaciones de esta sesión"]')).toBeNull();
+    expect(container.textContent).not.toContain("Todavía no hay conversaciones.");
+    expect(container.textContent).not.toContain("Tráfico de la mañana");
+
+    const openHistory = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Historial"),
+    );
+    expect(openHistory?.getAttribute("aria-expanded")).toBe("false");
+
+    await act(async () => {
+      openHistory?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const history = container.querySelector('[aria-label="Conversaciones de esta sesión"]');
+    expect(history).not.toBeNull();
+    expect(history?.textContent).toContain("Tráfico de la mañana");
+    expect(
+      Array.from(container.querySelectorAll("button")).some(
+        (button) => button.getAttribute("aria-label") === "Ocultar historial",
+      ),
+    ).toBe(true);
+  });
+
+  it("muestra el vacío del historial al abrirlo sin hilos", async () => {
+    vi.stubGlobal("fetch", mockFetch(async () => json(reply("answered", "ok"))));
+    await act(async () =>
+      root.render(<SessionChatPanel apiBaseUrl={API} sessionId="s-1" shopId="shop-1" />),
+    );
+    await act(async () => undefined);
+
+    expect(container.querySelector('[aria-label="Conversaciones de esta sesión"]')).toBeNull();
+
+    const openHistory = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Historial"),
+    );
+    await act(async () => {
+      openHistory?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain("Todavía no hay conversaciones.");
+  });
+
+  it("permite nueva conversación con el historial cerrado", async () => {
+    vi.stubGlobal("fetch", mockFetch(async () => json(reply("answered", "El tráfico es 17."))));
+    await act(async () =>
+      root.render(<SessionChatPanel apiBaseUrl={API} sessionId="s-1" shopId="shop-1" />),
+    );
+    await ask(container);
+    expect(container.querySelector('[role="log"]')?.textContent).toContain("¿cuál es el tráfico?");
+
+    const newConversation = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Nueva conversación"),
+    );
+    expect(newConversation).toBeDefined();
+    expect(container.querySelector('[aria-label="Conversaciones de esta sesión"]')).toBeNull();
+
+    await act(async () => {
+      newConversation?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container.querySelector('[role="log"]')?.textContent).not.toContain("¿cuál es el tráfico?");
+    expect(container.textContent).toContain("Hola, puedo citar métricas");
+  });
 });

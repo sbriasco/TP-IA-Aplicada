@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Bot } from "lucide-react";
+import { Bot, PanelLeft, PanelLeftClose, SquarePen } from "lucide-react";
 import {
   getChatThread,
   listChatThreads,
@@ -37,6 +37,7 @@ export function SessionChatPanel({ apiBaseUrl, sessionId, shopId, shopName }: Se
   const [threads, setThreads] = useState<ChatThreadSummary[]>([]);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [loadingThreads, setLoadingThreads] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const generation = useRef(0);
   const nextId = useRef(0);
   const log = useRef<HTMLDivElement>(null);
@@ -186,79 +187,127 @@ export function SessionChatPanel({ apiBaseUrl, sessionId, shopId, shopName }: Se
         <span> · Toda la sesión</span>
       </div>
       <div className={styles.body}>
-        <nav className={styles.history} aria-label="Conversaciones de esta sesión">
-          <div className={styles.historyHeading}>
-            <span>Historial</span>
-            <button type="button" onClick={startNewConversation}>
-              Nueva
-            </button>
-          </div>
-          {loadingThreads && <p className={styles.historyEmpty}>Cargando…</p>}
-          {!loadingThreads && threads.length === 0 && (
-            <p className={styles.historyEmpty}>Todavía no hay conversaciones.</p>
-          )}
-          <ul>
-            {threads.map((row) => (
-              <li key={row.id}>
+        {historyOpen ? (
+          <nav
+            id="session-chat-history"
+            className={styles.history}
+            aria-label="Conversaciones de esta sesión"
+          >
+            <div className={styles.historyHeading}>
+              <span>Historial</span>
+              <div className={styles.historyActions}>
+                <button type="button" onClick={startNewConversation}>
+                  Nueva
+                </button>
                 <button
                   type="button"
-                  className={row.id === threadId ? styles.historyActive : undefined}
-                  disabled={
-                    waiting ||
-                    (shopId !== null && row.shop_id !== null && row.shop_id !== shopId)
-                  }
-                  onClick={() => {
-                    void openThread(row.id);
-                  }}
+                  className={styles.iconButton}
+                  aria-label="Ocultar historial"
+                  aria-expanded={true}
+                  aria-controls="session-chat-history"
+                  onClick={() => setHistoryOpen(false)}
                 >
-                  {row.title}
+                  <PanelLeftClose size={16} aria-hidden="true" />
                 </button>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <div className={styles.conversation} role="log" aria-label="Conversación con el agente" ref={log} aria-busy={waiting}>
-          {turns.length === 0 && (
-            <div className={styles.welcome}>
-              <span className={styles.author}>Agente FlowSight</span>
-              <p>
-                Hola, puedo citar métricas guardadas de esta zona y contrastar con otras sesiones.
-                Los seguimientos usan el hilo abierto.
-              </p>
-              <p className={styles.hint}>
-                Cada pregunta usa la zona seleccionada. Elegí un hilo del historial o empezá uno nuevo.
-              </p>
-              <div className={styles.suggestions}>
-                {SUGGESTIONS.map((text) => (
+              </div>
+            </div>
+            {loadingThreads && <p className={styles.historyEmpty}>Cargando…</p>}
+            {!loadingThreads && threads.length === 0 && (
+              <p className={styles.historyEmpty}>Todavía no hay conversaciones.</p>
+            )}
+            <ul>
+              {threads.map((row) => (
+                <li key={row.id}>
                   <button
                     type="button"
-                    key={text}
-                    disabled={shopId === null}
+                    className={row.id === threadId ? styles.historyActive : undefined}
+                    disabled={
+                      waiting ||
+                      (shopId !== null && row.shop_id !== null && row.shop_id !== shopId)
+                    }
                     onClick={() => {
-                      setQuestion(text);
-                      input.current?.focus();
+                      void openThread(row.id);
                     }}
                   >
-                    {text}
+                    {row.title}
                   </button>
-                ))}
+                </li>
+              ))}
+            </ul>
+          </nav>
+        ) : null}
+        <div className={styles.main}>
+          <div className={styles.toolbar}>
+            {!historyOpen ? (
+              <button
+                type="button"
+                className={styles.toolbarButton}
+                aria-expanded={false}
+                aria-controls="session-chat-history"
+                onClick={() => setHistoryOpen(true)}
+              >
+                <PanelLeft size={16} aria-hidden="true" />
+                Historial
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className={styles.toolbarButton}
+              onClick={startNewConversation}
+            >
+              <SquarePen size={16} aria-hidden="true" />
+              Nueva conversación
+            </button>
+          </div>
+          <div
+            className={styles.conversation}
+            role="log"
+            aria-label="Conversación con el agente"
+            ref={log}
+            aria-busy={waiting}
+          >
+            {turns.length === 0 && (
+              <div className={styles.welcome}>
+                <span className={styles.author}>Agente FlowSight</span>
+                <p>
+                  Hola, puedo citar métricas guardadas de esta zona y contrastar con otras sesiones.
+                  Los seguimientos usan el hilo abierto.
+                </p>
+                <p className={styles.hint}>
+                  Cada pregunta usa la zona seleccionada. Elegí un hilo del historial o empezá uno nuevo.
+                </p>
+                <div className={styles.suggestions}>
+                  {SUGGESTIONS.map((text) => (
+                    <button
+                      type="button"
+                      key={text}
+                      disabled={shopId === null}
+                      onClick={() => {
+                        setQuestion(text);
+                        input.current?.focus();
+                      }}
+                    >
+                      {text}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
-          {turns.map((turn) => (
-            <div className={styles.turn} key={turn.id}>
-              <div className={styles.question}>
-                <span className={styles.author}>Vos</span>
-                <p>{turn.question}</p>
+            )}
+            {turns.map((turn) => (
+              <div className={styles.turn} key={turn.id}>
+                <div className={styles.question}>
+                  <span className={styles.author}>Vos</span>
+                  <p>{turn.question}</p>
+                </div>
+                {turn.answer && <AgentAnswer answer={turn.answer} />}
               </div>
-              {turn.answer && <AgentAnswer answer={turn.answer} />}
-            </div>
-          ))}
-          {waiting && (
-            <p className={styles.waiting} role="status">
-              <span aria-hidden="true">•••</span> Consultando tus métricas…
-            </p>
-          )}
+            ))}
+            {waiting && (
+              <p className={styles.waiting} role="status">
+                <span aria-hidden="true">•••</span> Consultando tus métricas…
+              </p>
+            )}
+          </div>
         </div>
       </div>
       <form onSubmit={onSubmit} className={styles.composer}>

@@ -7,12 +7,20 @@
 .context { padding: 9px 16px; background: var(--fs-raised); border-bottom: 1px solid var(--fs-line); font-size: 12px; overflow-wrap: anywhere; }
 .context span { color: var(--fs-muted); }
 .body { display: flex; flex: 1; min-height: 0; }
+.main { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--fs-line); background: var(--fs-surface); }
+.toolbarButton { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; padding: 6px 10px; min-height: 32px; border-radius: 6px; border: 1px solid var(--fs-line); background: var(--fs-raised); color: var(--fs-ink); }
+.toolbarButton:hover { border-color: var(--fs-accent); }
+.toolbarButton svg { flex-shrink: 0; }
 .history { width: 148px; flex-shrink: 0; border-right: 1px solid var(--fs-line); padding: 10px 8px; overflow: auto; scrollbar-width: thin; }
 .historyHeading { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 8px; font-size: 11px; font-weight: 600; color: var(--fs-muted); }
+.historyActions { display: flex; align-items: center; gap: 4px; }
 .historyHeading button { font-size: 11px; padding: 4px 8px; min-height: 28px; border-radius: 6px; border: 1px solid var(--fs-line); background: var(--fs-raised); color: var(--fs-ink); }
+.iconButton { display: inline-grid; place-items: center; width: 28px; padding: 0 !important; color: var(--fs-muted) !important; }
+.iconButton:hover { color: var(--fs-ink) !important; }
 .history ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.history button { width: 100%; text-align: left; font-size: 11px; line-height: 1.35; padding: 8px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: var(--fs-muted); overflow-wrap: anywhere; }
-.history button:hover:not(:disabled) { color: var(--fs-ink); background: var(--fs-raised); }
+.history ul button { width: 100%; text-align: left; font-size: 11px; line-height: 1.35; padding: 8px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: var(--fs-muted); overflow-wrap: anywhere; }
+.history ul button:hover:not(:disabled) { color: var(--fs-ink); background: var(--fs-raised); }
 .historyActive { color: var(--fs-ink) !important; background: var(--fs-tint) !important; border-color: var(--fs-line) !important; }
 .historyEmpty { margin: 0; font-size: 11px; color: var(--fs-muted); }
 .conversation { flex: 1; min-height: 0; padding: 16px; overflow: auto; scrollbar-width: thin; }
