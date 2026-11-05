@@ -44,6 +44,7 @@ class SceneEventRecorder:
     def __init__(self, shops: Sequence[ShopGeometry], *, fps: float) -> None:
         self._shops = list(shops)
         self._fps = fps
+        self._last_seen: dict[int, int] = {}
         self._inside: dict[tuple[uuid.UUID, int, ZoneRoleName], bool] = {}
         self._front_enter: dict[tuple[uuid.UUID, int], int] = {}
         self._window_enter: dict[tuple[uuid.UUID, int], int] = {}
@@ -57,6 +58,21 @@ class SceneEventRecorder:
         feet: Sequence[tuple[int, tuple[float, float]]],
         crossings: Sequence[CrossingFact],
     ) -> None:
+        lost = {
+            track_id
+            for track_id, last in self._last_seen.items()
+            if Decimal(frame_index - last) > Decimal(str(self._fps))
+        }
+        if lost:
+            # Losing continuity discards open visits without inventing an exit or
+            # duration. Session-level pass/entry deduplication remains intact.
+            for states in (self._inside, self._front_enter, self._window_enter):
+                for key in list(states):
+                    if key[1] in lost:
+                        del states[key]
+            for track_id in lost:
+                del self._last_seen[track_id]
+        self._last_seen.update((track_id, frame_index) for track_id, _foot in feet)
         for shop in self._shops:
             zones = _zones(shop)
             for track_id, foot in feet:
@@ -124,9 +140,9 @@ class SceneEventRecorder:
         self._emit(shop_id, track_id, "showcase_stop", "window", frame_index, duration)
 
     def _duration(self, entered: int, frame_index: int) -> Decimal:
-        return (
-            (Decimal(frame_index) - Decimal(entered)) / Decimal(str(self._fps))
-        ).quantize(Decimal("0.000001"))
+        return ((Decimal(frame_index) - Decimal(entered)) / Decimal(str(self._fps))).quantize(
+            Decimal("0.000001")
+        )
 
     def _emit(
         self,

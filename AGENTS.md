@@ -28,7 +28,7 @@ Exposición, detención y atención estimada hacia vidrieras; funnel comercial y
 - Separar procesamiento de video, detección/tracking, reglas espaciales, eventos, métricas, API y presentación.
 - Utilizar YOLO con ByteTrack como tracker inicial; validar su desempeño con los videos seleccionados y comparar con BoT-SORT si los resultados lo justifican.
 - Respetar el stack acordado a continuación. Evaluar y documentar cambios antes de adoptarlos; no asumir versiones ni compatibilidad de GPU sin validarlas.
-- El LLM consulta herramientas/API de analytics. No calcula métricas desde el video ni ejecuta SQL arbitrario generado por el modelo.
+- El LLM consulta herramientas/API de analytics. No calcula métricas desde el video ni ejecuta SQL arbitrario generado por el modelo. Puede conversar y orientar sobre FlowSight sin zona elegida; las consultas analíticas releen datos del contexto resuelto en cada turno, con máximo dos llamadas al modelo. El historial persistido orienta repreguntas, no respalda cifras nuevas; las listas del contexto se limitan a cien elementos y su recorte debe informarse.
 - Mantener credenciales y llamadas al modelo en el backend.
 - La conexión local de webcam se inicializa automáticamente por API y worker; no exigir configurar identificador o token en `.env` para listar dispositivos. Los valores explícitos siguen siendo overrides opcionales. La credencial generada vive en `.tools/runtime/webcam.json`, fuera de Git.
 - Un `track_id` es temporal y pertenece a una sesión/cámara: no representa una identidad real ni garantiza una persona única.

@@ -19,26 +19,27 @@ class UltralyticsTracker:
     tracker_version = "ultralytics-bytetrack"
 
     def __init__(self, weights: Path | None) -> None:
-        if (
-            weights is None
-            or Path(weights).name != WEIGHT_FILENAME
-            or not Path(weights).is_file()
-        ):
+        if weights is None or Path(weights).name != WEIGHT_FILENAME or not Path(weights).is_file():
             raise ModelUnavailable("model_unavailable")
         self._weights = Path(weights)
         self._model: object | None = None
+        self._person_tracker: object | None = None
+        self._cached_frame: object | None = None
+        self._cached_frame_index: int | None = None
+        self._detections: list[Detection] = []
+        self._bags: list[BagBox] = []
         self._device = "cpu"
         self.execution_mode: str | None = None
         self.limitations: list[str] = []
 
     def reset_tracking(self) -> None:
         """Start a new continuity segment while keeping loaded model weights."""
-        predictor = getattr(self._model, "predictor", None)
-        trackers = getattr(predictor, "trackers", ())
-        for tracker in trackers:
-            tracker.reset()
-        if predictor is not None and hasattr(predictor, "vid_path"):
-            predictor.vid_path = [None] * len(trackers)
+        if self._person_tracker is not None:
+            self._person_tracker.reset()  # type: ignore[attr-defined]
+        self._cached_frame = None
+        self._cached_frame_index = None
+        self._detections = []
+        self._bags = []
 
     def detect(
         self,
@@ -47,31 +48,26 @@ class UltralyticsTracker:
         height: int,
         frame: object | None = None,
     ) -> list[Detection]:
-        del frame_index, width, height
+        del width, height
         if frame is None:
             return []
+        if self._cached_frame_index == frame_index and self._cached_frame is frame:
+            return list(self._detections)
         model = self._ensure_model()
         try:
-            results = self._track(model, frame)
+            detections, bags = self._track(model, frame)
         except Exception:
             if self._device != "cuda":
                 raise
             self._device = "cpu"
             self.execution_mode = "cpu"
             self._remember("El procesador gráfico falló al usarse; el análisis siguió en CPU.")
-            results = self._track(model, frame)
-        if not results:
-            return []
-        boxes = results[0].boxes
-        if boxes is None or boxes.xyxy is None or boxes.id is None:
-            return []
-        detections: list[Detection] = []
-        for index, xyxy in enumerate(boxes.xyxy.tolist()):
-            x1, y1, x2, y2 = xyxy
-            detections.append(
-                Detection(track_id=int(boxes.id[index].item()), bbox=(x1, y1, x2, y2))
-            )
-        return detections
+            detections, bags = self._track(model, frame)
+        self._cached_frame = frame
+        self._cached_frame_index = frame_index
+        self._detections = detections
+        self._bags = bags
+        return list(detections)
 
     def detect_bags(
         self,
@@ -80,29 +76,10 @@ class UltralyticsTracker:
         height: int,
         frame: object | None = None,
     ) -> list[BagBox]:
-        del frame_index, width, height
         if frame is None:
             return []
-        model = self._ensure_model()
-        try:
-            results = self._predict_bags(model, frame)
-        except Exception:
-            if self._device != "cuda":
-                raise
-            self._device = "cpu"
-            self.execution_mode = "cpu"
-            self._remember("El procesador gráfico falló al usarse; el análisis siguió en CPU.")
-            results = self._predict_bags(model, frame)
-        if not results:
-            return []
-        boxes = results[0].boxes
-        if boxes is None or boxes.xyxy is None:
-            return []
-        bags: list[BagBox] = []
-        for xyxy in boxes.xyxy.tolist():
-            x1, y1, x2, y2 = xyxy
-            bags.append(BagBox(bbox=(x1, y1, x2, y2)))
-        return bags
+        self.detect(frame_index, width, height, frame)
+        return list(self._bags)
 
     def _ensure_model(self) -> object:
         if self._model is not None:
@@ -129,30 +106,49 @@ class UltralyticsTracker:
         self._model = model
         return model
 
-    def _track(self, model: object, frame: object) -> object:
+    def _track(self, model: object, frame: object) -> tuple[list[Detection], list[BagBox]]:
+        # One inference, one person-only tracker update. YOLO.track() would retain
+        # callbacks on predict(), letting a bag pass age/remove person tracks.
         # Ultralytics 8.4 maps the old `half=True` flag to `quantize=16` and warns on every call.
         kwargs: dict[str, object] = {
             "source": frame,
-            "persist": True,
-            "tracker": "bytetrack.yaml",
             "device": self._device,
             "verbose": False,
-            "classes": [0],
+            "classes": [0, *BAG_CLASS_IDS],
+            "conf": 0.1,  # ByteTrack needs the same low-confidence input as YOLO.track().
+            "batch": 1,
         }
         if self._device == "cuda":
             kwargs["quantize"] = 16
-        return model.track(**kwargs)  # type: ignore[attr-defined]
+        results = model.predict(**kwargs)  # type: ignore[attr-defined]
+        if not results or results[0].boxes is None:
+            return [], []
+        result = results[0]
+        boxes = result.boxes
+        bags = [
+            BagBox(bbox=tuple(xyxy))
+            for xyxy, class_id, confidence in zip(
+                boxes.xyxy.tolist(), boxes.cls.tolist(), boxes.conf.tolist(), strict=True
+            )
+            if int(class_id) in BAG_CLASS_IDS and confidence >= 0.25
+        ]
+        people = boxes[boxes.cls == 0].cpu().numpy()
+        tracker = self._ensure_person_tracker()
+        tracks = tracker.update(people, result.orig_img)  # type: ignore[attr-defined]
+        detections = [
+            Detection(track_id=int(track[4]), bbox=tuple(float(value) for value in track[:4]))
+            for track in tracks
+        ]
+        return detections, bags
 
-    def _predict_bags(self, model: object, frame: object) -> object:
-        kwargs: dict[str, object] = {
-            "source": frame,
-            "device": self._device,
-            "verbose": False,
-            "classes": list(BAG_CLASS_IDS),
-        }
-        if self._device == "cuda":
-            kwargs["quantize"] = 16
-        return model.predict(**kwargs)  # type: ignore[attr-defined]
+    def _ensure_person_tracker(self) -> object:
+        if self._person_tracker is None:
+            from ultralytics.trackers.byte_tracker import BYTETracker
+            from ultralytics.utils import ROOT, YAML, IterableSimpleNamespace
+
+            config = IterableSimpleNamespace(**YAML.load(ROOT / "cfg/trackers/bytetrack.yaml"))
+            self._person_tracker = BYTETracker(config)
+        return self._person_tracker
 
     def _remember(self, limitation: str) -> None:
         if limitation not in self.limitations:

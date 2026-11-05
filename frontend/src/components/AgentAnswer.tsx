@@ -3,18 +3,30 @@ import { formatMetric, LABEL_TEXT, METRIC_NAME } from "../presentation/metrics";
 import styles from "./SessionChatPanel.module.css";
 
 const EXTRA_NAMES: Record<string, string> = {
+  funnel_observed_pass: "Funnel (pasos observados)",
+  funnel_exposure: "Funnel (exposición)",
+  funnel_stop: "Funnel (detención)",
+  funnel_attention: "Funnel (atención estimada)",
   funnel_entries: "Funnel (entradas vinculadas)",
+  funnel_observed_pass_to_exposure_rate: "Conversión de pasos a exposición",
+  funnel_exposure_to_stop_rate: "Conversión de exposición a detención",
+  funnel_stop_to_attention_rate: "Conversión de detención a atención",
+  funnel_attention_to_linked_entry_rate: "Conversión de atención a entrada vinculada",
   group_count: "Grupos estimados",
   visit_count: "Posible compra estimada",
   peak: "Horario pico",
 };
+
+function formatChatMetric(code: string, value: number): string {
+  return formatMetric(code.endsWith("_rate") ? "entry_rate" : code, value);
+}
 
 export function AgentAnswer({ answer }: { answer: ChatResponse }) {
   function figureText(figure: ChatFigure): string {
     if (figure.code.includes("__")) {
       return `${figure.code.split("__")[0]}: ${
         figure.availability === "available" && figure.value !== null
-          ? formatMetric(figure.code.split("__")[0], figure.value)
+          ? formatChatMetric(figure.code.split("__")[0], figure.value)
           : "no disponible"
       }`;
     }
@@ -29,7 +41,7 @@ export function AgentAnswer({ answer }: { answer: ChatResponse }) {
     }
     const value =
       figure.availability === "available" && figure.value !== null
-        ? formatMetric(figure.code, figure.value)
+        ? formatChatMetric(figure.code, figure.value)
         : "no disponible";
     const label = LABEL_TEXT[figure.label];
     const name = METRIC_NAME[figure.code] ?? EXTRA_NAMES[figure.code] ?? figure.code;
@@ -40,7 +52,9 @@ export function AgentAnswer({ answer }: { answer: ChatResponse }) {
   const scopeLabel =
     answer.scope === "comparison"
       ? `contraste${answer.comparison ? ` · eje ${answer.comparison.axis}` : ""}`
-      : "toda la sesión";
+      : answer.scope === "whole_session"
+        ? "toda la sesión"
+        : "Ayuda de FlowSight";
 
   return (
     <section className={styles.answer} aria-label="Respuesta">

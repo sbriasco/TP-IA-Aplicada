@@ -90,6 +90,7 @@ def test_answered_traffic_cites_the_stored_figure(client: TestClient, caplog) ->
 
 def test_invented_number_is_not_answered(client: TestClient) -> None:
     session_id, shop_id = _seed(client)
+
     def invent(**_kwargs):
         return Draft(text="el tráfico es 123456", model_calls=1)
 
@@ -104,16 +105,251 @@ def test_invented_number_is_not_answered(client: TestClient) -> None:
     assert "123456" not in body["message"]
 
 
+def test_greeting_without_a_selected_zone_is_persisted_as_conversation(client: TestClient) -> None:
+    session_id, _shop_id = _seed(client)
+    seen = []
+
+    def greet(**kwargs):
+        seen.append(kwargs)
+        return Draft("¡Hola! Puedo ayudarte a usar FlowSight y a interpretar este análisis.", 1)
+
+    client.app.state.chat_drafter = greet
+    response = client.post(
+        "/chat",
+        json={
+            "question": "Hola, ¿cómo estás?",
+            "session_id": session_id,
+            "shop_id": None,
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "answered"
+    assert "Hola" in body["message"]
+    assert body["scope"] is None
+    assert body["figures"] == []
+    assert body["thread_id"]
+    assert seen[0]["analysis_context"]["source_kind"] == "synthetic"
+    detail = client.get(f"/chat-threads/{body['thread_id']}").json()
+    assert [item["role"] for item in detail["messages"]] == ["user", "assistant"]
+
+
+def test_help_then_a_complex_question_share_the_thread(client: TestClient) -> None:
+    session_id, shop_id = _seed(client)
+    seen = []
+
+    def reply(**kwargs):
+        seen.append(kwargs)
+        if len(seen) == 1:
+            return Draft("Cargá un video y configurá las zonas de análisis antes de procesarlo.", 1)
+        return Draft(
+            "El tráfico es 17, una estimación de visitas; no representa personas únicas.", 1
+        )
+
+    client.app.state.chat_drafter = reply
+    first = client.post(
+        "/chat",
+        json={
+            "question": "¿Cómo configuro un análisis en FlowSight?",
+            "session_id": session_id,
+            "shop_id": shop_id,
+        },
+    ).json()
+    assert first["status"] == "answered"
+    second = client.post(
+        "/chat",
+        json={
+            "question": (
+                "Ahora explicame el tráfico registrado, su interpretación y sus limitaciones"
+            ),
+            "session_id": session_id,
+            "shop_id": shop_id,
+            "thread_id": first["thread_id"],
+        },
+    ).json()
+    assert second["status"] == "answered"
+    assert second["thread_id"] == first["thread_id"]
+    assert "17" in second["message"]
+    assert seen[1]["history"][0]["content"].startswith("¿Cómo configuro")
+
+
+def test_metric_definition_is_not_misrouted_to_session_comparison(client: TestClient) -> None:
+    session_id, shop_id = _seed(client)
+    client.app.state.chat_drafter = lambda **_kwargs: Draft(
+        "El tráfico estima visitas observadas; las entradas cuentan cruces confirmados del acceso.",
+        1,
+    )
+    response = client.post(
+        "/chat",
+        json={
+            "question": "¿Qué diferencia hay entre tráfico y entradas?",
+            "session_id": session_id,
+            "shop_id": shop_id,
+        },
+    )
+    assert response.json()["status"] == "answered"
+    assert response.json()["comparison"] is None
+
+
+def test_named_zone_can_be_queried_without_picker_selection(client: TestClient) -> None:
+    session_id, shop_id = _seed(client, shop_name="Acceso 1")
+    client.app.state.chat_drafter = _traffic_drafter
+    response = client.post(
+        "/chat",
+        json={
+            "question": "Dame el tráfico de la zona Acceso 1",
+            "session_id": session_id,
+            "shop_id": None,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "answered"
+    assert response.json()["shop_id"] == shop_id
+    assert "17" in response.json()["message"]
+
+
+def test_latest_session_and_follow_up_resolve_its_own_zone(client: TestClient) -> None:
+    early, early_shop = _processed(
+        client,
+        name="Mañana",
+        traffic=11,
+        version_number=1,
+        finished_at=datetime(2026, 9, 1, tzinfo=UTC),
+    )
+    late, late_shop = _processed(
+        client,
+        name="Tarde",
+        traffic=29,
+        version_number=2,
+        finished_at=datetime(2026, 9, 2, tzinfo=UTC),
+    )
+    client.app.state.chat_drafter = _traffic_drafter
+    first = client.post(
+        "/chat",
+        json={
+            "question": "tráfico de la última",
+            "session_id": early,
+            "shop_id": early_shop,
+        },
+    )
+    assert first.status_code == 200
+    body = first.json()
+    assert body["status"] == "answered"
+    assert body["session_id"] == late
+    assert body["shop_id"] == late_shop
+    follow_up = client.post(
+        "/chat",
+        json={
+            "question": "¿Y qué significa ese tráfico?",
+            "session_id": early,
+            "shop_id": early_shop,
+            "thread_id": body["thread_id"],
+        },
+    ).json()
+    assert follow_up["status"] == "answered"
+    assert follow_up["session_id"] == late
+    assert follow_up["shop_id"] == late_shop
+    assert "29" in follow_up["message"]
+
+
+def test_comparison_with_latest_chooses_another_session(client: TestClient) -> None:
+    _early, shop_id = _processed(
+        client,
+        name="Mañana",
+        traffic=11,
+        version_number=1,
+        finished_at=datetime(2026, 9, 1, tzinfo=UTC),
+    )
+    late, _shop = _processed(
+        client,
+        name="Tarde",
+        traffic=29,
+        version_number=2,
+        shop_id=shop_id,
+        finished_at=datetime(2026, 9, 2, tzinfo=UTC),
+    )
+    client.app.state.chat_drafter = lambda **_kwargs: Draft(
+        "La diferencia fue de 18 visitas estimadas.", 1
+    )
+    response = client.post(
+        "/chat",
+        json={
+            "question": "Compará esta sesión con la última",
+            "session_id": late,
+            "shop_id": shop_id,
+        },
+    ).json()
+    assert response["status"] == "answered"
+    assert response["scope"] == "comparison"
+
+
+def test_named_comparison_and_follow_up_keep_both_requested_sessions(client: TestClient) -> None:
+    opened, shop_id = _processed(
+        client,
+        name="Actual",
+        traffic=7,
+        version_number=1,
+        finished_at=datetime(2026, 9, 1, tzinfo=UTC),
+    )
+    _processed(
+        client,
+        name="Turno mañana",
+        traffic=11,
+        version_number=2,
+        shop_id=shop_id,
+        finished_at=datetime(2026, 9, 2, tzinfo=UTC),
+    )
+    _processed(
+        client,
+        name="Turno tarde",
+        traffic=29,
+        version_number=3,
+        shop_id=shop_id,
+        finished_at=datetime(2026, 9, 3, tzinfo=UTC),
+    )
+    seen = []
+
+    def answer(**kwargs):
+        seen.append(kwargs["comparison"])
+        return Draft("El contraste está disponible.", 1)
+
+    client.app.state.chat_drafter = answer
+    payload = {"session_id": opened, "shop_id": shop_id}
+    first = client.post(
+        "/chat",
+        json={
+            **payload,
+            "question": "Compará el tráfico entre Turno mañana y Turno tarde",
+        },
+    ).json()
+    assert first["status"] == "answered"
+    assert set(first["comparison"]["column_labels"]) == {"Turno mañana", "Turno tarde"}
+    second = client.post(
+        "/chat",
+        json={
+            **payload,
+            "question": "¿Y las salidas?",
+            "thread_id": first["thread_id"],
+        },
+    ).json()
+    assert second["status"] == "answered"
+    assert second["scope"] == "comparison"
+    assert second["comparison"] == first["comparison"]
+    assert seen[0] is not seen[1]
+
+
 @pytest.mark.parametrize(
     ("shop_name", "session_name", "draft", "expected_status"),
     [
         (
-            "Local 1", "Chat",
+            "Local 1",
+            "Chat",
             "En el local «Local 1» el tráfico observado es 17, una estimación de visitas.",
             "answered",
         ),
         (
-            "Local", "Turno 2026",
+            "Local",
+            "Turno 2026",
             "En la sesión «Turno 2026» el tráfico observado es 17, una estimación de visitas.",
             "answered",
         ),
@@ -483,9 +719,7 @@ def _processed(
         db.add(flow)
         db.flush()
         shop = (
-            db.get(Shop, uuid.UUID(shop_id))
-            if shop_id is not None
-            else Shop(camera_id=camera.id)
+            db.get(Shop, uuid.UUID(shop_id)) if shop_id is not None else Shop(camera_id=camera.id)
         )
         if shop_id is None:
             db.add(shop)

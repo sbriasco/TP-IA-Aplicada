@@ -346,7 +346,7 @@ def test_existing_reads_unchanged(client: TestClient):
     assert metrics.status_code == 200
     codes = {row["code"] for row in metrics.json()["metrics"]}
     assert "traffic_total" in codes
-    # Closed chat catalog (specs/014); comparison/insight must not appear as figure codes.
+    # Explicit video/live catalog; comparison/insight are not figure codes.
     assert set(_FIGURE_NAMES) == {
         "traffic_total",
         "entries",
@@ -356,8 +356,21 @@ def test_existing_reads_unchanged(client: TestClient):
         "visible_occupancy",
         "dwell_mean_seconds",
         "dwell_median_seconds",
+        "total_crossings",
+        "dwell_interior_mean_seconds",
+        "dwell_front_mean_seconds",
+        "coverage_percent",
+        "elapsed_capture_seconds",
         "peak",
         "funnel_entries",
+        "funnel_observed_pass",
+        "funnel_exposure",
+        "funnel_stop",
+        "funnel_attention",
+        "funnel_observed_pass_to_exposure_rate",
+        "funnel_exposure_to_stop_rate",
+        "funnel_stop_to_attention_rate",
+        "funnel_attention_to_linked_entry_rate",
         "group_count",
         "visit_count",
     }

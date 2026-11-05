@@ -1,5 +1,7 @@
 # Validación del agente FlowSight — 2026-10-01
 
+Este documento conserva la evidencia y el comportamiento de esa fecha. El chat actual incorpora conversación, herramientas ampliadas, hilos persistidos y reporte de webcam; su funcionamiento se describe en la [guía del chat analítico](chat-analitico.md). Las limitaciones históricas sobre preguntas independientes y ausencia de comparaciones ya no describen el alcance actual.
+
 Revisión y correcciones con asistencia de IA en `fix/chat-grounding`, después del commit local `2f046d6`. Sin dependencias, cambios de modelo ni migraciones nuevas.
 
 ## Problemas encontrados

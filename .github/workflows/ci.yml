@@ -124,3 +124,6 @@ jobs:
       - name: Verificar recorrido E2E
         working-directory: frontend
         run: npm run test:e2e
+      - name: Verificar recorridos UI con API simulada
+        working-directory: frontend
+        run: npm run test:e2e:ui
