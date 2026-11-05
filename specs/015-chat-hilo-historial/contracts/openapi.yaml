@@ -1,0 +1,47 @@
+openapi: 3.0.3
+info:
+  title: FlowSight chat threads
+  version: "015"
+paths:
+  /sessions/{session_id}/chat-threads:
+    get:
+      summary: List chat threads for an analysis session
+      parameters:
+        - in: path
+          name: session_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Thread summaries (not deleted)
+  /chat-threads/{thread_id}:
+    get:
+      summary: Thread with messages
+      parameters:
+        - in: path
+          name: thread_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Thread detail
+        "404":
+          description: Missing or deleted
+  /chat:
+    post:
+      summary: Ask with optional thread_id (creates thread if omitted)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question, session_id]
+              properties:
+                question: { type: string }
+                session_id: { type: string, format: uuid }
+                shop_id: { type: string, format: uuid, nullable: true }
+                thread_id: { type: string, format: uuid, nullable: true }
+      responses:
+        "200":
+          description: Answer including thread_id when persisted

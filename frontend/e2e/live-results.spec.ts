@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 import type { LiveResults } from "../src/types/live";
 
+test.beforeEach(async ({ page }) => {
+  await page.route("**/sessions/session-1/chat-threads", route => route.fulfill({ json: [] }));
+});
+
 const report: LiveResults = {
   job_id: "report-1", session_id: "session-1", source_kind: "webcam", status: "completed",
   capture_status: "ended", result_complete: true, coverage_complete: false, unknown_tail: false,

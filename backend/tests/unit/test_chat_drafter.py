@@ -15,9 +15,12 @@ def test_reasoning_model_can_answer_after_reading_the_metrics_tool() -> None:
         if len(calls) == 1:
             message = SimpleNamespace(
                 content=None,
-                tool_calls=[SimpleNamespace(id="call-1", function=SimpleNamespace(
-                    name="get_session_figures", arguments="{}"
-                ))],
+                tool_calls=[
+                    SimpleNamespace(
+                        id="call-1",
+                        function=SimpleNamespace(name="get_session_figures", arguments="{}"),
+                    )
+                ],
             )
             finish = "tool_calls"
         elif request["max_completion_tokens"] <= 256:
@@ -35,8 +38,9 @@ def test_reasoning_model_can_answer_after_reading_the_metrics_tool() -> None:
 
     client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     settings = SimpleNamespace(deployment="gpt-5-mini")
-    with patch("flowsight.services.chat.load_azure_llm_settings", return_value=settings), patch(
-        "flowsight.services.chat.build_client", return_value=(client, settings)
+    with (
+        patch("flowsight.services.chat.load_azure_llm_settings", return_value=settings),
+        patch("flowsight.services.chat.build_client", return_value=(client, settings)),
     ):
         result = azure_draft(
             question="¿Cuál es el tráfico?",
@@ -59,15 +63,26 @@ def test_answer_requires_the_scoped_tool_before_text_generation() -> None:
                 # A provider may answer without looking up the registered data.
                 message = SimpleNamespace(content="El tráfico es 123456.", tool_calls=[])
             else:
-                message = SimpleNamespace(content=None, tool_calls=[SimpleNamespace(
-                    id="metrics",
-                    function=SimpleNamespace(name="get_session_figures", arguments="{}"),
-                )])
+                message = SimpleNamespace(
+                    content=None,
+                    tool_calls=[
+                        SimpleNamespace(
+                            id="metrics",
+                            function=SimpleNamespace(name="get_session_figures", arguments="{}"),
+                        )
+                    ],
+                )
         elif request["tool_choice"] != "none":
             # Automatic choice can repeat the lookup instead of finishing.
-            message = SimpleNamespace(content=None, tool_calls=[SimpleNamespace(
-                id="repeat", function=SimpleNamespace(name="get_session_figures", arguments="{}")
-            )])
+            message = SimpleNamespace(
+                content=None,
+                tool_calls=[
+                    SimpleNamespace(
+                        id="repeat",
+                        function=SimpleNamespace(name="get_session_figures", arguments="{}"),
+                    )
+                ],
+            )
         else:
             value = json.loads(tool_results[-1]["content"])[0]["value"]
             message = SimpleNamespace(content=f"El tráfico observado es {value}.", tool_calls=[])
@@ -75,8 +90,9 @@ def test_answer_requires_the_scoped_tool_before_text_generation() -> None:
 
     client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     settings = SimpleNamespace(deployment="gpt-5-mini")
-    with patch("flowsight.services.chat.load_azure_llm_settings", return_value=settings), patch(
-        "flowsight.services.chat.build_client", return_value=(client, settings)
+    with (
+        patch("flowsight.services.chat.load_azure_llm_settings", return_value=settings),
+        patch("flowsight.services.chat.build_client", return_value=(client, settings)),
     ):
         result = azure_draft(
             question="¿Cuál fue el tráfico?",
@@ -97,8 +113,9 @@ def test_provider_cannot_skip_the_required_metrics_lookup() -> None:
 
     client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     settings = SimpleNamespace(deployment="gpt-5-mini")
-    with patch("flowsight.services.chat.load_azure_llm_settings", return_value=settings), patch(
-        "flowsight.services.chat.build_client", return_value=(client, settings)
+    with (
+        patch("flowsight.services.chat.load_azure_llm_settings", return_value=settings),
+        patch("flowsight.services.chat.build_client", return_value=(client, settings)),
     ):
         result = azure_draft(
             question="¿Cuál fue el tráfico?",
@@ -113,14 +130,102 @@ def test_provider_cannot_skip_the_required_metrics_lookup() -> None:
 
 
 def test_tool_values_keep_precision_and_distinguish_zero_from_unavailable() -> None:
-    payload = _public_figures([
-        ChatFigure("entries", "none", "available", Decimal("0.000000"), None),
-        ChatFigure("dwell_mean_seconds", "observable", "available", Decimal("3.125000"), None),
-        ChatFigure("dwell_median_seconds", "observable", "unavailable", None, "no_closed_dwells"),
-    ])
+    payload = _public_figures(
+        [
+            ChatFigure("entries", "none", "available", Decimal("0.000000"), None),
+            ChatFigure("dwell_mean_seconds", "observable", "available", Decimal("3.125000"), None),
+            ChatFigure(
+                "dwell_median_seconds", "observable", "unavailable", None, "no_closed_dwells"
+            ),
+        ]
+    )
     assert payload[0]["value"] == "0"
     assert payload[1]["value"] == "3.125"
     assert payload[1]["unit"] == "segundos"
     assert payload[2]["value"] is None
     assert payload[2]["availability"] == "no disponible"
     assert "permanencias completas" in payload[2]["unavailable_reason"]
+
+
+def test_greeting_can_answer_without_a_metrics_lookup() -> None:
+    calls = []
+
+    def create(**request):
+        calls.append(request)
+        assert "configur" in request["messages"][0]["content"].lower()
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="¡Hola! Puedo ayudarte a usar FlowSight.",
+                        tool_calls=[],
+                    )
+                )
+            ]
+        )
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    settings = SimpleNamespace(deployment="gpt-5-mini")
+    with (
+        patch("flowsight.services.chat.load_azure_llm_settings", return_value=settings),
+        patch("flowsight.services.chat.build_client", return_value=(client, settings)),
+    ):
+        result = azure_draft(
+            question="Hola",
+            figures=[],
+            shop_name="",
+            timeout_seconds=20,
+            analysis_context={"source_kind": "video_file", "facts": {}, "numeric_values": []},
+        )
+    assert result.text.startswith("¡Hola!")
+    assert result.model_calls == 1
+
+
+def test_rate_tool_marks_the_percentage_as_display_not_a_count() -> None:
+    payload = _public_figures(
+        [
+            ChatFigure("entry_rate", "none", "available", Decimal("0.125"), None),
+        ]
+    )
+    assert payload[0]["value"] == "0.125"
+    assert payload[0]["display_value"] == "12.5"
+    assert payload[0]["unit"] == "porcentaje"
+
+
+def test_off_topic_turn_cannot_read_measurements() -> None:
+    def create(**request):
+        assert any(tool["function"]["name"] == "redirect_to_flowsight" for tool in request["tools"])
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=None,
+                        tool_calls=[
+                            SimpleNamespace(
+                                id="outside",
+                                function=SimpleNamespace(
+                                    name="redirect_to_flowsight",
+                                    arguments="{}",
+                                ),
+                            )
+                        ],
+                    )
+                )
+            ]
+        )
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    settings = SimpleNamespace(deployment="gpt-5-mini")
+    with (
+        patch("flowsight.services.chat.load_azure_llm_settings", return_value=settings),
+        patch("flowsight.services.chat.build_client", return_value=(client, settings)),
+    ):
+        result = azure_draft(
+            question="¿Cómo cocino una pizza?",
+            shop_name="Acceso",
+            timeout_seconds=20,
+            figures=[ChatFigure("entries", "none", "available", Decimal("17"), None)],
+        )
+    assert "FlowSight" in result.text
+    assert "17" not in result.text
+    assert result.model_calls == 1

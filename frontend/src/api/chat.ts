@@ -27,6 +27,29 @@ export interface ChatResponse {
   figures: ChatFigure[];
   comparison?: ChatComparisonSummary | null;
   model_calls: number;
+  thread_id?: string | null;
+}
+
+export interface ChatThreadSummary {
+  id: string;
+  session_id: string;
+  shop_id: string | null;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatThreadMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+  answer: ChatResponse | null;
+}
+
+export interface ChatThreadDetail {
+  thread: ChatThreadSummary;
+  messages: ChatThreadMessage[];
 }
 
 export function postChat(
@@ -34,6 +57,7 @@ export function postChat(
   question: string,
   sessionId: string,
   shopId: string | null,
+  threadId?: string | null,
 ): Promise<ChatResponse> {
   return requestJson<ChatResponse>(`${apiBaseUrl}/chat`, {
     method: "POST",
@@ -42,6 +66,23 @@ export function postChat(
       question,
       session_id: sessionId,
       shop_id: shopId,
+      ...(threadId ? { thread_id: threadId } : {}),
     }),
   });
+}
+
+export function listChatThreads(
+  apiBaseUrl: string,
+  sessionId: string,
+): Promise<ChatThreadSummary[]> {
+  return requestJson<ChatThreadSummary[]>(
+    `${apiBaseUrl}/sessions/${sessionId}/chat-threads`,
+  );
+}
+
+export function getChatThread(
+  apiBaseUrl: string,
+  threadId: string,
+): Promise<ChatThreadDetail> {
+  return requestJson<ChatThreadDetail>(`${apiBaseUrl}/chat-threads/${threadId}`);
 }

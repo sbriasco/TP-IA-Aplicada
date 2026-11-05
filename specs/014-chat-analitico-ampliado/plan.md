@@ -8,7 +8,7 @@
 
 ## Summary
 
-El panel de resultados deja de citar solo cinco cifras: el backend expone un catálogo cerrado ampliado y una herramienta de contraste que reutiliza el ensamblado de comparaciones (013). El modelo en Azure solo elige herramientas y redacta; no mide, no hace SQL ni RAG. Preguntas independientes (US3 diferido). Grounding demostrable con redactor falso ([research.md](./research.md)).
+El panel de resultados deja de citar solo cinco cifras: el backend expone un catálogo cerrado ampliado y una herramienta de contraste que reutiliza el ensamblado de comparaciones (013). El backend resuelve qué tool aplicar (lectura de sesión o contraste) y arma los argumentos; el modelo en Azure interpreta la pregunta y redacta a partir de esos resultados; no mide, no hace SQL ni RAG. Preguntas independientes (US3 diferido). Grounding demostrable con redactor falso ([research.md](./research.md)).
 
 ## Technical Context
 

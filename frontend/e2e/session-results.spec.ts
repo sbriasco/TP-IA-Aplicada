@@ -71,8 +71,8 @@ test("el historial abre los indicadores de esa sesión y conserva el frame sin e
     expect(composer!.y + composer!.height).toBeLessThanOrEqual(viewport.height);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
   }
-  await page.getByRole("button", { name: "¿Cuál fue el horario pico?", exact: true }).click();
-  await expect(page.getByLabel("Pregunta al agente", { exact: true })).toHaveValue("¿Cuál fue el horario pico?");
+  await page.getByRole("button", { name: "¿Cuál fue la tasa de ingreso?", exact: true }).click();
+  await expect(page.getByLabel("Pregunta al agente", { exact: true })).toHaveValue("¿Cuál fue la tasa de ingreso?");
   await page.getByLabel("Cómo se mide Tráfico", { exact: true }).click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
   await page.screenshot({ path: "../.verification/frontend-redesign/resultados-compactos-1024.png" });

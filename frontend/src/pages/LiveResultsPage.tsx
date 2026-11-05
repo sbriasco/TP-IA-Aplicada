@@ -6,6 +6,7 @@ import { AppShell } from "../components/AppShell";
 import { CrossingChart } from "../components/CrossingChart";
 import { Link } from "../components/Link";
 import { PositionHeatmap } from "../components/PositionHeatmap";
+import { SessionChatPanel } from "../components/SessionChatPanel";
 import { Activity, ArrowLeft, ChevronDown, MapPinOff, VideoOff, AlertTriangle } from "lucide-react";
 import { EmptyState } from "../components/results/EmptyState";
 import { EventsTable } from "../components/results/EventsTable";
@@ -119,7 +120,8 @@ export function LiveResultsPage({ jobId, apiBaseUrl = API_BASE_URL }: { jobId: s
     </header>}>
     {error && <p role="alert">{error}</p>}
     {!result && !error && <p role="status">Cargando resultados…</p>}
-    {result && <>
+    {result && <div className={ended ? styles.resultsWorkspace : undefined}>
+      <div className={ended ? styles.analytics : undefined}>
       <section aria-label="Indicadores de captura"><dl className={styles.metrics}>
         <div className={styles.metric}><dt>Cruces totales</dt><dd aria-label="Total de cruces">{summary?.total_crossings ?? "--"}</dd>
           <dd className={styles.metricNote}>{access ? "Entradas: " + (summary?.entry_count ?? "--") + " · Salidas: " + (summary?.exit_count ?? "--") :
@@ -158,7 +160,9 @@ export function LiveResultsPage({ jobId, apiBaseUrl = API_BASE_URL }: { jobId: s
             <div><dt>Cruces sin confirmar descartados</dt><dd>{result.unconfirmed_crossings}</dd></div>
             <div><dt>Registro de eventos</dt><dd>{summary ? summary.total_crossings + " cruces individuales" : "Sin datos"}</dd></div>
             <div><dt>Muestra de posiciones</dt><dd>{samples ? samples.returned_count + " posiciones mostradas de " + samples.sample_count + " muestras guardadas; capacidad " + samples.capacity + "." : "No disponible"}</dd></div>
-            <div><dt>Asistente analítico</dt><dd>Asistente analítico no disponible para sesiones en tiempo real.</dd></div>
+            <div><dt>Asistente analítico</dt><dd>{ended
+              ? "Disponible sobre el reporte guardado (cruces, permanencia, cobertura y duración)."
+              : "Disponible cuando el reporte de webcam esté guardado; no durante la captura en vivo."}</dd></div>
           </dl>
           <p className={styles.note}>No representa personas únicas. El total suma cruces confirmados de la línea seleccionada. La permanencia usa visitas de duración positiva, incluidas las visitas en curso; los períodos sin seguimiento cortan la continuidad.</p>
           {result.unknown_tail && <p className={styles.warning}>Final desconocido: la duración y las cifras corresponden al último checkpoint válido.</p>}
@@ -182,6 +186,17 @@ export function LiveResultsPage({ jobId, apiBaseUrl = API_BASE_URL }: { jobId: s
           </section>}
         </div>
       </details>
-    </>}
+      </div>
+      {ended && (
+        <SessionChatPanel
+          key={result.session_id}
+          apiBaseUrl={apiBaseUrl}
+          sessionId={result.session_id}
+          shopId={result.selected_shop_id}
+          shopName={result.shops.find((shop) => shop.shop_id === result.selected_shop_id)?.shop_name}
+          sourceKind="webcam"
+        />
+      )}
+    </div>}
   </AppShell>;
 }

@@ -209,7 +209,7 @@ def test_completed_purchases_ignore_range_and_leave_closed_figures(
     assert patterns.json()["precision_uncommitted"] is True
     assert "possible_purchase" not in _FIGURE_NAMES
     assert "posible_compra" not in _FIGURE_NAMES
-    # Closed chat catalog (specs/014): visit_count cites possible-purchase; not the GET body shape.
+    # Explicit video/live catalog: visit_count cites estimates, not the GET body shape.
     assert set(_FIGURE_NAMES) == {
         "traffic_total",
         "entries",
@@ -219,8 +219,21 @@ def test_completed_purchases_ignore_range_and_leave_closed_figures(
         "visible_occupancy",
         "dwell_mean_seconds",
         "dwell_median_seconds",
+        "total_crossings",
+        "dwell_interior_mean_seconds",
+        "dwell_front_mean_seconds",
+        "coverage_percent",
+        "elapsed_capture_seconds",
         "peak",
         "funnel_entries",
+        "funnel_observed_pass",
+        "funnel_exposure",
+        "funnel_stop",
+        "funnel_attention",
+        "funnel_observed_pass_to_exposure_rate",
+        "funnel_exposure_to_stop_rate",
+        "funnel_stop_to_attention_rate",
+        "funnel_attention_to_linked_entry_rate",
         "group_count",
         "visit_count",
     }

@@ -34,8 +34,72 @@ def test_expanded_catalog_questions_are_allowed() -> None:
         "¿cuál es la tasa de ingreso?",
         "¿cuántas posibles compras estimadas?",
         "¿cuál sesión tuvo más tráfico que la última?",
+        "¿cuántos cruces hubo?",
+        "¿qué cobertura tuvo la captura?",
     ):
         assert question_refusal(question) is None
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Hola, ¿cómo estás?",
+        "Gracias por la ayuda",
+        "¿Cómo uso FlowSight?",
+        "¿Cómo configuro las áreas de interés?",
+        "¿Qué base de datos usa FlowSight?",
+        "¿Cómo identificar el horario pico?",
+        "¿Puede FlowSight confirmar compras o reconocer caras?",
+        "¿Qué diferencia hay entre tráfico y entradas?",
+        "¿Cuál fue el flujo por minuto?",
+    ],
+)
+def test_app_conversation_is_not_a_closed_keyword_catalog(question: str) -> None:
+    assert question_refusal(question) is None
+
+
+def test_explaining_product_limits_is_not_asserting_an_identity_or_sale() -> None:
+    assert (
+        draft_refusal(
+            "FlowSight no identifica personas ni confirma compras. "
+            "Una posible compra es una estimación.",
+            [],
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Una posible compra no es una venta confirmada.",
+        "Una bolsa no implica una venta confirmada.",
+        "FlowSight no confirma compras ni reconoce caras.",
+    ],
+)
+def test_negative_sale_explanations_are_allowed(text: str) -> None:
+    assert draft_refusal(text, []) is None
+
+
+def test_negation_does_not_hide_a_later_positive_claim() -> None:
+    assert draft_refusal("No confirma compras, pero es una venta confirmada.", []) is not None
+
+
+def test_backed_number_keeps_its_sign() -> None:
+    assert draft_refusal("El tráfico fue -17.", [_TRAFFIC]) is not None
+
+
+def test_percentage_display_is_backed_only_as_a_percentage() -> None:
+    rate = ChatFigure("entry_rate", "none", "available", Decimal("0.25"), None)
+    assert draft_refusal("La tasa de ingreso es 25 %.", [rate]) is None
+    assert draft_refusal("La tasa de ingreso es 25 por ciento.", [rate]) is None
+    assert draft_refusal("La tasa de ingreso es 26 %.", [rate]) is not None
+    assert draft_refusal("Hubo 25 ingresos.", [rate]) is not None
+
+
+def test_numbered_help_steps_do_not_become_unbacked_measurements() -> None:
+    assert draft_refusal("1. Cargá el video.\n2. Configurá las zonas de análisis.", []) is None
+    assert draft_refusal("1. Hubo 123456 ingresos.", []) is not None
 
 
 def test_sql_and_raw_video_requests_are_refused() -> None:

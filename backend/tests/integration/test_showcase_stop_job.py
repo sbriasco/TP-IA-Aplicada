@@ -207,7 +207,8 @@ def test_a_qualifying_stop_is_stored_for_that_session_only(session_factory, tmp_
         window_polygon=tuple(tuple(point) for point in WINDOW),
     )
     recorder = SceneEventRecorder([geometry], fps=1)
-    recorder.observe(0, [(1, (0.1, 0.3))], [])
+    for frame_index in range(3):
+        recorder.observe(frame_index, [(1, (0.1, 0.3))], [])
     recorder.observe(3, [(1, (0.9, 0.9))], [])
     with session_factory.begin() as database_session:
         persist_completed_scene(

@@ -505,6 +505,7 @@ class ChatRequest(BaseModel):
     question: str
     session_id: uuid.UUID
     shop_id: uuid.UUID | None = None
+    thread_id: uuid.UUID | None = None
 
 
 class ChatResponse(BaseModel):
@@ -519,6 +520,35 @@ class ChatResponse(BaseModel):
     figures: list[ChatFigure]
     comparison: ChatComparisonSummary | None = None
     model_calls: int = Field(ge=0, le=2)
+    thread_id: uuid.UUID | None = None
+
+
+class ChatThreadSummaryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    session_id: uuid.UUID
+    shop_id: uuid.UUID | None
+    title: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class ChatThreadMessageResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    role: Literal["user", "assistant"]
+    content: str
+    created_at: datetime
+    answer: ChatResponse | None = None
+
+
+class ChatThreadDetailResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    thread: ChatThreadSummaryResponse
+    messages: list[ChatThreadMessageResponse]
 
 
 class FunnelStageResponse(BaseModel):

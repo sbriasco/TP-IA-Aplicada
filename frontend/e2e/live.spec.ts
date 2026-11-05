@@ -95,7 +95,10 @@ test(`webcam fake: preparación, editor, vivo, ${recover ? "recuperación confir
     await expect(page.getByRole("heading", { name: "Mapa de posiciones" })).toBeVisible();
     await expect(page.locator("video")).toHaveCount(0);
     await page.getByText("Diagnóstico técnico de la captura (Interrupciones y descarte)", { exact: true }).click();
-    await expect(page.getByText("Asistente analítico no disponible para sesiones en tiempo real.")).toBeVisible();
+    const chat = page.getByRole("complementary", { name: "Chat de la sesión" });
+    await expect(chat.getByRole("heading", { name: "Agente FlowSight" })).toBeVisible();
+    await expect(chat.getByRole("textbox", { name: "Pregunta al agente" })).toBeEnabled();
+    await expect(chat.getByRole("button", { name: "¿Qué cobertura tuvo el análisis?", exact: true })).toBeEnabled();
     expect(errors).toEqual([]);
   } finally { stopWorker(worker); }
 });

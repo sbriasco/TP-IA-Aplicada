@@ -27,6 +27,7 @@ test("resultados: KPIs, área temporal, escena aplicada, tramo y agente", async 
     return route.fulfill({ json: all.filter(event => event.video_timestamp_seconds >= Number(fromSeconds) && event.video_timestamp_seconds <= Number(url.searchParams.get("to_seconds"))) });
   });
   await page.route("**/jobs/job-1/position-samples", route => route.fulfill({ json: { job_id: "job-1", availability: "unavailable", samples: [] } }));
+  await page.route("**/sessions/s-1/chat-threads", route => route.fulfill({ json: [] }));
   let chatBody: unknown;
   await page.route("**/chat", async route => { chatBody = route.request().postDataJSON(); await route.fulfill({ json: { status: "answered", message: "Se registraron 5 entradas en esta zona.", session_id: "s-1", shop_id: "zone-1", shop_name: "Local 1", scope: "whole_session", figures: [], model_calls: 1 } }); });
   await page.emulateMedia({ colorScheme: "dark" });
