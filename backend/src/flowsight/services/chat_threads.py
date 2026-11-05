@@ -5,13 +5,14 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DatabaseSession
 
 from flowsight.db.models import ChatMessage, ChatThread
+from flowsight.services.comparison import ComparisonAxis
 
 HISTORY_MESSAGE_LIMIT = 20
 _TITLE_MAX = 80
@@ -129,6 +130,48 @@ def history_for_model(
     return [{"role": row.role, "content": row.content} for row in clipped]
 
 
+@dataclass(frozen=True)
+class AnalysisContext:
+    session_id: uuid.UUID
+    shop_id: uuid.UUID | None
+    comparison_ids: tuple[uuid.UUID, ...] = ()
+    axis: ComparisonAxis | None = None
+
+
+def last_analysis_context(
+    database_session: DatabaseSession, thread_id: uuid.UUID
+) -> AnalysisContext | None:
+    """Recover scope, never measurements, from a previous answer in this thread."""
+    messages = database_session.scalars(
+        select(ChatMessage)
+        .where(ChatMessage.thread_id == thread_id, ChatMessage.role == "assistant")
+        .order_by(ChatMessage.created_at.desc())
+        .limit(HISTORY_MESSAGE_LIMIT)
+    )
+    for message in messages:
+        payload = _loads_payload(message.answer_payload)
+        if (
+            not payload
+            or payload.get("status") != "answered"
+            or payload.get("scope") not in {"whole_session", "comparison"}
+            or not payload.get("session_id")
+        ):
+            continue
+        try:
+            comparison = payload.get("comparison")
+            axis = comparison.get("axis") if isinstance(comparison, dict) else None
+            ids = comparison.get("session_ids") if isinstance(comparison, dict) else None
+            return AnalysisContext(
+                uuid.UUID(payload["session_id"]),
+                uuid.UUID(payload["shop_id"]) if payload.get("shop_id") else None,
+                tuple(uuid.UUID(sid) for sid in ids) if isinstance(ids, list) else (),
+                axis if axis in {"session", "day", "time_of_day", "zone"} else None,
+            )
+        except (ValueError, TypeError, AttributeError):
+            continue
+    return None
+
+
 def append_turn(
     database_session: DatabaseSession,
     thread: ChatThread,
@@ -154,11 +197,9 @@ def append_turn(
             thread_id=thread.id,
             role="assistant",
             content=answer_message,
-            created_at=now,
+            created_at=now + timedelta(microseconds=1),
             answer_payload=(
-                None
-                if answer_payload is None
-                else json.dumps(answer_payload, ensure_ascii=False)
+                None if answer_payload is None else json.dumps(answer_payload, ensure_ascii=False)
             ),
         )
     )

@@ -187,6 +187,82 @@ describe("SessionChatPanel", () => {
     expect(container.textContent).toContain("La pregunta tardó demasiado. Podés volver a intentar.");
   });
 
+  it("conserva la respuesta y permite reintentar un refresco de historial rechazado", async () => {
+    let historyRequests = 0;
+    let chatRequests = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: RequestInfo | URL) => {
+      if (String(url).endsWith("/chat-threads")) {
+        historyRequests += 1;
+        if (historyRequests === 2) throw new TypeError("Failed to fetch");
+        return json([{
+          id: "thread-1", session_id: "s-1", shop_id: "shop-1", title: "Tráfico guardado",
+          created_at: "2026-10-30T00:00:00Z", updated_at: "2026-10-30T00:00:00Z",
+        }]);
+      }
+      chatRequests += 1;
+      return json(reply("answered", "El tráfico es 17."));
+    }));
+    await act(async () => root.render(<SessionChatPanel apiBaseUrl={API} sessionId="s-1" shopId="shop-1" />));
+
+    await ask(container);
+    expect(container.querySelector('[role="log"]')?.textContent).toContain("El tráfico es 17.");
+    const status = container.querySelector('[role="status"]');
+    expect(status?.textContent).toContain("No se pudo actualizar el historial");
+    const retry = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Reintentar historial",
+    );
+    expect(retry).toBeDefined();
+    const openHistory = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Historial"),
+    );
+    await act(async () => openHistory?.click());
+    expect(container.querySelector('[aria-label="Conversaciones de esta sesión"]')?.textContent).toContain("Tráfico guardado");
+
+    await act(async () => retry?.click());
+    expect(historyRequests).toBe(3);
+    expect(chatRequests).toBe(1);
+    expect(container.querySelector('[role="status"]')).toBeNull();
+    expect(container.querySelector('[role="log"]')?.textContent).toContain("El tráfico es 17.");
+  });
+
+  it.each(["hola", "¿cómo uso FlowSight?"])("permite conversar sin zona: %s", async (question) => {
+    const fetch = mockFetch(async () => json({
+      ...reply("answered", "Puedo ayudarte con FlowSight.", []),
+      shop_id: null, shop_name: null, scope: null,
+    }));
+    vi.stubGlobal("fetch", fetch);
+    await act(async () => root.render(<SessionChatPanel apiBaseUrl={API} sessionId="s-1" shopId={null} />));
+
+    expect(container.querySelector("input")?.disabled).toBe(false);
+    expect(container.textContent).toContain("Sin zona seleccionada");
+    await ask(container, question);
+
+    const chatCall = fetch.mock.calls.find(([url]) => String(url) === `${API}/chat`);
+    expect(chatCall).toBeDefined();
+    expect(container.querySelector('[role="log"]')?.textContent).toContain("Puedo ayudarte con FlowSight.");
+  });
+
+  it("conserva el hilo al repreguntar sin zona y lo limpia al cambiar de sesión", async () => {
+    const requests: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (String(url).endsWith("/chat-threads")) return json([]);
+      requests.push(JSON.parse(String(init?.body)));
+      return json({ ...reply("answered", "Te ayudo con FlowSight.", []), shop_id: null, shop_name: null, scope: null });
+    }));
+    await act(async () => root.render(<SessionChatPanel apiBaseUrl={API} sessionId="s-1" shopId={null} />));
+    await ask(container, "hola");
+    await ask(container, "¿cómo configuro zonas?");
+    expect(requests).toEqual([
+      { question: "hola", session_id: "s-1", shop_id: null },
+      { question: "¿cómo configuro zonas?", session_id: "s-1", shop_id: null, thread_id: "thread-1" },
+    ]);
+
+    await act(async () => root.render(<SessionChatPanel apiBaseUrl={API} sessionId="s-2" shopId={null} />));
+    expect(container.querySelector('[role="log"]')?.textContent).not.toContain("Te ayudo con FlowSight.");
+    await ask(container, "hola otra vez");
+    expect(requests.at(-1)).toEqual({ question: "hola otra vez", session_id: "s-2", shop_id: null });
+  });
+
   it("se identifica como agente de IA y conserva los turnos de la conversación", async () => {
     vi.stubGlobal("fetch", mockFetch(async () => json(reply("answered", "El tráfico es 17."))));
     await act(async () => root.render(<SessionChatPanel apiBaseUrl={API} sessionId="s-1" shopId="shop-1" />));
@@ -346,5 +422,103 @@ describe("SessionChatPanel", () => {
 
     expect(container.querySelector('[role="log"]')?.textContent).not.toContain("¿cuál es el tráfico?");
     expect(container.textContent).toContain("Hola, puedo citar métricas");
+  });
+
+  it("separa la nueva conversación de un envío pendiente y recupera el hilo guardado en el historial", async () => {
+    let finishOld: () => void = () => undefined;
+    let finishEarlierRefresh: () => void = () => undefined;
+    const pendingOld = new Promise<void>((resolve) => { finishOld = resolve; });
+    const earlierRefresh = new Promise<void>((resolve) => { finishEarlierRefresh = resolve; });
+    let savedOld = false;
+    let historyRequests = 0;
+    const requests: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (String(url).endsWith("/chat-threads")) {
+        historyRequests++;
+        if (historyRequests === 2) {
+          await earlierRefresh;
+          return json([]);
+        }
+        return json(savedOld ? [{
+          id: "thread-1", session_id: "s-1", shop_id: "shop-1", title: "Conversación anterior",
+          created_at: "2026-10-30T00:00:00Z", updated_at: "2026-10-30T00:00:00Z",
+        }] : []);
+      }
+      const body = JSON.parse(String(init?.body)) as { question: string };
+      requests.push(body);
+      if (body.question === "Consulta anterior") {
+        await pendingOld;
+        savedOld = true;
+        return json(reply("answered", "Respuesta anterior"));
+      }
+      return json({ ...reply("answered", "Respuesta nueva"), thread_id: "thread-new" });
+    }));
+    await act(async () => root.render(<SessionChatPanel apiBaseUrl={API} sessionId="s-1" shopId="shop-1" />));
+    await ask(container, "Consulta anterior");
+
+    const log = container.querySelector('[role="log"]');
+    expect(log?.getAttribute("aria-busy")).toBe("true");
+    const newConversation = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Nueva conversación",
+    );
+    await act(async () => newConversation?.click());
+    expect(log?.getAttribute("aria-busy")).toBe("false");
+    await ask(container, "Consulta nueva");
+    expect(log?.textContent).toContain("Respuesta nueva");
+
+    await act(async () => finishOld());
+    await act(async () => finishEarlierRefresh());
+    expect(log?.textContent).not.toContain("Respuesta anterior");
+    const openHistory = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Historial",
+    );
+    await act(async () => openHistory?.click());
+    expect(container.querySelector('nav[aria-label="Conversaciones de esta sesión"]')?.textContent).toContain("Conversación anterior");
+
+    await ask(container, "Repregunta nueva");
+    expect(requests).toEqual([
+      { question: "Consulta anterior", session_id: "s-1", shop_id: "shop-1" },
+      { question: "Consulta nueva", session_id: "s-1", shop_id: "shop-1" },
+      { question: "Repregunta nueva", session_id: "s-1", shop_id: "shop-1", thread_id: "thread-new" },
+    ]);
+  });
+
+  it("ignora una reapertura pendiente sin interrumpir la espera de un envío nuevo", async () => {
+    let finishOpen: () => void = () => undefined;
+    let finishPost: () => void = () => undefined;
+    const pendingOpen = new Promise<void>((resolve) => { finishOpen = resolve; });
+    const pendingPost = new Promise<void>((resolve) => { finishPost = resolve; });
+    const thread = {
+      id: "thread-1", session_id: "s-1", shop_id: "shop-1", title: "Conversación guardada",
+      created_at: "2026-10-30T00:00:00Z", updated_at: "2026-10-30T00:00:00Z",
+    };
+    vi.stubGlobal("fetch", vi.fn(async (url: RequestInfo | URL) => {
+      if (String(url).endsWith("/chat-threads")) return json([thread]);
+      if (String(url).endsWith("/chat-threads/thread-1")) {
+        await pendingOpen;
+        return json({ thread, messages: [{ role: "user", content: "Pregunta guardada" }] });
+      }
+      await pendingPost;
+      return json({ ...reply("answered", "Respuesta nueva"), thread_id: "thread-new" });
+    }));
+    await act(async () => root.render(<SessionChatPanel apiBaseUrl={API} sessionId="s-1" shopId="shop-1" />));
+    const click = async (name: string) => {
+      const button = Array.from(container.querySelectorAll("button")).find((item) => item.textContent === name);
+      expect(button).toBeDefined();
+      await act(async () => button?.click());
+    };
+    await click("Historial");
+    await click("Conversación guardada");
+    await click("Nueva conversación");
+    await ask(container, "Consulta nueva");
+    await act(async () => finishOpen());
+
+    const log = container.querySelector('[role="log"]');
+    expect(log?.getAttribute("aria-busy")).toBe("true");
+    expect(log?.textContent).toContain("Consulta nueva");
+    expect(log?.textContent).not.toContain("Pregunta guardada");
+    await act(async () => finishPost());
+    expect(log?.getAttribute("aria-busy")).toBe("false");
+    expect(log?.textContent).toContain("Respuesta nueva");
   });
 });

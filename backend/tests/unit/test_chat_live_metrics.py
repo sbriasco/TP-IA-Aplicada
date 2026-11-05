@@ -115,6 +115,9 @@ def test_completed_webcam_figures_cite_live_crossings_dwell_and_coverage(live_jo
 
     with factory() as database:
         figures = {row.code: row for row in read_figures(database, session_id, shop_id)}
+        from flowsight.services.chat_context import read_analysis_context
+
+        context = read_analysis_context(database, session_id, shop_id)
     assert figures["total_crossings"].value == Decimal(3)
     assert figures["entries"].value == Decimal(2)
     assert figures["exits"].value == Decimal(1)
@@ -126,7 +129,14 @@ def test_completed_webcam_figures_cite_live_crossings_dwell_and_coverage(live_jo
     assert figures["peak"].start_seconds == Decimal(0)
     assert figures["peak"].track_count == 3
     assert figures["funnel_entries"].availability == "unavailable"
+    assert figures["funnel_exposure"].availability == "unavailable"
+    assert figures["funnel_stop_to_attention_rate"].availability == "unavailable"
     assert figures["visit_count"].availability == "unavailable"
+    assert context["source_kind"] == "webcam"
+    assert context["facts"]["live"]["summary"]["total_crossings"] == 3
+    assert context["facts"]["live"]["coverage_complete"] is False
+    assert context["facts"]["live"]["minutes"]["items"][1]["coverage_incomplete"] is True
+    assert "funnel" not in context["facts"]
 
 
 def test_running_webcam_chat_source_is_rejected(live_job):

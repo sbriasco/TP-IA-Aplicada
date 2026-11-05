@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import math
 import uuid
+from decimal import Decimal
+from itertools import combinations
 
 from flowsight.vision.visit_patterns import (
     Area,
     ConfiguredArea,
+    _cliques,
+    _edges,
     build_visit_patterns,
 )
 
@@ -333,3 +338,88 @@ def test_ending_the_video_keeps_a_group_only_after_two_seconds() -> None:
     ended = ready.groups[0].ended_video_timestamp_seconds
     started = ready.groups[0].started_video_timestamp_seconds
     assert ended > started
+
+
+def test_all_seven_separate_pairs_are_groups_without_a_twelve_person_limit() -> None:
+    tracks = {
+        2 * pair + offset + 1: (0.1 + offset * 0.02, 0.1 + pair * 0.12)
+        for pair in range(7)
+        for offset in range(2)
+    }
+    draft = build_visit_patterns(
+        _walk(range(22), tracks, step=0.01), [], fps=FPS, width=WIDTH, height=HEIGHT
+    )
+    assert [group.track_ids for group in draft.groups] == [
+        (1, 2),
+        (3, 4),
+        (5, 6),
+        (7, 8),
+        (9, 10),
+        (11, 12),
+        (13, 14),
+    ]
+
+
+def test_a_dense_group_keeps_all_thirty_two_candidates() -> None:
+    draft = build_visit_patterns(
+        _walk(range(22), {track: (0.1, 0.5) for track in range(1, 33)}, step=0.01),
+        [],
+        fps=FPS,
+        width=WIDTH,
+        height=HEIGHT,
+    )
+    assert draft.group_count == 1
+    assert draft.groups[0].track_ids == tuple(range(1, 33))
+
+
+def test_an_established_pair_keeps_priority_when_a_third_person_joins() -> None:
+    draft = build_visit_patterns(
+        [
+            *_walk(range(6), {1: (0.1, 0.5), 2: (0.12, 0.5)}, step=0.01),
+            *_walk(range(6, 28), {1: (0.1, 0.5), 2: (0.12, 0.5), 3: (0.14, 0.5)}, step=0.01),
+        ],
+        [],
+        fps=FPS,
+        width=WIDTH,
+        height=HEIGHT,
+    )
+    assert draft.group_count == 1
+    assert draft.groups[0].track_ids == (1, 2)
+    assert draft.groups[0].started_video_timestamp_seconds == Decimal("0.1")
+
+
+def _opposite_pairs_circle(size: int) -> dict[int, tuple[float, float]]:
+    radius = 80 / (1 + math.cos(math.pi / size))
+    return {
+        index + 1: (
+            400 + radius * math.cos(2 * math.pi * index / size),
+            500 + radius * math.sin(2 * math.pi * index / size),
+        )
+        for index in range(size)
+    }
+
+
+def test_adversarial_geometry_has_bounded_candidates_without_dropping_ids() -> None:
+    pixels = _opposite_pairs_circle(24)
+    edges = _edges(pixels, {track: (10, 0) for track in pixels}, proximity_px=80)
+    # All pairs satisfy the actual geometry except the twelve opposite pairs:
+    # enumerating every maximal clique would materialize 2**12 candidates.
+    assert len(edges) == 264
+    candidates = _cliques(list(pixels), edges)
+    assert len(candidates) <= 24
+    assert set().union(*candidates) == set(pixels)
+    assert all(
+        len(members) >= 2 and all(frozenset(pair) in edges for pair in combinations(members, 2))
+        for members in candidates
+    )
+
+
+def test_adversarial_geometry_groups_all_fifty_six_ids_including_the_residual() -> None:
+    tracks = {track: (x / 1000, y / 1000) for track, (x, y) in _opposite_pairs_circle(56).items()}
+    observations = _walk(range(22), tracks, step=0.01)
+    draft = build_visit_patterns(observations, [], fps=FPS, width=1000, height=1000)
+    assert [group.track_ids for group in draft.groups] == [
+        tuple(range(1, 29)),
+        tuple(range(29, 57)),
+    ]
+    assert build_visit_patterns(observations, [], fps=FPS, width=1000, height=1000) == draft

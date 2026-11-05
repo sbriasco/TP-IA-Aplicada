@@ -4,7 +4,7 @@
 
 Proyecto del Grupo 6, integrado por seis estudiantes de Ingeniería en Informática, para Inteligencia Artificial Aplicada.
 
-FlowSight busca transformar videos en información sobre circulación, entradas y salidas, permanencia y ocupación observable. El usuario podrá cargar un video, identificar locales y dibujar zonas y líneas sobre un frame; luego consultar los resultados en un dashboard y mediante un chat analítico.
+FlowSight transforma videos en información sobre circulación, entradas y salidas, permanencia y ocupación observable. El usuario carga un video y configura zonas de análisis con áreas y líneas sobre un frame; luego consulta los resultados en un dashboard y mediante un chat analítico. También puede analizar una webcam local, con comprobación de encuadre y reporte guardado al terminar.
 
 El procesamiento de video se ejecuta localmente. PostgreSQL puede ser local o compartido en Azure según configuración. El chat consulta un modelo disponible en Azure desde el backend.
 
@@ -22,7 +22,15 @@ El proyecto está en desarrollo. Los incrementos implementados y sus límites so
 | [Procesamiento y tracking](specs/005-procesamiento-tracking/spec.md) | El worker procesa `video_analysis` con YOLO y ByteTrack. Tests y CI usan el detector `fake` y no cargan el peso. El lock fija PyTorch de CPU (`torch==2.7.1+cpu`); el wheel de GPU no entra al repositorio. Entradas, salidas y ocupación visible se guardan en `analysis_measures`. La vista en vivo muestra el seguimiento y el avance. El peso del worker es `yolo11m.pt`. En la RTX, un video de 2360 frames se procesó en CUDA a 29,8 frames por segundo con `yolov8n` ([reference-run.json](specs/005-procesamiento-tracking/validation/reference-run.json)); esa cifra no se volvió a medir con `yolo11m`. |
 | [Eventos y métricas](specs/006-eventos-metricas/spec.md) | Eventos por track, ocho métricas por local, flujo temporal y horario pico persistidos. Los tiempos corresponden al video; los valores incompletos y las divisiones sin denominador se muestran como no disponibles. |
 | [Dashboard e historial](specs/007-dashboard-historial/spec.md) | Historial por sesión, resultados, filtro temporal de hechos/flujo y muestra de posiciones sobre el frame. El tramo no recalcula los indicadores de toda la sesión. |
-| [Chat analítico mínimo](specs/008-chat-analitico-minimo/spec.md) | Consulta acotada a cifras registradas del local y sesión, con credenciales en backend y pruebas de respuestas/rechazos. La suite usa un redactor de prueba; no valida disponibilidad ni cuotas reales de Azure. |
+| [Chat analítico mínimo](specs/008-chat-analitico-minimo/spec.md) | Base de consulta de cifras guardadas, con credenciales en backend y guardas de respuestas. Evolucionó con las especificaciones 014–016 y el cierre conversacional; ver la [guía actual del chat](docs/chat-analitico.md). |
+| [Webcam en vivo](specs/009-webcam-en-vivo/spec.md) | Captura local sin grabación, encuadre confirmado, cruces, cobertura, estadía observable por zona, pausa/retoma y reporte histórico. El ensayo físico de precisión, latencia y estabilidad sigue pendiente. |
+| [Exposición, atención y funnel](specs/010-exposicion-atencion-funnel/spec.md) | Etapas y conversiones entre visitas vinculadas de una sesión de archivo, con detención y atención estimada. Sin denominador o configuración necesaria, el dato queda no disponible. El contraste manual sigue pendiente. |
+| [Patrones de visita y grupos](specs/011-patrones-visita-grupos/spec.md) | Secuencias y transiciones entre áreas de una cámara y grupos estimados por proximidad, dirección y duración. Los resultados abarcan toda la sesión, sin inferir relaciones reales. |
+| [Posible compra](specs/012-posible-compra/spec.md) | Indicio experimental por bolsa visible vinculada de forma exclusiva a una visita temporal. No confirma una venta ni su zona de origen; la precisión requiere contraste manual. |
+| [Comparaciones e insights](specs/013-comparaciones-insights/spec.md) | Contraste de archivos completados por sesión, día UTC de cierre, horario del video o zona, con diferencias e insights calculados por el backend. Webcam queda fuera; los datos ausentes conservan su motivo. |
+| [Chat ampliado](specs/014-chat-analitico-ampliado/spec.md) | Interpreta métricas, funnel, flujo, patrones, grupos, posible compra y comparaciones ya guardados. Conversa y orienta sobre FlowSight sin exigir cifras para un saludo o ayuda; máximo dos llamadas al modelo por turno. |
+| [Hilos e historial del chat](specs/015-chat-hilo-historial/spec.md) | Conversaciones persistidas por sesión, con repreguntas y recuperación del contexto. Cada consulta analítica vuelve a leer sus datos; las cifras del historial no son evidencia nueva. |
+| [Chat de webcam](specs/016-chat-webcam/spec.md) | Consulta el reporte guardado de un trabajo live terminado: cruces, estadía, duración, minutos e interrupciones/cobertura. No calcula funnel, grupos ni posible compra para webcam. |
 
 El frontend incluye una interfaz común adaptable a escritorio y móvil, navegación entre las etapas de una sesión, tarjetas de indicadores y gráficos cargados por separado. Ver [auditoría del MVP](docs/auditoria-mvp-2026-10-01.md) y [validación del rediseño](docs/frontend-redesign-2026-10-01.md). La entrega pública requiere preparar acceso y operación del backend/worker; generar el build del frontend no completa ese despliegue.
 
@@ -44,13 +52,13 @@ La [evidencia de validación de la base](specs/002-entorno-arquitectura-base/val
 
 ### Versión final — 13 de noviembre de 2026
 
-Se evaluarán exposición, detención y atención estimada hacia vidrieras, funnel comercial, patrones de visita dentro de una cámara, grupos estimados, señales de posible compra, comparaciones e insights y un chat ampliado. Estas capacidades requieren validación con los videos disponibles.
+Están implementados exposición, detención y atención estimada hacia áreas de interés, funnel, patrones de visita dentro de una cámara, grupos estimados, señales de posible compra, comparaciones e insights y chat ampliado con historial. El cierre de código y las pruebas sintéticas no sustituyen los contrastes manuales con videos ni el ensayo físico de webcam, que continúan pendientes.
 
 ### Límites de interpretación
 
 Un `track_id` es temporal y pertenece a una sesión; no identifica a una persona real ni garantiza un conteo de personas únicas. Las métricas usan timestamps del video, y la ocupación corresponde a lo observable por la cámara. No se infiere permanencia dentro de un local cuando se pierde el seguimiento.
 
-Quedan fuera del alcance comprometido el reconocimiento facial, la identidad real, el seguimiento entre cámaras y la confirmación de compras. Atención y posible compra se presentarán como estimaciones. No se promete procesamiento en tiempo real antes de medirlo.
+Quedan fuera del alcance comprometido el reconocimiento facial, la identidad real, el seguimiento entre cámaras y la confirmación de compras. Atención, grupos y posible compra se presentan como estimaciones. No se promete procesamiento en tiempo real antes de medirlo. El chat no ejecuta SQL libre ni acciones sobre la aplicación; explica los datos disponibles y sus límites.
 
 ## Arquitectura y tecnologías
 
@@ -147,7 +155,7 @@ Para aplicar el esquema de forma repetible:
 
 Si una migración falla, no borres la base ni ejecutes `downgrade`. Corregí la causa, consultá `alembic current` y volvé a ejecutar `upgrade head`.
 
-Al actualizar el repositorio, ejecutá este script antes de reiniciar la API y el worker. Usa la base configurada en `.env` y aplica solo las migraciones que falten. `0007` permite retirar cámaras conservando sus análisis; `0008` permite retirar configuraciones sin modificar las escenas guardadas ni los resultados históricos.
+Al actualizar el repositorio, ejecutá este script antes de reiniciar la API y el worker. Usa la base configurada en `.env` y aplica solo las migraciones que falten. `0007` permite retirar cámaras conservando sus análisis; `0008` permite retirar configuraciones sin modificar las escenas guardadas ni los resultados históricos. Las revisiones siguientes agregan webcam y cobertura (`0009`–`0012`), el nombre persistido `display_name` de cada configuración (`0013`), funnel (`0014`), patrones/grupos (`0015`), posible compra (`0016`) e hilos de chat (head `0017_chat_threads_v2`). Los nombres se guardan con la versión inmutable: cambiar el nombre requiere guardar otra versión.
 
 La migración `0002` (specs/004) crea una cámara por cada `camera_id` de texto distinto usado en sesiones sintéticas previas. Si dos `camera_id` solo difieren en mayúsculas/espacios (por ejemplo `"Cam01"` y `"cam01 "`), no se fusionan: la cámara con la sesión más antigua conserva el nombre y las siguientes reciben un sufijo (`"cam01 (2)"`, `"cam01 (3)"`, …) para no violar la unicidad de nombre. Cada conflicto queda registrado con `logger.warning` en el log de Alembic, con los nombres involucrados. No se fusionan sesiones ni se modifica `sessions.camera_id`.
 
@@ -186,12 +194,15 @@ npm run lint
 npm test
 npm run build
 npm run test:e2e
+npm run test:e2e:ui
 Pop-Location
 ```
 
-`pytest` deja afuera la marca `gpu` y las migraciones históricas 0002–0005. Esas últimas se corren con `pytest -m historical_migration`. `npm run test:e2e` recorre la API, el worker y Chromium. Las pantallas que solo mockean la red están en `npm run test:e2e:ui` y no vuelven a correr dentro del e2e integrado.
+`pytest` deja afuera la marca `gpu` y las migraciones históricas 0002–0005. Esas últimas se corren con `pytest -m historical_migration`. `npm run test:e2e` recorre la API, el worker y Chromium. Las pantallas que solo mockean la red están en `npm run test:e2e:ui` y no vuelven a correr dentro del e2e integrado. GitHub Actions ejecuta ambas suites, además de Ruff, pytest, lint, Vitest y build; las pruebas del chat usan un redactor de suite o respuestas simuladas, sin acreditar disponibilidad ni calidad sostenida de Azure.
 
 `pytest` nunca corre contra la base compartida de Azure: las pruebas que hacen `downgrade`, `TRUNCATE` o insertan datos usan el helper `destructive_database_url()` (`backend/tests/conftest.py`), que toma `FLOWSIGHT_TEST_DATABASE_URL` si está definida y, si falta, acepta `FLOWSIGHT_DATABASE_URL` solo cuando el host es `localhost`, `127.0.0.1` o `::1`. Un host `*.postgres.database.azure.com` se rechaza siempre, aunque venga en `FLOWSIGHT_TEST_DATABASE_URL`. Si tu `FLOWSIGHT_DATABASE_URL` apunta a Azure, definí `FLOWSIGHT_TEST_DATABASE_URL` con un PostgreSQL local (en la terminal o en `.env`, ver `.env.example`) para poder correr esas pruebas.
+
+El diagnóstico de entorno en pytest pasa un `.env` temporal con la URL de pruebas y prepara su esquema actual. No consulta la configuración Azure del equipo; las verificaciones de configuración y herramientas faltantes también usan archivos temporales.
 
 `test:e2e` aplica las migraciones, inicia temporalmente API y frontend, crea una sesión y un
 trabajo sintético, ejecuta el worker y verifica en Chromium la conexión WebSocket, la preview

@@ -52,8 +52,11 @@ export function SessionChatPanel({
   const [threads, setThreads] = useState<ChatThreadSummary[]>([]);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [loadingThreads, setLoadingThreads] = useState(false);
+  const [historyError, setHistoryError] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const generation = useRef(0);
+  const conversationRequest = useRef(0);
+  const historyRequest = useRef(0);
   const nextId = useRef(0);
   const log = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -64,21 +67,12 @@ export function SessionChatPanel({
     setQuestion("");
     setWaiting(false);
     setThreadId(null);
+    setThreads([]);
     const scope = generation.current;
-    setLoadingThreads(true);
-    void listChatThreads(apiBaseUrl, sessionId)
-      .then((rows) => {
-        if (generation.current !== scope) return;
-        setThreads(rows);
-      })
-      .catch(() => {
-        if (generation.current === scope) setThreads([]);
-      })
-      .finally(() => {
-        if (generation.current === scope) setLoadingThreads(false);
-      });
+    void refreshThreads(scope);
     return () => {
       generation.current++;
+      conversationRequest.current++;
     };
   }, [apiBaseUrl, sessionId, shopId]);
 
@@ -86,12 +80,28 @@ export function SessionChatPanel({
     if (log.current) log.current.scrollTop = log.current.scrollHeight;
   }, [turns, waiting]);
 
+  async function refreshThreads(scope: number) {
+    if (generation.current !== scope) return;
+    const request = ++historyRequest.current;
+    const isCurrent = () => generation.current === scope && historyRequest.current === request;
+    setLoadingThreads(true);
+    setHistoryError(false);
+    try {
+      const rows = await listChatThreads(apiBaseUrl, sessionId);
+      if (isCurrent()) setThreads(rows);
+    } catch {
+      if (isCurrent()) setHistoryError(true);
+    } finally {
+      if (isCurrent()) setLoadingThreads(false);
+    }
+  }
+
   async function openThread(id: string) {
-    const scope = generation.current;
+    const request = ++conversationRequest.current;
     setWaiting(true);
     try {
       const detail = await getChatThread(apiBaseUrl, id);
-      if (generation.current !== scope) return;
+      if (conversationRequest.current !== request) return;
       if (shopId !== null && detail.thread.shop_id !== null && detail.thread.shop_id !== shopId) {
         setThreadId(null);
         setTurns([]);
@@ -124,16 +134,18 @@ export function SessionChatPanel({
       setThreadId(id);
       setTurns(restored);
     } catch {
-      if (generation.current === scope) {
+      if (conversationRequest.current === request) {
         setThreadId(null);
         setTurns([]);
       }
     } finally {
-      if (generation.current === scope) setWaiting(false);
+      if (conversationRequest.current === request) setWaiting(false);
     }
   }
 
   function startNewConversation() {
+    conversationRequest.current++;
+    setWaiting(false);
     setThreadId(null);
     setTurns([]);
     setQuestion("");
@@ -143,8 +155,9 @@ export function SessionChatPanel({
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = String(new FormData(event.currentTarget).get("question") ?? "").trim();
-    if (!text || waiting || shopId === null) return;
+    if (!text || waiting) return;
     const scope = generation.current;
+    const request = ++conversationRequest.current;
     const id = ++nextId.current;
     const activeThread = threadId;
     setTurns((current) => [...current.slice(-19), { id, question: text, answer: null }]);
@@ -152,17 +165,16 @@ export function SessionChatPanel({
     setWaiting(true);
     void postChat(apiBaseUrl, text, sessionId, shopId, activeThread)
       .then((answer) => {
-        if (generation.current !== scope) return;
+        // A superseded send may still have been saved in this session's history.
+        void refreshThreads(scope);
+        if (conversationRequest.current !== request) return;
         if (answer.thread_id) setThreadId(answer.thread_id);
         setTurns((current) =>
           current.map((turn) => (turn.id === id ? { ...turn, answer } : turn)),
         );
-        void listChatThreads(apiBaseUrl, sessionId).then((rows) => {
-          if (generation.current === scope) setThreads(rows);
-        });
       })
       .catch((reason: unknown) => {
-        if (generation.current !== scope) return;
+        if (conversationRequest.current !== request) return;
         const answer: ChatResponse = {
           status: "error",
           message:
@@ -182,7 +194,7 @@ export function SessionChatPanel({
         );
       })
       .finally(() => {
-        if (generation.current === scope) setWaiting(false);
+        if (conversationRequest.current === request) setWaiting(false);
       });
   }
 
@@ -198,7 +210,7 @@ export function SessionChatPanel({
         </div>
       </header>
       <div className={styles.context}>
-        {shopName ?? "Zona seleccionada"}
+        {shopId === null ? "Sin zona seleccionada" : shopName ?? "Zona seleccionada"}
         <span> · Toda la sesión</span>
       </div>
       <div className={styles.body}>
@@ -222,7 +234,7 @@ export function SessionChatPanel({
               </button>
             </div>
             {loadingThreads && <p className={styles.historyEmpty}>Cargando…</p>}
-            {!loadingThreads && threads.length === 0 && (
+            {!loadingThreads && !historyError && threads.length === 0 && (
               <p className={styles.historyEmpty}>Todavía no hay conversaciones.</p>
             )}
             <ul>
@@ -269,6 +281,19 @@ export function SessionChatPanel({
               Nueva conversación
             </button>
           </div>
+          {historyError && (
+            <div className={styles.historyNotice}>
+              <p role="status">No se pudo actualizar el historial. Podés seguir conversando.</p>
+              <button
+                type="button"
+                className={styles.toolbarButton}
+                disabled={loadingThreads}
+                onClick={() => { void refreshThreads(generation.current); }}
+              >
+                Reintentar historial
+              </button>
+            </div>
+          )}
           <div
             className={styles.conversation}
             role="log"
@@ -285,14 +310,15 @@ export function SessionChatPanel({
                     : "Hola, puedo citar métricas guardadas de esta zona y contrastar con otras sesiones. Los seguimientos usan el hilo abierto."}
                 </p>
                 <p className={styles.hint}>
-                  Cada pregunta usa la zona seleccionada. Elegí un hilo del historial o empezá uno nuevo.
+                  {shopId === null
+                    ? "Podés saludar o pedir ayuda. Para consultar métricas, indicá una zona de análisis."
+                    : "Cada pregunta usa la zona seleccionada. También podés pedir ayuda sobre FlowSight."}
                 </p>
                 <div className={styles.suggestions}>
                   {suggestions.map((text) => (
                     <button
                       type="button"
                       key={text}
-                      disabled={shopId === null}
                       onClick={() => {
                         setQuestion(text);
                         input.current?.focus();
@@ -315,7 +341,7 @@ export function SessionChatPanel({
             ))}
             {waiting && (
               <p className={styles.waiting} role="status">
-                <span aria-hidden="true">•••</span> Consultando tus métricas…
+                <span aria-hidden="true">•••</span> Consultando al agente…
               </p>
             )}
           </div>
@@ -331,10 +357,9 @@ export function SessionChatPanel({
             placeholder="Preguntá sobre este análisis…"
             value={question}
             maxLength={2000}
-            disabled={shopId === null}
             onChange={(event) => setQuestion(event.target.value)}
           />
-          <button type="submit" disabled={waiting || shopId === null || !question.trim()}>
+          <button type="submit" disabled={waiting || !question.trim()}>
             Enviar
           </button>
         </div>

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
+
+import pytest
 
 from flowsight.vision.detector import Detection
 from flowsight.vision.events import SceneEventRecorder
@@ -82,6 +85,9 @@ def test_leaving_the_front_zone_closes_a_dwell_in_video_seconds() -> None:
     shop = _shop()
     recorder = SceneEventRecorder([shop], fps=2)
     recorder.observe(0, [(1, (0.5, 0.8))], [])
+    recorder.observe(1, [(1, (0.5, 0.8))], [])
+    recorder.observe(2, [(1, (0.5, 0.8))], [])
+    recorder.observe(3, [(1, (0.5, 0.8))], [])
     recorder.observe(4, [(1, (0.5, 0.5))], [])
     dwells = [event for event in recorder.finish() if event.kind == "dwell"]
     assert len(dwells) == 1
@@ -97,7 +103,7 @@ def test_a_lost_track_inside_the_front_zone_has_no_dwell_or_store_exit() -> None
 
 
 def test_interior_only_can_enter_and_exit_without_a_dwell() -> None:
-    kinds = _run(_shop(), [(0, [(1, (0.5, 0.2))]), (2, [(1, (0.5, 0.5))])])
+    kinds = _run(_shop(), [(0, [(1, (0.5, 0.2))]), (1, [(1, (0.5, 0.2))]), (2, [(1, (0.5, 0.5))])])
     assert "zone_enter:interior:1" in kinds
     assert "zone_exit:interior:1" in kinds
     assert not any(kind.startswith("dwell:") for kind in kinds)
@@ -107,3 +113,40 @@ def test_a_front_foot_without_store_enter_is_a_pass() -> None:
     kinds = _run(_shop(), [(0, [(1, (0.5, 0.8))])])
     assert "store_pass:None:1" in kinds
     assert "store_enter:None:1" not in kinds
+
+
+@pytest.mark.parametrize("gap_frames", [25, 26])
+@pytest.mark.parametrize("missing_frames_observed", [False, True])
+def test_a_gap_over_one_second_does_not_close_a_dwell_or_showcase_stop(
+    gap_frames: int, missing_frames_observed: bool
+) -> None:
+    recorder = SceneEventRecorder([_shop(front_polygon=WINDOW, interior_polygon=None)], fps=25)
+    for frame in range(76):
+        recorder.observe(frame, [(1, (0.199, 0.1))], [])
+    if missing_frames_observed:
+        for frame in range(76, 75 + gap_frames):
+            recorder.observe(frame, [], [])
+    recorder.observe(75 + gap_frames, [(1, (0.201, 0.1))], [])
+    events = recorder.finish()
+    closed = [event for event in events if event.kind in {"dwell", "showcase_stop"}]
+    if gap_frames == 25:
+        assert [(event.kind, event.duration_seconds) for event in closed] == [
+            ("dwell", Decimal("4")),
+            ("showcase_stop", Decimal("4")),
+        ]
+    else:
+        assert closed == []
+        assert not any(event.kind == "zone_exit" for event in events)
+
+
+def test_reappearing_inside_starts_a_new_visit_without_duplicating_the_pass() -> None:
+    recorder = SceneEventRecorder([_shop(front_polygon=WINDOW, interior_polygon=None)], fps=25)
+    for frame in [*range(76), *range(101, 126)]:
+        recorder.observe(frame, [(1, (0.199, 0.1))], [])
+    recorder.observe(126, [(1, (0.201, 0.1))], [])
+    events = recorder.finish()
+    assert [(event.kind, event.duration_seconds) for event in events if event.duration_seconds] == [
+        ("dwell", Decimal("1")),
+    ]
+    assert len([event for event in events if event.kind == "zone_enter"]) == 4
+    assert len([event for event in events if event.kind == "store_pass"]) == 1

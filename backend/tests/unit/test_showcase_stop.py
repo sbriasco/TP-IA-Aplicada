@@ -35,6 +35,8 @@ def _kinds(events: list[object]) -> list[str]:
 def test_three_seconds_in_the_window_records_one_stop_and_keeps_the_zone_entry() -> None:
     recorder = SceneEventRecorder([_shop()], fps=1)
     recorder.observe(0, [(1, INSIDE)], [])
+    recorder.observe(1, [(1, INSIDE)], [])
+    recorder.observe(2, [(1, INSIDE)], [])
     recorder.observe(3, [(1, OUTSIDE)], [])
     events = recorder.finish()
     stops = [event for event in events if event.kind == "showcase_stop"]
@@ -48,6 +50,7 @@ def test_three_seconds_in_the_window_records_one_stop_and_keeps_the_zone_entry()
 def test_two_seconds_in_the_window_does_not_record_a_stop() -> None:
     recorder = SceneEventRecorder([_shop()], fps=1)
     recorder.observe(0, [(1, INSIDE)], [])
+    recorder.observe(1, [(1, INSIDE)], [])
     recorder.observe(2, [(1, OUTSIDE)], [])
     events = recorder.finish()
     assert not any(event.kind == "showcase_stop" for event in events)
@@ -81,6 +84,9 @@ def test_a_second_entry_keeps_both_zone_entries() -> None:
 def test_front_dwell_is_unchanged() -> None:
     recorder = SceneEventRecorder([_shop()], fps=2)
     recorder.observe(0, [(1, FRONT_FOOT)], [])
+    recorder.observe(1, [(1, FRONT_FOOT)], [])
+    recorder.observe(2, [(1, FRONT_FOOT)], [])
+    recorder.observe(3, [(1, FRONT_FOOT)], [])
     recorder.observe(4, [(1, OUTSIDE)], [])
     events = recorder.finish()
     dwells = [event for event in events if event.kind == "dwell"]

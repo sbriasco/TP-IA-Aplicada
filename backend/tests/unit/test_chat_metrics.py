@@ -44,9 +44,114 @@ CHAT_CODES = {
     "dwell_median_seconds",
     "peak",
     "funnel_entries",
+    "funnel_observed_pass",
+    "funnel_exposure",
+    "funnel_stop",
+    "funnel_attention",
+    "funnel_observed_pass_to_exposure_rate",
+    "funnel_exposure_to_stop_rate",
+    "funnel_stop_to_attention_rate",
+    "funnel_attention_to_linked_entry_rate",
     "group_count",
     "visit_count",
 }
+
+
+def test_funnel_catalog_cites_all_stored_stages_and_ratios(monkeypatch) -> None:
+    from flowsight.db.models import (
+        ShopFunnelLabel,
+        ShopFunnelRate,
+        ShopFunnelRateCode,
+        ShopFunnelStage,
+        ShopFunnelStageCode,
+    )
+    from flowsight.services import chat_metrics
+    from flowsight.services.funnel import FunnelView
+    from flowsight.services.scene_metrics import ResultIncomplete
+    from flowsight.vision.metrics import TrafficBucketValue
+
+    session_id, shop_id, job_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    counts = {"observed_pass": 20, "exposure": 10, "stop": 5, "attention": 2, "linked_entry": 1}
+    view = FunnelView(
+        job_id=job_id, session_id=session_id, shop_id=shop_id,
+        stop_threshold_seconds=Decimal(3), attention_threshold_seconds=Decimal(8),
+        excluded_window_only=1, precision_uncommitted=True,
+        stages=tuple(
+            ShopFunnelStage(
+                stage=ShopFunnelStageCode(code), count=count,
+                availability=MeasureAvailability.AVAILABLE,
+                label=ShopFunnelLabel.ATTENTION_ESTIMATE if code == "attention"
+                else ShopFunnelLabel.NONE,
+                unavailable_reason=None,
+            ) for code, count in counts.items()
+        ),
+        rates=tuple(
+            ShopFunnelRate(
+                code=ShopFunnelRateCode(code), value=Decimal(value),
+                availability=MeasureAvailability.AVAILABLE, unavailable_reason=None,
+            ) for code, value in (
+                ("observed_pass_to_exposure", "0.5"), ("exposure_to_stop", "0.5"),
+                ("stop_to_attention", "0.4"), ("attention_to_linked_entry", "0.5"),
+            )
+        ),
+    )
+    monkeypatch.setattr(chat_metrics, "get_active_session", lambda *_: None)
+    monkeypatch.setattr(
+        chat_metrics, "load_shop_metrics",
+        lambda *_: ([], [], TrafficBucketValue(0, Decimal(0), 0)),
+    )
+    monkeypatch.setattr(chat_metrics, "load_shop_funnel", lambda *_: view)
+
+    def unavailable(*_):
+        raise ResultIncomplete
+
+    monkeypatch.setattr(chat_metrics, "load_visit_patterns", unavailable)
+    monkeypatch.setattr(chat_metrics, "load_possible_purchase", unavailable)
+    figures = {figure.code: figure for figure in read_figures(object(), session_id, shop_id)}
+    assert figures["funnel_exposure"].value == Decimal(10)
+    assert figures["funnel_stop"].value == Decimal(5)
+    assert figures["funnel_attention"].value == Decimal(2)
+    assert figures["funnel_attention"].label == "attention_estimate"
+    assert figures["funnel_observed_pass"].value == Decimal(20)
+    assert figures["funnel_entries"].value == Decimal(1)
+    assert figures["funnel_stop_to_attention_rate"].value == Decimal("0.4")
+    assert figures["funnel_attention_to_linked_entry_rate"].value == Decimal("0.5")
+    assert figures["funnel_attention"].estimation is True
+
+    view.stages[1].availability = MeasureAvailability.UNAVAILABLE
+    view.stages[1].count = None
+    view.stages[1].unavailable_reason = "no_showcase"
+    view.rates[2].availability = MeasureAvailability.UNAVAILABLE
+    view.rates[2].value = None
+    view.rates[2].unavailable_reason = "no_previous_stage"
+    missing = {figure.code: figure for figure in read_figures(object(), session_id, shop_id)}
+    assert missing["funnel_exposure"].value is None
+    assert missing["funnel_exposure"].unavailable_reason == "no_showcase"
+    assert missing["funnel_stop_to_attention_rate"].value is None
+    assert missing["funnel_stop_to_attention_rate"].unavailable_reason == "no_previous_stage"
+
+
+def test_missing_funnel_keeps_every_stage_and_rate_unavailable(monkeypatch) -> None:
+    from flowsight.services import chat_metrics
+    from flowsight.services.scene_metrics import ResultIncomplete
+    from flowsight.vision.metrics import TrafficBucketValue
+
+    monkeypatch.setattr(chat_metrics, "get_active_session", lambda *_: None)
+    monkeypatch.setattr(
+        chat_metrics, "load_shop_metrics",
+        lambda *_: ([], [], TrafficBucketValue(0, Decimal(0), 0)),
+    )
+
+    def unavailable(*_):
+        raise ResultIncomplete
+
+    for name in ("load_shop_funnel", "load_visit_patterns", "load_possible_purchase"):
+        monkeypatch.setattr(chat_metrics, name, unavailable)
+    figures = {figure.code: figure for figure in read_figures(object(), uuid.uuid4(), uuid.uuid4())}
+    assert figures["funnel_exposure"].availability == "unavailable"
+    assert figures["funnel_exposure"].value is None
+    assert figures["funnel_observed_pass_to_exposure_rate"].availability == "unavailable"
+    assert figures["funnel_observed_pass_to_exposure_rate"].value is None
 
 
 @pytest.fixture()
@@ -198,6 +303,99 @@ def test_analysis_without_metrics_does_not_report_a_zero_peak(database) -> None:
     assert peak.start_seconds is None
     assert peak.track_count is None
     assert peak.unavailable_reason == "metrics_not_generated"
+
+
+def test_context_reads_historical_names_and_flow_from_only_the_selected_session(database) -> None:
+    from flowsight.services.chat_context import read_analysis_context
+
+    with database.state.session_factory.begin() as db:
+        camera = get_or_create_camera(db, "cam-chat-context")
+        first, first_job, shop_id = _completed_session(
+            db, camera, "Primera", traffic=Decimal("17"), shop_name="Zona 419"
+        )
+        _buckets(db, first_job, shop_id)
+        second, second_job, other_shop = _completed_session(
+            db, camera, "Segunda", traffic=Decimal("99"), version_number=2,
+            shop_name="Otra configuración",
+        )
+        _buckets(db, second_job, other_shop)
+        context = read_analysis_context(db, first.id, shop_id)
+        assert context["source_kind"] == "synthetic"
+        assert context["facts"]["zone_catalog"]["items"] == [
+            {"shop_id": str(shop_id), "name": "Zona 419"}
+        ]
+        assert context["facts"]["flow"]["buckets"]["items"] == [
+            {"start_seconds": "0.000000", "track_count": 1},
+            {"start_seconds": "60.000000", "track_count": 5},
+        ]
+        assert context["facts"]["funnel"]["availability"] == "unavailable"
+        with pytest.raises(ShopNotInSession):
+            read_analysis_context(db, second.id, shop_id)
+
+
+@pytest.mark.parametrize("front_configured", [False, True])
+@pytest.mark.parametrize("reader", ["flow", "peak"])
+def test_flow_and_peak_distinguish_missing_front_from_observed_zero(
+    database, front_configured, reader
+):
+    from flowsight.services.chat_context import read_analysis_context
+    from flowsight.services.scene_metrics import load_shop_metrics, persist_completed_scene
+
+    with database.state.session_factory.begin() as db:
+        camera = get_or_create_camera(db, "cam-chat-context-front")
+        flow_session, job, shop_id = _completed_session(
+            db, camera, "Escena sin observaciones", traffic=None
+        )
+        persist_completed_scene(
+            db, job_id=job.id, session_id=flow_session.id, events=[], fps=30,
+            duration_seconds=65, front_by_shop={shop_id: front_configured},
+            line_by_shop={shop_id: False},
+        )
+        rows, buckets, _peak = load_shop_metrics(db, flow_session.id, shop_id)
+        traffic = next(row for row in rows if row.code == "traffic_total")
+        assert traffic.availability == ("available" if front_configured else "unavailable")
+        assert [row.track_count for row in buckets] == [0, 0]
+        context = read_analysis_context(db, flow_session.id, shop_id)
+        figures = {row.code: row for row in read_figures(db, flow_session.id, shop_id)}
+
+    flow = context["facts"]["flow"]
+    if front_configured and reader == "flow":
+        assert flow["availability"] == "available"
+        assert len(flow["buckets"]["items"]) == 2
+        assert Decimal(0) in {Decimal(value) for value in context["numeric_values"]}
+    elif front_configured:
+        assert figures["peak"].availability == "available"
+        assert figures["peak"].track_count == 0
+    elif reader == "flow":
+        assert flow["availability"] == "unavailable"
+        assert flow["unavailable_reason"] == "scene_element_missing"
+        assert flow["buckets"]["items"] == []
+        assert context["numeric_values"] == []
+    else:
+        assert figures["peak"].availability == "unavailable"
+        assert figures["peak"].unavailable_reason == "scene_element_missing"
+        assert figures["peak"].start_seconds is None
+        assert figures["peak"].track_count is None
+
+
+@pytest.mark.parametrize("reader", ["flow", "peak"])
+def test_orphan_buckets_cannot_back_flow_or_peak_without_traffic_metrics(database, reader):
+    from flowsight.services.chat_context import read_analysis_context
+
+    with database.state.session_factory.begin() as db:
+        camera = get_or_create_camera(db, "cam-chat-context-no-metrics")
+        flow_session, job, shop_id = _completed_session(db, camera, "Sin métricas", traffic=None)
+        _stored(db, job, shop_id, ShopMetricCode.ENTRIES, Decimal(43), ShopMetricLabel.NONE)
+        _buckets(db, job, shop_id)
+        context = read_analysis_context(db, flow_session.id, shop_id)
+        figures = {row.code: row for row in read_figures(db, flow_session.id, shop_id)}
+    if reader == "flow":
+        assert context["facts"]["flow"]["availability"] == "unavailable"
+        assert context["facts"]["flow"]["buckets"]["items"] == []
+        assert context["numeric_values"] == []
+    else:
+        assert figures["peak"].availability == "unavailable"
+        assert figures["peak"].unavailable_reason == "metrics_not_generated"
 
 
 def _completed_session(

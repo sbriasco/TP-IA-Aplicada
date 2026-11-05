@@ -11,6 +11,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
+from itertools import combinations
 from typing import Literal
 
 from flowsight.scene.geometry import _point_in_polygon
@@ -115,9 +116,7 @@ class VisitPatternRecorder:
         self._groups: dict[frozenset[int], _GroupRun] = {}
         self._closed_groups: list[tuple[frozenset[int], _GroupRun]] = []
 
-    def observe(
-        self, frame_index: int, feet: Sequence[tuple[int, tuple[float, float]]]
-    ) -> None:
+    def observe(self, frame_index: int, feet: Sequence[tuple[int, tuple[float, float]]]) -> None:
         for track_id, foot in feet:
             state = self._tracks.setdefault(track_id, _TrackState())
             self._advance_track(state, frame_index, foot)
@@ -136,10 +135,7 @@ class VisitPatternRecorder:
 
     def _advance_track(self, state: _TrackState, frame: int, foot: tuple[float, float]) -> None:
         occupied = self._occupied(foot)
-        gap = (
-            state.last_frame is not None
-            and self._seconds(state.last_frame, frame) > Decimal("1")
-        )
+        gap = state.last_frame is not None and self._seconds(state.last_frame, frame) > Decimal("1")
         if gap:
             self._close_sequence(state)
         if state.last_frame is None or gap:
@@ -197,9 +193,7 @@ class VisitPatternRecorder:
         state.last_pixel = pixel
         state.last_pixel_frame = frame
 
-    def _advance_groups(
-        self, frame: int, feet: Sequence[tuple[int, tuple[float, float]]]
-    ) -> None:
+    def _advance_groups(self, frame: int, feet: Sequence[tuple[int, tuple[float, float]]]) -> None:
         present = {track_id for track_id, _foot in feet}
         held: dict[frozenset[int], _GroupRun] = {}
         for members, run in list(self._groups.items()):
@@ -222,7 +216,13 @@ class VisitPatternRecorder:
             if self._tracks[track_id].last_pixel is not None
         }
         edges = _edges(pixels, vectors, float(PROXIMITY_WIDTH_FRACTION) * self._width)
-        qualifying = _cliques([track for track in pixels if vectors.get(track) is not None], edges)
+        # Preserve earlier episodes before estimating any new group. All pairs
+        # must still qualify, including when an episode is a larger clique's subset.
+        qualifying = [
+            members
+            for members in self._groups
+            if all(frozenset(pair) in edges for pair in combinations(members, 2))
+        ]
         ranked = sorted(
             qualifying,
             key=lambda members: (
@@ -240,6 +240,11 @@ class VisitPatternRecorder:
             start = self._start_of(kept, frame)
             survivors[kept] = _GroupRun(start=start, last=frame)
             assigned.update(kept)
+        remaining = {track for track in pixels if vectors.get(track) is not None} - assigned
+        while candidates := _cliques(sorted(remaining), edges):
+            members = min(candidates, key=lambda group: (-len(group), tuple(sorted(group))))
+            survivors[members] = _GroupRun(start=frame, last=frame)
+            remaining.difference_update(members)
         for members, run in list(self._groups.items()):
             continued = members in survivors and survivors[members].start == run.start
             if not continued:
@@ -372,9 +377,7 @@ def _edges(
             right_vector = vectors[right]
             if right_pixel is None or right_vector is None:
                 continue
-            distance = math.hypot(
-                left_pixel[0] - right_pixel[0], left_pixel[1] - right_pixel[1]
-            )
+            distance = math.hypot(left_pixel[0] - right_pixel[0], left_pixel[1] - right_pixel[1])
             if distance > proximity_px:
                 continue
             if _angle_within(left_vector, right_vector):
@@ -392,20 +395,39 @@ def _angle_within(left: tuple[float, float], right: tuple[float, float]) -> bool
 
 
 def _cliques(nodes: list[int], edges: set[frozenset[int]]) -> list[frozenset[int]]:
-    linked = sorted({track for edge in edges for track in edge if track in set(nodes)})
-    if len(linked) > 12:
-        linked = linked[:12]
-    found: list[frozenset[int]] = []
-    total = len(linked)
-    for mask in range(1, 1 << total):
-        members = [linked[bit] for bit in range(total) if mask & (1 << bit)]
-        if len(members) < 2:
+    """At most one deterministic complete-link candidate per non-isolated seed.
+
+    Enumerating every maximal clique can still require 2**(n/2) candidates
+    for valid distance graphs. Greedy growth considers every seed without
+    promising a globally largest clique: O(n**3) work and O(n**2) memory.
+    The caller repeats on residual IDs so compatible pairs cannot be skipped
+    merely because their initial candidates overlapped a selected group.
+    """
+    allowed = set(nodes)
+    adjacent: dict[int, set[int]] = {node: set() for node in nodes}
+    for edge in edges:
+        if len(edge) != 2 or not edge <= allowed:
             continue
-        pairs = (
-            frozenset((members[i], members[j]))
-            for i in range(len(members))
-            for j in range(i + 1, len(members))
-        )
-        if all(pair in edges for pair in pairs):
-            found.append(frozenset(members))
-    return found
+        left, right = edge
+        adjacent[left].add(right)
+        adjacent[right].add(left)
+    found: set[frozenset[int]] = set()
+    remaining = {node for node in nodes if adjacent[node]}
+    while remaining:
+        component: set[int] = set()
+        pending = {min(remaining)}
+        while pending:
+            node = pending.pop()
+            component.add(node)
+            pending.update(adjacent[node] - component)
+        remaining.difference_update(component)
+        order = sorted(component, key=lambda node: (-len(adjacent[node]), node))
+        for seed in sorted(component):
+            members = {seed}
+            common = set(adjacent[seed])
+            for node in order:
+                if node in common:
+                    members.add(node)
+                    common.intersection_update(adjacent[node])
+            found.add(frozenset(members))
+    return sorted(found, key=lambda members: tuple(sorted(members)))
