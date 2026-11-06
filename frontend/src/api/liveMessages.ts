@@ -21,6 +21,13 @@ export interface LiveZoneDwell {
   interior_average_seconds: number | null; front_average_seconds: number | null;
   interior_sample_count: number; front_sample_count: number;
 }
+export interface LiveFileShop {
+  traffic_total: number | null; store_pass: number | null; entries: number | null; exits: number | null;
+  entry_rate: number | null; dwell_mean_seconds: number | null;
+  observed_pass: number | null; exposure: number | null; stop: number | null;
+  attention: number | null; linked_entry: number | null;
+  group_count: number; possible_purchase_count: number;
+}
 export interface LiveUpdate {
   type: "live.update"; schema_version: "3"; source_kind: "webcam";
   job_id: string; session_id: string; revision: number; capture_sequence: number;
@@ -32,6 +39,7 @@ export interface LiveUpdate {
   checkpoint_revision: number; checkpoint_at: string | null;
   capture_started_at?: string | null;
   zone_dwell?: Record<string, LiveZoneDwell>;
+  file_analysis?: Record<string, LiveFileShop>;
 }
 export interface ClockPong {
   type: "clock.pong"; nonce: string; client_sent_ms: number;

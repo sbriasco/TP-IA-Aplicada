@@ -46,26 +46,22 @@ def _counts(draft: object) -> dict[str, int | None]:
 def test_funnel_counts_each_track_once_and_keeps_official_entries_separate() -> None:
     events = [
         _fact(1, "zone_enter", "front"),
-        _fact(1, "zone_enter", "window"),
-        _fact(1, "zone_enter", "window", frame=1),
-        _fact(1, "showcase_stop", "window", frame=2, duration="2"),
+        _fact(1, "dwell", "front", frame=1, duration="0.5"),
         _fact(2, "zone_enter", "front"),
-        _fact(2, "zone_enter", "window"),
-        _fact(2, "showcase_stop", "window", frame=5, duration="5"),
+        _fact(2, "dwell", "front", frame=2, duration="1"),
         _fact(3, "zone_enter", "front"),
-        _fact(3, "zone_enter", "window"),
-        _fact(3, "showcase_stop", "window", frame=10, duration="8"),
-        _fact(3, "store_enter", frame=3),
+        _fact(3, "dwell", "front", frame=10, duration="2"),
+        _fact(3, "store_enter", frame=9),
         _fact(4, "zone_enter", "front"),
         _fact(4, "store_enter", frame=4),
         _fact(5, "zone_enter", "window"),
         _fact(6, "zone_enter", "front"),
-        _fact(6, "zone_enter", "window"),
-        _fact(6, "showcase_stop", "window", frame=4, duration="3"),
-        _fact(6, "showcase_stop", "window", frame=12, duration="8"),
-        _fact(6, "store_enter", frame=5),
+        _fact(6, "dwell", "front", frame=4, duration="0.4"),
+        _fact(6, "dwell", "front", frame=12, duration="2"),
+        _fact(6, "store_enter", frame=11),
         _fact(7, "zone_enter", "front"),
         _fact(7, "zone_enter", "window"),
+        _fact(7, "showcase_stop", "window", frame=8, duration="8"),
         _fact(8, "zone_enter", "front", shop=OTHER),
         _fact(8, "store_enter", shop=OTHER),
     ]
@@ -75,15 +71,15 @@ def test_funnel_counts_each_track_once_and_keeps_official_entries_separate() -> 
     draft = build_funnel(events, shop_id=SHOP, window_configured=True, fps=1)
     assert _counts(draft) == {
         "observed_pass": 6,
-        "exposure": 5,
+        "exposure": 4,
         "stop": 3,
         "attention": 2,
         "linked_entry": 2,
     }
     assert draft.excluded_window_only == 1
     assert draft.precision_uncommitted is True
-    assert draft.stop_threshold_seconds == Decimal("3")
-    assert draft.attention_threshold_seconds == Decimal("8")
+    assert draft.stop_threshold_seconds == Decimal("1")
+    assert draft.attention_threshold_seconds == Decimal("2")
     assert official_entries == 3
     assert sum(1 for event in events if event.kind == "store_enter" and event.shop_id == SHOP) == 3
     assert all(stage.stage != "entries" for stage in draft.stages)
@@ -96,16 +92,15 @@ def test_funnel_counts_each_track_once_and_keeps_official_entries_separate() -> 
     assert {rate.code for rate in draft.rates} == set(RATE_CODES)
     assert "entry_rate" not in {rate.code for rate in draft.rates}
     by_code = {rate.code: rate for rate in draft.rates}
-    assert by_code["observed_pass_to_exposure"].value == Decimal("0.833333")
+    assert by_code["observed_pass_to_exposure"].value == Decimal("0.666667")
     assert by_code["attention_to_linked_entry"].value == Decimal("1.000000")
 
 
 def test_an_entry_at_or_before_the_attention_start_is_not_linked() -> None:
     events = [
         _fact(1, "zone_enter", "front"),
-        _fact(1, "zone_enter", "window"),
-        _fact(1, "showcase_stop", "window", frame=10, duration="8"),
-        _fact(1, "store_enter", frame=2),
+        _fact(1, "dwell", "front", frame=10, duration="2"),
+        _fact(1, "store_enter", frame=8),
     ]
     draft = build_funnel(events, shop_id=SHOP, window_configured=True, fps=1)
     assert _counts(draft)["attention"] == 1

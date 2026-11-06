@@ -706,10 +706,10 @@ class ShopFunnel(Base):
             name="fk_shop_funnels_job_session",
         ),
         CheckConstraint(
-            "stop_threshold_seconds = 3", name="ck_shop_funnels_stop_threshold"
+            "stop_threshold_seconds IN (3, 1)", name="ck_shop_funnels_stop_threshold"
         ),
         CheckConstraint(
-            "attention_threshold_seconds = 8",
+            "attention_threshold_seconds IN (8, 2)",
             name="ck_shop_funnels_attention_threshold",
         ),
         CheckConstraint(
@@ -831,14 +831,16 @@ class VisitPatternReport(Base):
             name="fk_visit_pattern_reports_job_session",
         ),
         CheckConstraint(
-            "proximity_width_fraction = 0.08",
+            "proximity_width_fraction IN (0.08, 0.12, 0.16)",
             name="ck_visit_pattern_reports_proximity",
         ),
         CheckConstraint(
-            "direction_degrees = 45", name="ck_visit_pattern_reports_direction"
+            "direction_degrees IN (45, 60, 90)",
+            name="ck_visit_pattern_reports_direction",
         ),
         CheckConstraint(
-            "minimum_seconds = 2", name="ck_visit_pattern_reports_minimum"
+            "minimum_seconds IN (1, 2)",
+            name="ck_visit_pattern_reports_minimum",
         ),
         CheckConstraint(
             "motion_epsilon_width_fraction = 0.005",

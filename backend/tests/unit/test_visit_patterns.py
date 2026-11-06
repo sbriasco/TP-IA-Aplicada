@@ -226,6 +226,16 @@ def test_polygons_without_steps_stay_available_and_empty() -> None:
     assert draft.sequences == ()
 
 
+def test_sixty_degrees_connects_and_a_right_angle_does_not() -> None:
+    pixels = {1: (10.0, 50.0), 2: (16.0, 50.0)}
+    assert frozenset((1, 2)) in _edges(
+        pixels, {1: (1.0, 0.0), 2: (0.5, math.sqrt(3) / 2)}, 16
+    )
+    assert frozenset((1, 2)) not in _edges(pixels, {1: (1.0, 0.0), 2: (0.0, 1.0)}, 16)
+    assert frozenset((1, 2)) in _edges(pixels, {1: (1.0, 0.0), 2: None}, 16)
+    assert frozenset((1, 2)) not in _edges(pixels, {1: (1.0, 0.0), 2: (-1.0, 0.0)}, 16)
+
+
 def test_two_moving_visits_within_the_thresholds_form_one_estimated_group() -> None:
     draft = build_visit_patterns(
         _walk(range(0, 22), {1: (0.10, 0.50), 2: (0.16, 0.50)}, step=0.02),
@@ -243,7 +253,7 @@ def test_two_moving_visits_within_the_thresholds_form_one_estimated_group() -> N
     assert span >= 2
 
 
-def test_a_still_visit_a_short_approach_and_a_distant_third_stay_out() -> None:
+def test_a_still_pair_forms_a_group_and_a_short_or_distant_third_stays_out() -> None:
     still = build_visit_patterns(
         _walk(range(0, 22), {1: (0.10, 0.50), 2: (0.16, 0.50)}, step=0.0),
         [],
@@ -252,7 +262,7 @@ def test_a_still_visit_a_short_approach_and_a_distant_third_stay_out() -> None:
         height=HEIGHT,
     )
     short = build_visit_patterns(
-        _walk(range(0, 11), {1: (0.10, 0.50), 2: (0.16, 0.50)}, step=0.02),
+        _walk(range(0, 9), {1: (0.10, 0.50), 2: (0.16, 0.50)}, step=0.02),
         [],
         fps=FPS,
         width=WIDTH,
@@ -269,7 +279,8 @@ def test_a_still_visit_a_short_approach_and_a_distant_third_stay_out() -> None:
         width=WIDTH,
         height=HEIGHT,
     )
-    assert still.group_count == 0
+    assert still.group_count == 1
+    assert still.groups[0].track_ids == (1, 2)
     assert short.group_count == 0
     assert third.group_count == 1
     assert third.groups[0].track_ids == (1, 2)
@@ -302,25 +313,46 @@ def test_a_visit_that_fits_two_groups_stays_in_one() -> None:
     assert larger.groups[0].track_ids == (1, 2, 3)
 
 
-def test_a_broken_group_that_qualifies_again_is_another_episode() -> None:
+def test_a_confirmed_group_is_not_counted_again_after_a_reunion() -> None:
     together = _walk(range(0, 22), {1: (0.10, 0.50), 2: (0.16, 0.50)}, step=0.02)
     apart = _walk(range(22, 31), {1: (0.10, 0.50), 2: (0.70, 0.50)}, step=0.02)
     again = _walk(range(31, 54), {1: (0.10, 0.50), 2: (0.16, 0.50)}, step=0.02)
     draft = build_visit_patterns(
         [*together, *apart, *again], [], fps=FPS, width=WIDTH, height=HEIGHT
     )
-    assert draft.group_count == 2
+    assert draft.group_count == 1
     assert draft.groups[0].track_ids == (1, 2)
-    assert draft.groups[1].track_ids == (1, 2)
-    assert (
-        draft.groups[1].started_video_timestamp_seconds
-        > draft.groups[0].ended_video_timestamp_seconds
+
+
+def test_reserved_ids_do_not_join_a_later_group() -> None:
+    together = _walk(range(0, 22), {1: (0.10, 0.50), 2: (0.16, 0.50)}, step=0.02)
+    apart = _walk(range(22, 33), {1: (0.10, 0.20), 2: (0.80, 0.80)}, step=0.0)
+    later = _walk(
+        range(33, 55),
+        {1: (0.10, 0.20), 3: (0.16, 0.20), 2: (0.80, 0.80), 4: (0.86, 0.80)},
+        step=0.0,
     )
+    draft = build_visit_patterns(
+        [*together, *apart, *later], [], fps=FPS, width=WIDTH, height=HEIGHT
+    )
+    assert draft.group_count == 1
+    assert draft.groups[0].track_ids == (1, 2)
 
 
-def test_ending_the_video_keeps_a_group_only_after_two_seconds() -> None:
+def test_a_short_approach_leaves_the_ids_free_for_another_group() -> None:
+    short = _walk(range(0, 9), {1: (0.10, 0.50), 2: (0.16, 0.50)}, step=0.0)
+    gap = _walk(range(9, 20), {1: (0.10, 0.50), 2: (0.80, 0.50)}, step=0.0)
+    later = _walk(range(20, 42), {1: (0.10, 0.50), 3: (0.16, 0.50)}, step=0.0)
+    draft = build_visit_patterns(
+        [*short, *gap, *later], [], fps=FPS, width=WIDTH, height=HEIGHT
+    )
+    assert draft.group_count == 1
+    assert draft.groups[0].track_ids == (1, 3)
+
+
+def test_ending_the_video_keeps_a_group_only_after_one_second() -> None:
     early = build_visit_patterns(
-        _walk(range(0, 11), {1: (0.10, 0.50), 2: (0.16, 0.50)}, step=0.02),
+        _walk(range(0, 9), {1: (0.10, 0.50), 2: (0.16, 0.50)}, step=0.02),
         [],
         fps=FPS,
         width=WIDTH,
@@ -342,7 +374,7 @@ def test_ending_the_video_keeps_a_group_only_after_two_seconds() -> None:
 
 def test_all_seven_separate_pairs_are_groups_without_a_twelve_person_limit() -> None:
     tracks = {
-        2 * pair + offset + 1: (0.1 + offset * 0.02, 0.1 + pair * 0.12)
+        2 * pair + offset + 1: (0.1 + offset * 0.02, 0.1 + pair * 0.20)
         for pair in range(7)
         for offset in range(2)
     }
@@ -385,11 +417,11 @@ def test_an_established_pair_keeps_priority_when_a_third_person_joins() -> None:
     )
     assert draft.group_count == 1
     assert draft.groups[0].track_ids == (1, 2)
-    assert draft.groups[0].started_video_timestamp_seconds == Decimal("0.1")
+    assert draft.groups[0].started_video_timestamp_seconds == Decimal("0")
 
 
-def _opposite_pairs_circle(size: int) -> dict[int, tuple[float, float]]:
-    radius = 80 / (1 + math.cos(math.pi / size))
+def _opposite_pairs_circle(size: int, proximity_px: float = 80) -> dict[int, tuple[float, float]]:
+    radius = proximity_px / (1 + math.cos(math.pi / size))
     return {
         index + 1: (
             400 + radius * math.cos(2 * math.pi * index / size),
@@ -415,7 +447,10 @@ def test_adversarial_geometry_has_bounded_candidates_without_dropping_ids() -> N
 
 
 def test_adversarial_geometry_groups_all_fifty_six_ids_including_the_residual() -> None:
-    tracks = {track: (x / 1000, y / 1000) for track, (x, y) in _opposite_pairs_circle(56).items()}
+    tracks = {
+        track: (x / 1000, y / 1000)
+        for track, (x, y) in _opposite_pairs_circle(56, proximity_px=120).items()
+    }
     observations = _walk(range(22), tracks, step=0.01)
     draft = build_visit_patterns(observations, [], fps=FPS, width=1000, height=1000)
     assert [group.track_ids for group in draft.groups] == [

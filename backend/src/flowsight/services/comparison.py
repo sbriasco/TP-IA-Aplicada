@@ -216,6 +216,11 @@ def build_comparison(
             eligible.append(row)
     if len(eligible) < 2:
         raise ComparisonInsufficientSessions("need at least two eligible sessions")
+    kinds = {row.session.source_kind for row in eligible}
+    if SourceKind.WEBCAM in kinds and any(kind is not SourceKind.WEBCAM for kind in kinds):
+        raise ComparisonInsufficientSessions(
+            "Compará sesiones en vivo entre sí, o archivos entre sí."
+        )
 
     if axis == "session":
         columns = tuple(_column_from_eligible(row) for row in eligible)
@@ -239,7 +244,7 @@ def _load_eligible(
     database_session: DatabaseSession, session_id: uuid.UUID, zone_name: str
 ) -> _EligibleSession | None:
     flow = get_active_session(database_session, session_id)
-    if flow is None or flow.source_kind == SourceKind.WEBCAM:
+    if flow is None:
         return None
     job = database_session.scalar(
         select(ProcessingJob)

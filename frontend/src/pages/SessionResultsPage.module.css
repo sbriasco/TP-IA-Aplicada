@@ -59,14 +59,15 @@
 
 @media (min-width: 1281px) {
   .main .resultsWorkspace { flex: 1; min-height: 0; align-items: stretch; gap: 20px; }
-  .analytics { display: flex; flex-direction: column; min-height: 0; gap: 10px; }
+  .analytics { display: flex; flex-direction: column; min-height: 0; gap: 10px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding-bottom: 8px; }
+  .analytics > :not(.analysisGrid) { flex-shrink: 0; }
   .overview { flex-shrink: 0; margin-bottom: 0; }
   .sectionHeading { margin-bottom: 8px; }
   .metrics { gap: 10px; }
-  .analysisGrid { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; gap: 10px; }
+  .analysisGrid { flex: 1 0 auto; min-height: auto; grid-template-rows: minmax(180px, 1fr); align-items: stretch; gap: 10px; }
   .analysisGrid .panel { margin: 0; padding: 12px; }
   .flowPanel { display: grid; grid-template-rows: auto auto minmax(100px, 1fr) auto; min-height: 0; }
-  .sceneColumn { min-height: 0; grid-template-rows: minmax(0, 1fr) auto; gap: 10px; }
+  .sceneColumn { min-height: 0; grid-template-rows: minmax(160px, 1fr) auto; gap: 10px; }
   .scenePanel { display: flex; flex-direction: column; min-height: 0; }
   .frame { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
   .frameImage { flex-shrink: 0; }

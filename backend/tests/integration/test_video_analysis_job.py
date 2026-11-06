@@ -248,11 +248,10 @@ def test_halfway_progress_and_official_measures(
     def detect(self, frame_index, width, height, frame=None):
         with session_factory() as database_session:
             stored = database_session.get(ProcessingJob, job.id)
-            if (
-                stored is not None
-                and stored.frames_total
-                and frame_index == stored.frames_total // 2
-            ):
+            halfway = None
+            if stored is not None and stored.frames_total:
+                halfway = (stored.frames_total // 2) // 2 * 2
+            if stored is not None and frame_index == halfway:
                 captured["frames_analyzed"] = stored.frames_analyzed
                 captured["half"] = stored.frames_total / 2
                 captured["frames_total"] = stored.frames_total
@@ -271,8 +270,7 @@ def test_halfway_progress_and_official_measures(
         settings=Settings(_env_file=None),
     )
     assert processed is not None
-    # Frame 25 of 50: the last persisted batch is frame 15. The preview still
-    # follows the frame just analyzed (index 24 → 50%).
+    # Even frame 24 of 50: the last persisted batch is still frame 15.
     assert captured["frames_analyzed"] == 15
     assert captured["half"] == 25
     # The snapshot is the latest image allowed by the 5 fps cap, so it can lag
@@ -315,11 +313,13 @@ def test_cancel_mid_video_keeps_partial_measures_and_is_not_retried(
     def detect(self, frame_index, width, height, frame=None):
         with session_factory() as database_session:
             stored = database_session.get(ProcessingJob, job.id)
+            halfway = None
+            if stored is not None and stored.frames_total:
+                halfway = (stored.frames_total // 2) // 2 * 2
             if (
                 stored is not None
-                and stored.frames_total
                 and stored.status is JobStatus.PROCESSING
-                and frame_index == stored.frames_total // 2
+                and frame_index == halfway
             ):
                 with session_factory.begin() as writing:
                     transition_job(
@@ -368,7 +368,7 @@ def test_cancel_mid_video_keeps_partial_measures_and_is_not_retried(
         assert claim_next_job(database_session, "worker-new", datetime.now(UTC)) is None
 
 
-def test_preview_snapshots_follow_five_per_second_while_every_frame_is_analyzed(
+def test_preview_snapshots_follow_five_per_second_on_analyzed_frames(
     session_factory, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     job = _register_video_job(session_factory, tmp_path, "preview-cap", datetime.now(UTC))
@@ -393,7 +393,7 @@ def test_preview_snapshots_follow_five_per_second_while_every_frame_is_analyzed(
         settings=Settings(_env_file=None),
     )
     assert processed == job.id
-    assert published == [0, 20, 40, 49]
+    assert published == [0, 20, 40, 48]
     with session_factory() as database_session:
         stored = database_session.get(ProcessingJob, job.id)
         assert stored is not None
@@ -406,15 +406,14 @@ def test_measures_flush_every_fifteen_frames_batches_crossings(
 ) -> None:
     job = _register_video_job(session_factory, tmp_path, "batches", datetime.now(UTC))
     _add_shop(session_factory, job)
-    progress: list[int | None] = []
-    crossings_at_frame_3: list[int] = []
-    crossings_at_frame_15: list[int] = []
+    progress: dict[int, int | None] = {}
+    crossings_at_frame: dict[int, int] = {}
 
     def detect(self, frame_index, width, height, frame=None):
         del self, width, height, frame
         with session_factory() as database_session:
             stored = database_session.get(ProcessingJob, job.id)
-            progress.append(None if stored is None else stored.frames_analyzed)
+            progress[frame_index] = None if stored is None else stored.frames_analyzed
             count = (
                 database_session.scalar(
                     select(func.count())
@@ -423,13 +422,12 @@ def test_measures_flush_every_fifteen_frames_batches_crossings(
                 )
                 or 0
             )
-            if frame_index == 3:
-                crossings_at_frame_3.append(count)
-            if frame_index == 15:
-                crossings_at_frame_15.append(count)
-        # y=72 is side B of the entry line; y=192 is side A. Frame 1 opens a
-        # pending exit and frame 2 reverses it, which decides two oscillations.
-        y2 = 192 if frame_index == 1 else 72
+            if frame_index in {4, 16}:
+                crossings_at_frame[frame_index] = count
+        # y=72 is side B of the entry line; y=192 is side A. Frame 2 opens a
+        # pending exit and frame 4 reverses it, which decides two oscillations.
+        # Odd frames are not analyzed.
+        y2 = 192 if frame_index == 2 else 72
         return [Detection(track_id=1, bbox=(10, 10, 40, y2))]
 
     monkeypatch.setattr(FakeDetector, "detect", detect)
@@ -442,18 +440,20 @@ def test_measures_flush_every_fifteen_frames_batches_crossings(
     )
     assert processed == job.id
     assert progress[0] == 0
-    assert progress[1] == 0
     assert progress[2] == 0
+    assert progress[4] == 0
     # Crossings wait for the 15-frame batch (no per-crossing commit).
-    assert progress[3] == 0
-    assert crossings_at_frame_3 == [0]
+    assert crossings_at_frame[4] == 0
     assert progress[14] == 0
-    assert progress[15] == 15
-    assert crossings_at_frame_15 == [2]
-    assert progress[29] == 15
+    assert progress[16] == 15
+    assert crossings_at_frame[16] == 2
+    assert progress[28] == 15
     assert progress[30] == 30
-    assert progress[45] == 45
-    assert progress[49] == 45
+    assert progress[44] == 30
+    assert progress[46] == 45
+    assert progress[48] == 45
+    assert 1 not in progress
+    assert 49 not in progress
 
     with session_factory() as database_session:
         stored = database_session.get(ProcessingJob, job.id)
@@ -484,7 +484,7 @@ def test_cancel_is_persisted_on_the_next_fifteen_frame_flush(
     original = FakeDetector.detect
 
     def detect(self, frame_index, width, height, frame=None):
-        if frame_index == 3:
+        if frame_index == 2:
             with session_factory.begin() as writing:
                 transition_job(
                     writing,

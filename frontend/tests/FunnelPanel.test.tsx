@@ -28,41 +28,35 @@ const funnel: ShopFunnel = {
 };
 
 describe("FunnelPanel", () => {
-  it("muestra las etapas, las tasas por par y el aviso de precisión", async () => {
+  it("muestra las etapas sin las tasas", async () => {
     const container = document.createElement("div");
     const root = createRoot(container);
     try {
-      await act(async () => root.render(<FunnelPanel funnel={funnel} officialEntries={6} />));
+      await act(async () => root.render(<FunnelPanel funnel={funnel} />));
       const text = container.textContent ?? "";
       expect(text).toContain("Paso observado");
-      expect(text).toContain("Exposición a la vidriera");
+      expect(text).toContain("Con salida observada");
       expect(text).toContain("Detención frente a la vidriera");
       expect(text).toContain("Atención estimada");
       expect(text).toContain("Ingreso vinculado");
-      expect(text).toContain("No es el total de entradas ni una compra.");
-      expect(text).toContain("Umbral: 3 s de video.");
-      expect(text).toContain("Umbral: 8 s de video.");
-      expect(text).toContain("Estimación. No afirma que haya mirado la vidriera.");
-      expect(text).toContain("De paso observado a exposición");
-      expect(text).toContain("De exposición a detención");
-      expect(text).toContain("De detención a atención estimada");
-      expect(text).toContain("De atención estimada a ingreso vinculado");
-      expect(text).toContain("La precisión de estas etapas no está comprometida.");
-      expect(text).toContain("2 visitas estuvieron en la vidriera y no pasaron por el frente. Quedan fuera del funnel.");
-      expect(text).toContain("Ingresos oficiales: 6");
-      expect(text).toContain("no disponible");
+      expect(text).not.toContain("No es el total de entradas ni una compra.");
+      expect(text).not.toContain("Umbral");
+      expect(text).not.toContain("De paso observado a exposición");
+      expect(text).not.toContain("De exposición a detención");
+      expect(text).not.toContain("De detención a atención estimada");
+      expect(text).not.toContain("De atención estimada a ingreso vinculado");
+      expect(text).not.toContain("79,5");
+      expect(text).not.toContain("%");
+      expect(text).not.toContain("precisión");
+      expect(text).not.toContain("Quedan fuera del funnel");
+      expect(text).not.toContain("Ingresos oficiales");
       expect(text.toLowerCase()).not.toContain("tasa de ingreso");
-      const unavailable = Array.from(container.querySelectorAll("li")).find((item) =>
-        item.textContent?.includes("De exposición a detención"),
-      );
-      expect(unavailable?.textContent).toContain("no disponible");
-      expect(unavailable?.textContent).not.toContain("0 %");
     } finally {
       await act(async () => root.unmount());
     }
   });
 
-  it("sin vidriera explica la etapa no disponible", async () => {
+  it("sin vidriera muestra la etapa como no disponible", async () => {
     const container = document.createElement("div");
     const root = createRoot(container);
     const withoutShowcase: ShopFunnel = {
@@ -75,11 +69,10 @@ describe("FunnelPanel", () => {
       ),
     };
     try {
-      await act(async () => root.render(<FunnelPanel funnel={withoutShowcase} officialEntries={null} />));
-      expect(container.textContent).toContain("No hay zona de vidriera.");
-      expect(container.textContent).toContain("No es el total de entradas ni una compra.");
+      await act(async () => root.render(<FunnelPanel funnel={withoutShowcase} />));
+      expect(container.textContent).toContain("no disponible");
+      expect(container.textContent).not.toContain("No hay zona de vidriera.");
       expect(container.textContent).toContain("Paso observado");
-      expect(container.textContent).not.toContain("visitas estuvieron en la vidriera");
     } finally {
       await act(async () => root.unmount());
     }

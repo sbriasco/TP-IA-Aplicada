@@ -17,11 +17,11 @@ from typing import Literal
 from flowsight.scene.geometry import _point_in_polygon
 
 ZoneRoleName = Literal["front", "interior", "window"]
-PROXIMITY_WIDTH_FRACTION = Decimal("0.08")
-DIRECTION_DEGREES = Decimal("45")
-MINIMUM_SECONDS = Decimal("2")
+PROXIMITY_WIDTH_FRACTION = Decimal("0.12")
+DIRECTION_DEGREES = Decimal("60")
+MINIMUM_SECONDS = Decimal("1")
 MOTION_EPSILON_WIDTH_FRACTION = Decimal("0.005")
-_COS_45 = math.cos(math.radians(45))
+_COS_LIMIT = math.cos(math.radians(float(DIRECTION_DEGREES)))
 
 
 @dataclass(frozen=True)
@@ -114,6 +114,7 @@ class VisitPatternRecorder:
         self._height = height
         self._tracks: dict[int, _TrackState] = {}
         self._groups: dict[frozenset[int], _GroupRun] = {}
+        self._reserved: set[int] = set()
         self._closed_groups: list[tuple[frozenset[int], _GroupRun]] = []
 
     def observe(self, frame_index: int, feet: Sequence[tuple[int, tuple[float, float]]]) -> None:
@@ -216,12 +217,29 @@ class VisitPatternRecorder:
             if self._tracks[track_id].last_pixel is not None
         }
         edges = _edges(pixels, vectors, float(PROXIMITY_WIDTH_FRACTION) * self._width)
-        # Preserve earlier episodes before estimating any new group. All pairs
-        # must still qualify, including when an episode is a larger clique's subset.
+        survivors: dict[frozenset[int], _GroupRun] = dict(held)
+        assigned: set[int] = set(blocked)
+        # A set that already lasted 1s keeps those ids for the whole analysis.
+        # It does not grow, and the ids are not estimated again after it closes.
+        for members, run in list(self._groups.items()):
+            if members in held:
+                continue
+            together = all(frozenset(pair) in edges for pair in combinations(members, 2))
+            already = self._seconds(run.start, run.last) >= MINIMUM_SECONDS
+            reaches = together and self._seconds(run.start, frame) >= MINIMUM_SECONDS
+            if not already and not reaches:
+                continue
+            self._reserved.update(members)
+            if together:
+                survivors[members] = _GroupRun(start=run.start, last=frame)
+                assigned.update(members)
+        # Provisional sets can still change membership. Only free ids are eligible.
         qualifying = [
             members
             for members in self._groups
-            if all(frozenset(pair) in edges for pair in combinations(members, 2))
+            if members not in survivors
+            and members.isdisjoint(self._reserved)
+            and all(frozenset(pair) in edges for pair in combinations(members, 2))
         ]
         ranked = sorted(
             qualifying,
@@ -231,16 +249,16 @@ class VisitPatternRecorder:
                 tuple(sorted(members)),
             ),
         )
-        assigned: set[int] = set(blocked)
-        survivors: dict[frozenset[int], _GroupRun] = dict(held)
         for members in ranked:
-            kept = frozenset(track for track in members if track not in assigned)
+            kept = frozenset(
+                track for track in members if track not in assigned and track not in self._reserved
+            )
             if len(kept) < 2:
                 continue
             start = self._start_of(kept, frame)
             survivors[kept] = _GroupRun(start=start, last=frame)
             assigned.update(kept)
-        remaining = {track for track in pixels if vectors.get(track) is not None} - assigned
+        remaining = set(pixels) - assigned - self._reserved
         while candidates := _cliques(sorted(remaining), edges):
             members = min(candidates, key=lambda group: (-len(group), tuple(sorted(group))))
             survivors[members] = _GroupRun(start=frame, last=frame)
@@ -260,6 +278,7 @@ class VisitPatternRecorder:
     def _emit_group(self, members: frozenset[int], run: _GroupRun) -> None:
         if self._seconds(run.start, run.last) < MINIMUM_SECONDS:
             return
+        self._reserved.update(members)
         self._closed_groups.append((members, run))
 
     def _seconds(self, start: int, end: int) -> Decimal:
@@ -366,22 +385,27 @@ def _edges(
     proximity_px: float,
 ) -> set[frozenset[int]]:
     edges: set[frozenset[int]] = set()
-    ids = [track for track, pixel in pixels.items() if pixel is not None and vectors.get(track)]
+    ids = [track for track, pixel in pixels.items() if pixel is not None]
     for index, left in enumerate(ids):
         left_pixel = pixels[left]
-        left_vector = vectors[left]
-        if left_pixel is None or left_vector is None:
+        if left_pixel is None:
             continue
         for right in ids[index + 1 :]:
             right_pixel = pixels[right]
-            right_vector = vectors[right]
-            if right_pixel is None or right_vector is None:
+            if right_pixel is None:
                 continue
             distance = math.hypot(left_pixel[0] - right_pixel[0], left_pixel[1] - right_pixel[1])
             if distance > proximity_px:
                 continue
-            if _angle_within(left_vector, right_vector):
-                edges.add(frozenset((left, right)))
+            left_vector = vectors.get(left)
+            right_vector = vectors.get(right)
+            if (
+                left_vector is not None
+                and right_vector is not None
+                and not _angle_within(left_vector, right_vector)
+            ):
+                continue
+            edges.add(frozenset((left, right)))
     return edges
 
 
@@ -391,7 +415,7 @@ def _angle_within(left: tuple[float, float], right: tuple[float, float]) -> bool
     if left_norm == 0 or right_norm == 0:
         return False
     cosine = (left[0] * right[0] + left[1] * right[1]) / (left_norm * right_norm)
-    return cosine >= _COS_45 - 1e-9
+    return cosine >= _COS_LIMIT - 1e-9
 
 
 def _cliques(nodes: list[int], edges: set[frozenset[int]]) -> list[frozenset[int]]:

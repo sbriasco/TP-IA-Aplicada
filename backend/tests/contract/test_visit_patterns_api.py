@@ -185,9 +185,9 @@ def test_completed_patterns_ignore_range_and_leave_closed_figures(
     assert response.status_code == 200
     body = response.json()
     assert body["precision_uncommitted"] is True
-    assert body["proximity_width_fraction"] == "0.08"
-    assert body["direction_degrees"] == "45"
-    assert body["minimum_seconds"] == "2"
+    assert body["proximity_width_fraction"] == "0.12"
+    assert body["direction_degrees"] == "60"
+    assert body["minimum_seconds"] == "1"
     assert body["patterns_availability"] == "available"
     assert body["group_count"] == 0
     assert body["groups"] == []

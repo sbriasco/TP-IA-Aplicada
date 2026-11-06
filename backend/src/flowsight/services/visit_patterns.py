@@ -51,10 +51,11 @@ def persist_visit_patterns(
     session_id: uuid.UUID,
     draft: VisitPatternDraft,
     source_kind: str,
+    allow_webcam: bool = False,
 ) -> None:
-    """Store the closed result. A webcam source stores nothing."""
+    """Store the closed result. A webcam source stores nothing unless asked."""
 
-    if source_kind == SourceKind.WEBCAM.value:
+    if source_kind == SourceKind.WEBCAM.value and not allow_webcam:
         return
     database_session.add(
         VisitPatternReport(
@@ -71,6 +72,9 @@ def persist_visit_patterns(
             precision_uncommitted=True,
         )
     )
+    # Child rows reference visit_pattern_reports.job_id, not the report primary key.
+    # The ORM does not order that insert, so a later flush can write children first.
+    database_session.flush()
     if draft.patterns_availability == "available":
         for row in draft.area_transitions:
             database_session.add(
@@ -121,13 +125,13 @@ def load_visit_patterns(
     database_session: DatabaseSession, session_id: uuid.UUID
 ) -> VisitPatternsView:
     session = get_active_session(database_session, session_id)
-    if session is not None and session.source_kind is SourceKind.WEBCAM:
-        raise LivePatternsUnavailable
     job = _completed_job(database_session, session_id)
     report = database_session.scalar(
         select(VisitPatternReport).where(VisitPatternReport.job_id == job.id)
     )
     if report is None:
+        if session is not None and session.source_kind is SourceKind.WEBCAM:
+            raise LivePatternsUnavailable
         raise ResultIncomplete
     transitions = database_session.scalars(
         select(VisitAreaTransition).where(VisitAreaTransition.job_id == job.id)

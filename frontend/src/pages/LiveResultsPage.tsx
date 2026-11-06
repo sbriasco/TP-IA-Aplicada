@@ -1,12 +1,18 @@
 import { useEffect, useId, useState } from "react";
 import { API_BASE_URL } from "../api/config";
 import { requestJson } from "../api/http";
+import { getShopFunnel, type ShopFunnel } from "../api/funnel";
 import { getLiveResults } from "../api/live";
+import { getPossiblePurchases, type PossiblePurchases } from "../api/possiblePurchases";
+import { getVisitPatterns, type VisitPatterns } from "../api/visitPatterns";
 import { AppShell } from "../components/AppShell";
 import { CrossingChart } from "../components/CrossingChart";
 import { Link } from "../components/Link";
 import { PositionHeatmap } from "../components/PositionHeatmap";
+import { FunnelPanel } from "../components/FunnelPanel";
+import { PossiblePurchasePanel } from "../components/PossiblePurchasePanel";
 import { SessionChatPanel } from "../components/SessionChatPanel";
+import { VisitPatternsPanel } from "../components/VisitPatternsPanel";
 import { Activity, ArrowLeft, ChevronDown, MapPinOff, VideoOff, AlertTriangle } from "lucide-react";
 import { EmptyState } from "../components/results/EmptyState";
 import { EventsTable } from "../components/results/EventsTable";
@@ -32,6 +38,9 @@ export function LiveResultsPage({ jobId, apiBaseUrl = API_BASE_URL }: { jobId: s
   const [samples, setSamples] = useState<LiveSamples | null>(null);
   const [events, setEvents] = useState<LiveEvents | null>(null);
   const [shopId, setShopId] = useState<string | undefined>();
+  const [funnel, setFunnel] = useState<ShopFunnel | null>(null);
+  const [patterns, setPatterns] = useState<VisitPatterns | null>(null);
+  const [purchases, setPurchases] = useState<PossiblePurchases | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sampleError, setSampleError] = useState<string | null>(null);
   const [eventError, setEventError] = useState<string | null>(null);
@@ -59,6 +68,17 @@ export function LiveResultsPage({ jobId, apiBaseUrl = API_BASE_URL }: { jobId: s
     }).catch(() => { if (active) setSampleError("No se pudo cargar la muestra de posiciones. Los cruces guardados siguen disponibles."); });
     return () => { active = false; };
   }, [apiBaseUrl, jobId]);
+  useEffect(() => {
+    const selected = shopId ?? result?.selected_shop_id;
+    if (!result || result.status !== "completed" || !result.result_complete || !selected) {
+      setFunnel(null); setPatterns(null); setPurchases(null); return;
+    }
+    let active = true;
+    void getShopFunnel(apiBaseUrl, result.session_id, selected).then((value) => { if (active) setFunnel(value); }, () => { if (active) setFunnel(null); });
+    void getVisitPatterns(apiBaseUrl, result.session_id).then((value) => { if (active) setPatterns(value); }, () => { if (active) setPatterns(null); });
+    void getPossiblePurchases(apiBaseUrl, result.session_id).then((value) => { if (active) setPurchases(value); }, () => { if (active) setPurchases(null); });
+    return () => { active = false; };
+  }, [apiBaseUrl, jobId, result, shopId]);
   async function moreMinutes() {
     if (!result || result.next_bucket_cursor === null || loadingMore) return;
     setLoadingMore(true);
@@ -133,6 +153,14 @@ export function LiveResultsPage({ jobId, apiBaseUrl = API_BASE_URL }: { jobId: s
         <div className={styles.metric}><dt>Cobertura del análisis</dt><dd aria-label="Cobertura del análisis">{coverage}</dd>
           <dd className={styles.metricNote}>{unanalyzed}</dd></div>
       </dl></section>
+      {funnel && <FunnelPanel funnel={funnel} />}
+      {patterns && (
+        <VisitPatternsPanel
+          patterns={patterns}
+          zones={result.shops.map((shop) => ({ id: shop.shop_id, name: shop.shop_name }))}
+        />
+      )}
+      {purchases && <PossiblePurchasePanel purchases={purchases} />}
       <div className={styles.content}>
         <section className={styles.panel} aria-labelledby={selectId + "-flow"}>
           <header className={styles.panelHeader}><h2 id={selectId + "-flow"}>Flujo de cruces temporales</h2>

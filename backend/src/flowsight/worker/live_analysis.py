@@ -29,11 +29,13 @@ from flowsight.db.models import (
 )
 from flowsight.preview.live_messages import LiveUpdate
 from flowsight.services.jobs import transition_job
+from flowsight.services.live_file_result import persist_live_file_result
 from flowsight.services.live_jobs import LiveMachineError
 from flowsight.services.live_results import mark_live_interrupted, persist_live_checkpoint
 from flowsight.vision.detector import Detection, build_detector
 from flowsight.vision.live_buckets import LiveBuckets
 from flowsight.vision.live_dwell import LiveDwellCounter
+from flowsight.vision.live_file_analysis import LiveFileAnalysis
 from flowsight.vision.live_performance import LivePerformance
 from flowsight.vision.live_sampling import LivePositionSampler
 from flowsight.vision.live_spatial import LiveSpatialCounter
@@ -192,6 +194,11 @@ def process_live_analysis_job(
             return
         detector = detector_factory(settings)
         counter = LiveSpatialCounter(shops)
+        file_analysis = LiveFileAnalysis(
+            shops,
+            width=capture_settings.requested_width,
+            height=capture_settings.requested_height,
+        )
         dwell = LiveDwellCounter(shops)
         buckets = LiveBuckets([shop.shop_id for shop in shops])
         sampler = LivePositionSampler()
@@ -308,6 +315,7 @@ def process_live_analysis_job(
 
                 counter.discontinue(horizon)
                 dwell.discontinue()
+                file_analysis.discontinue()
                 performance.reset()
                 sampler.discontinue()
                 reset = getattr(detector, "reset_tracking", None)
@@ -416,6 +424,7 @@ def process_live_analysis_job(
                     writer.flush()
                     missing += gap
                     counter.discontinue(horizon)
+                    file_analysis.discontinue()
                     performance.reset()
                     sampler.discontinue()
                     reset = getattr(detector, "reset_tracking", None)
@@ -430,7 +439,23 @@ def process_live_analysis_job(
                     observed += max(Decimal(0), gap)
             frame = replace(frame, segment_index=segment_index)
             detections = detector.detect(frame.sequence, frame.width, frame.height, frame.image)
+            detect_bags = getattr(detector, "detect_bags", None)
+            bags = (
+                []
+                if detect_bags is None
+                else detect_bags(frame.sequence, frame.width, frame.height, frame.image)
+            )
             new_facts = counter.observe(frame, detections)
+            file_analysis.observe(
+                frame.timestamp_seconds,
+                [
+                    (detection.track_id, normalized_foot(detection, frame.width, frame.height))
+                    for detection in detections
+                ],
+                detections,
+                bags,
+                new_facts,
+            )
             dwell.observe(
                 frame.timestamp_seconds,
                 frame.segment_index,
@@ -492,6 +517,9 @@ def process_live_analysis_job(
                     fps,
                     started_at=started_at,
                     zone_dwell=dwell.snapshot(),
+                    file_analysis=file_analysis.preview(
+                        {row.shop_id: (row.entries, row.exits) for row in counter.counts()}
+                    ),
                 )
                 last_publish = publication_ns
         control.stop_capture()
@@ -532,6 +560,20 @@ def process_live_analysis_job(
             if segment is not None and segment.ended_capture_seconds is None:
                 segment.ended_capture_seconds = horizon
                 segment.last_sequence = sequence
+            if analyzed > 0:
+                counts = {row.shop_id: (row.entries, row.exits) for row in counter.counts()}
+                events, patterns, purchases, metrics, buckets = file_analysis.finish(counts)
+                persist_live_file_result(
+                    database,
+                    job_id=job_id,
+                    session_id=session_id,
+                    shops=shops,
+                    events=events,
+                    patterns=patterns,
+                    purchases=purchases,
+                    metrics=metrics,
+                    buckets=buckets,
+                )
             transition_job(database, job_id=job_id, target=JobStatus.COMPLETED, occurred_at=now())
     except Exception as error:
         code = getattr(error, "code", "live_analysis_failed")
@@ -611,6 +653,31 @@ def _complete_unstarted(factory, job_id, machine_id, owner_epoch, now):
         transition_job(database, job_id=job_id, target=JobStatus.COMPLETED, occurred_at=now())
 
 
+def _file_analysis_payload(summary) -> dict:
+    if not summary:
+        return {}
+    payload = {}
+    for shop_id, row in summary.items():
+        payload[str(shop_id)] = {
+            "traffic_total": row.traffic_total,
+            "store_pass": row.store_pass,
+            "entries": row.entries,
+            "exits": row.exits,
+            "entry_rate": None if row.entry_rate is None else float(row.entry_rate),
+            "dwell_mean_seconds": None
+            if row.dwell_mean_seconds is None
+            else float(row.dwell_mean_seconds),
+            "observed_pass": row.observed_pass,
+            "exposure": row.exposure,
+            "stop": row.stop,
+            "attention": row.attention,
+            "linked_entry": row.linked_entry,
+            "group_count": row.group_count,
+            "possible_purchase_count": row.possible_purchase_count,
+        }
+    return payload
+
+
 def _emit_update(
     emit,
     frame,
@@ -632,6 +699,7 @@ def _emit_update(
     *,
     started_at=None,
     zone_dwell=None,
+    file_analysis=None,
 ):
     scale = min(1.0, 960 / frame.width, 540 / frame.height)
     image = (
@@ -673,6 +741,7 @@ def _emit_update(
             "type": "live.update",
             "capture_started_at": started_at,
             "zone_dwell": zone_dwell or {},
+            "file_analysis": _file_analysis_payload(file_analysis),
             "schema_version": "3",
             "source_kind": "webcam",
             "session_id": str(session_id),

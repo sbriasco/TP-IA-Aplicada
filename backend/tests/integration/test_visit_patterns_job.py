@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,7 @@ from flowsight.db.models import (
     JobKind,
     JobStatus,
     JobStatusTransition,
+    MeasureAvailability,
     ProcessingJob,
     SceneEntryLine,
     SceneVersion,
@@ -29,16 +31,19 @@ from flowsight.db.models import (
     ShopMetricCode,
     SourceKind,
     VideoSource,
+    VisitAreaTransition,
     VisitPatternReport,
     VisitSequence,
     ZoneRole,
 )
 from flowsight.services.cameras import get_or_create_camera
 from flowsight.services.jobs import transition_job
+from flowsight.services.possible_purchase import persist_possible_purchase
 from flowsight.services.visit_patterns import persist_visit_patterns
 from flowsight.video.fixtures import write_clip
 from flowsight.video.probe import probe_video
-from flowsight.vision.visit_patterns import VisitPatternDraft
+from flowsight.vision.possible_purchase import PossiblePurchaseDraft
+from flowsight.vision.visit_patterns import AreaTransition, VisitPatternDraft
 from flowsight.worker.lifecycle import process_next_job
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -210,6 +215,52 @@ def test_a_completed_file_stores_patterns_for_that_session_only(
         assert again[0].track_count == sequence_tracks
 
 
+def test_area_transitions_survive_the_purchase_flush(
+    session_factory, tmp_path: Path
+) -> None:
+    job, shop = _register(session_factory, tmp_path, "transiciones")
+    draft = VisitPatternDraft(
+        patterns_availability="available",
+        patterns_unavailable_reason=None,
+        groups_availability="available",
+        group_count=0,
+        area_transitions=(
+            AreaTransition(
+                from_shop_id=shop.id,
+                from_zone_role="front",
+                to_shop_id=shop.id,
+                to_zone_role="interior",
+                track_count=2,
+            ),
+        ),
+        sequences=(),
+        shop_transitions=(),
+        groups=(),
+    )
+    purchase = PossiblePurchaseDraft(visit_count=0, track_ids=())
+    with session_factory.begin() as database_session:
+        persist_visit_patterns(
+            database_session,
+            job_id=job.id,
+            session_id=job.session_id,
+            draft=draft,
+            source_kind=SourceKind.VIDEO_FILE.value,
+        )
+        persist_possible_purchase(
+            database_session,
+            job_id=job.id,
+            session_id=job.session_id,
+            draft=purchase,
+            source_kind=SourceKind.VIDEO_FILE.value,
+        )
+    with session_factory() as database_session:
+        stored = database_session.scalar(
+            select(VisitAreaTransition).where(VisitAreaTransition.job_id == job.id)
+        )
+        assert stored is not None
+        assert stored.track_count == 2
+
+
 def test_webcam_failed_and_cancelled_do_not_store_a_completed_result(
     session_factory, tmp_path: Path
 ) -> None:
@@ -251,3 +302,57 @@ def test_webcam_failed_and_cancelled_do_not_store_a_completed_result(
             )
             is None
         )
+
+
+def test_stored_reports_keep_the_thresholds_they_were_calculated_with(
+    session_factory, tmp_path: Path
+) -> None:
+    old_job, _old_shop = _register(session_factory, tmp_path, "umbrales-viejos")
+    new_job, _new_shop = _register(session_factory, tmp_path, "umbrales-nuevos")
+    empty = VisitPatternDraft(
+        patterns_availability="available",
+        patterns_unavailable_reason=None,
+        groups_availability="available",
+        group_count=0,
+        area_transitions=(),
+        sequences=(),
+        shop_transitions=(),
+        groups=(),
+    )
+    with session_factory.begin() as database_session:
+        database_session.add(
+            VisitPatternReport(
+                job_id=old_job.id,
+                session_id=old_job.session_id,
+                proximity_width_fraction=Decimal("0.08"),
+                direction_degrees=Decimal("45"),
+                minimum_seconds=Decimal("2"),
+                motion_epsilon_width_fraction=Decimal("0.005"),
+                patterns_availability=MeasureAvailability.AVAILABLE,
+                patterns_unavailable_reason=None,
+                groups_availability=MeasureAvailability.AVAILABLE,
+                group_count=0,
+                precision_uncommitted=True,
+            )
+        )
+        persist_visit_patterns(
+            database_session,
+            job_id=new_job.id,
+            session_id=new_job.session_id,
+            draft=empty,
+            source_kind=SourceKind.VIDEO_FILE.value,
+        )
+    with session_factory() as database_session:
+        old = database_session.scalar(
+            select(VisitPatternReport).where(VisitPatternReport.job_id == old_job.id)
+        )
+        new = database_session.scalar(
+            select(VisitPatternReport).where(VisitPatternReport.job_id == new_job.id)
+        )
+        assert old is not None and new is not None
+        assert old.proximity_width_fraction == Decimal("0.08")
+        assert old.direction_degrees == Decimal("45")
+        assert old.minimum_seconds == Decimal("2")
+        assert new.proximity_width_fraction == Decimal("0.12")
+        assert new.direction_degrees == Decimal("60")
+        assert new.minimum_seconds == Decimal("1")

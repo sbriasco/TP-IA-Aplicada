@@ -383,6 +383,18 @@ export function LiveAnalysisPage({ jobId, apiBaseUrl = API_BASE_URL }: { jobId: 
         <div><dt>Total</dt><dd aria-label="Total de cruces">{summary.total_crossings}</dd></div>
       </dl></> : <p>Configurá una línea para mostrar los cruces.</p>}</section>
       <LiveDwellSummary compact dwell={(snapshot?.zone_dwell ?? durable?.zone_dwell)?.[shopId]} />
+      {snapshot?.file_analysis?.[shopId] && <section aria-label="Análisis en curso"><h2>Análisis</h2><dl className={styles.metrics}>
+        <div><dt>Tráfico</dt><dd>{snapshot.file_analysis[shopId].traffic_total ?? "no disponible"}</dd></div>
+        <div><dt>Pasos</dt><dd>{snapshot.file_analysis[shopId].store_pass ?? "no disponible"}</dd></div>
+        <div><dt>Entradas</dt><dd>{snapshot.file_analysis[shopId].entries ?? "no disponible"}</dd></div>
+        <div><dt>Tasa de ingreso</dt><dd>{snapshot.file_analysis[shopId].entry_rate === null ? "no disponible" : `${(snapshot.file_analysis[shopId].entry_rate * 100).toLocaleString("es-AR", { maximumFractionDigits: 2 })} %`}</dd></div>
+        <div><dt>Con salida observada</dt><dd>{snapshot.file_analysis[shopId].exposure ?? "no disponible"}</dd></div>
+        <div><dt>Detención</dt><dd>{snapshot.file_analysis[shopId].stop ?? "no disponible"}</dd></div>
+        <div><dt>Atención estimada</dt><dd>{snapshot.file_analysis[shopId].attention ?? "no disponible"}</dd></div>
+        <div><dt>Ingreso vinculado</dt><dd>{snapshot.file_analysis[shopId].linked_entry ?? "no disponible"}</dd></div>
+        <div><dt>Grupos estimados</dt><dd>{snapshot.file_analysis[shopId].group_count}</dd></div>
+        <div><dt>Posible compra</dt><dd>{snapshot.file_analysis[shopId].possible_purchase_count}</dd></div>
+      </dl></section>}
       {summary && <CrossingChart compact minutes={minutes} summary={summary} captureStartedAt={snapshot?.capture_started_at ?? durable?.capture_started_at} />}
       <footer className={styles.panelFooter}>{!(snapshot?.coverage_complete ?? durable?.coverage_complete ?? true) && <p className={styles.warning}><AlertTriangle size={15} aria-hidden="true" />Cobertura incompleta: hubo intervalos sin analizar.</p>}
       <p className={styles.diagnostics}><Clock size={14} aria-hidden="true" />Última sincronización: {syncTime}</p></footer>

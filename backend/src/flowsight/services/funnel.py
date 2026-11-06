@@ -72,10 +72,11 @@ def persist_shop_funnel(
     fps: float,
     windows: dict[uuid.UUID, bool],
     source_kind: str,
+    allow_webcam: bool = False,
 ) -> None:
-    """Store one funnel per shop. A webcam source stores nothing."""
+    """Store one funnel per shop. A webcam source stores nothing unless asked."""
 
-    if source_kind == SourceKind.WEBCAM.value:
+    if source_kind == SourceKind.WEBCAM.value and not allow_webcam:
         return
     for shop_id, window_configured in windows.items():
         draft = build_funnel(
@@ -94,14 +95,14 @@ def load_shop_funnel(
     database_session: DatabaseSession, session_id: uuid.UUID, shop_id: uuid.UUID
 ) -> FunnelView:
     session = get_active_session(database_session, session_id)
-    if session is not None and session.source_kind is SourceKind.WEBCAM:
-        raise LiveFunnelUnavailable
     job = _completed_job(database_session, session_id)
     _require_shop(database_session, job, shop_id)
     header = database_session.scalar(
         select(ShopFunnel).where(ShopFunnel.job_id == job.id, ShopFunnel.shop_id == shop_id)
     )
     if header is None:
+        if session is not None and session.source_kind is SourceKind.WEBCAM:
+            raise LiveFunnelUnavailable
         return _missing(job, shop_id)
     stages = database_session.scalars(
         select(ShopFunnelStage).where(

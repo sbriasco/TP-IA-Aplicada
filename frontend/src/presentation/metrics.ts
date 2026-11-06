@@ -10,7 +10,7 @@ export const METRIC_NAME: Record<string, string> = {
 };
 
 export const METRIC_DESCRIPTION: Record<string, string> = {
-  traffic_total: "Tracks observados en el área externa",
+  traffic_total: "Tracks totales observados en ambas areas",
   store_pass: "Tracks que pasan en el área externa",
   entries: "Cruces confirmados hacia el área interna",
   exits: "Cruces confirmados hacia afuera",

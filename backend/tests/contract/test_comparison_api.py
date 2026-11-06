@@ -197,6 +197,36 @@ def test_insufficient_sessions(client: TestClient):
     assert response.json()["detail"]["code"] == "comparison_insufficient_sessions"
 
 
+def test_two_webcam_sessions_compare(client: TestClient):
+    first = _seed_session(
+        client,
+        name="Vivo A",
+        traffic=12,
+        version_number=1,
+        finished_at=datetime(2026, 9, 1, tzinfo=UTC),
+        source=SourceKind.WEBCAM,
+    )
+    second = _seed_session(
+        client,
+        name="Vivo B",
+        traffic=4,
+        version_number=2,
+        finished_at=datetime(2026, 9, 2, tzinfo=UTC),
+        source=SourceKind.WEBCAM,
+    )
+    response = client.post(
+        "/comparisons",
+        json={"session_ids": [first, second], "zone_name": "Local", "axis": "session"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert [column["label"] for column in body["columns"]] == ["Vivo A", "Vivo B"]
+    traffic = next(figure for figure in body["figures"] if figure["code"] == "traffic_total")
+    assert traffic["cells"][0]["value"] == 12.0
+    assert traffic["cells"][1]["value"] == 4.0
+    assert traffic["relation"] == "greater"
+
+
 def test_webcam_excluded(client: TestClient):
     file_session = _seed_session(
         client,

@@ -9,8 +9,8 @@ from decimal import Decimal
 
 from flowsight.vision.events import SceneEventFact
 
-STOP_THRESHOLD_SECONDS = Decimal("3")
-ATTENTION_THRESHOLD_SECONDS = Decimal("8")
+STOP_THRESHOLD_SECONDS = Decimal("1")
+ATTENTION_THRESHOLD_SECONDS = Decimal("2")
 _STAGE_ORDER = (
     "observed_pass",
     "exposure",
@@ -77,17 +77,21 @@ def build_funnel(
     excluded = len(window - front)
     observed = len(front)
     if window_configured:
-        exposure_ids = front & window
-        stops = [
+        dwells = [
             event
             for event in own
-            if event.kind == "showcase_stop"
-            and event.track_id in exposure_ids
+            if event.kind == "dwell"
+            and event.zone_role == "front"
             and event.duration_seconds is not None
-            and event.duration_seconds >= STOP_THRESHOLD_SECONDS
         ]
-        stop_ids = {event.track_id for event in stops}
-        attention_starts = _attention_starts(stops, fps)
+        exposure_ids = {event.track_id for event in dwells}
+        stop_ids = {
+            event.track_id
+            for event in dwells
+            if event.duration_seconds is not None
+            and event.duration_seconds >= STOP_THRESHOLD_SECONDS
+        }
+        attention_starts = _attention_starts(dwells, fps)
         linked = _linked_entries(own, attention_starts, fps)
         stages = (
             _available("observed_pass", observed),

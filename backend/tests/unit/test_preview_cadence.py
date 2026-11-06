@@ -1,4 +1,4 @@
-"""Preview images stay at the websocket cap. Analysis still sees every frame."""
+"""Preview images stay at the websocket cap. Inference runs on every other frame."""
 
 from flowsight.worker.video_analysis import preview_is_due
 
@@ -29,10 +29,13 @@ def test_a_fifty_frame_clip_publishes_four_images_when_frames_are_ten_millisecon
         ):
             published.append(frame_index)
             last = now_s
-    assert published == [0, 20, 40, 49]
+    assert published == [0, 20, 40, 48]
 
 
-def test_the_last_frame_is_published_even_inside_the_interval() -> None:
+def test_the_last_analyzed_frame_is_published_even_inside_the_interval() -> None:
     assert preview_is_due(
+        frame_index=48, frames_total=50, now_s=0.05, last_publish_s=0.0, max_fps=5
+    )
+    assert not preview_is_due(
         frame_index=49, frames_total=50, now_s=0.05, last_publish_s=0.0, max_fps=5
     )

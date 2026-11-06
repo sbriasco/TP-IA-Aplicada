@@ -90,6 +90,22 @@ class LiveZoneDwell(LiveModel):
     front_sample_count: Count
 
 
+class LiveFileShop(LiveModel):
+    traffic_total: Count | None = None
+    store_pass: Count | None = None
+    entries: Count | None = None
+    exits: Count | None = None
+    entry_rate: FiniteSeconds | None = None
+    dwell_mean_seconds: FiniteSeconds | None = None
+    observed_pass: Count | None = None
+    exposure: Count | None = None
+    stop: Count | None = None
+    attention: Count | None = None
+    linked_entry: Count | None = None
+    group_count: Count = 0
+    possible_purchase_count: Count = 0
+
+
 class LiveUpdate(LiveModel):
     type: Literal["live.update"]
     schema_version: Literal["3"]
@@ -116,6 +132,7 @@ class LiveUpdate(LiveModel):
     checkpoint_at: datetime | None
     capture_started_at: datetime | None = None
     zone_dwell: dict[uuid.UUID, LiveZoneDwell] = Field(default_factory=dict, max_length=20)
+    file_analysis: dict[uuid.UUID, LiveFileShop] = Field(default_factory=dict, max_length=20)
 
     @model_validator(mode="after")
     def bounded_snapshot(self):

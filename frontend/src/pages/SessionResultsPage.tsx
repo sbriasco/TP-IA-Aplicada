@@ -126,7 +126,7 @@ export function SessionResultsPage({
   }, [apiBaseUrl, sessionId, shopId, row?.result_complete]);
 
   useEffect(() => {
-    if (row?.result_complete !== true || shopId === null || session?.source_kind === "webcam") {
+    if (row?.result_complete !== true || shopId === null) {
       setFunnel(null);
       return;
     }
@@ -142,10 +142,10 @@ export function SessionResultsPage({
     return () => {
       active = false;
     };
-  }, [apiBaseUrl, sessionId, shopId, row?.result_complete, session?.source_kind]);
+  }, [apiBaseUrl, sessionId, shopId, row?.result_complete]);
 
   useEffect(() => {
-    if (session == null || row?.result_complete !== true || session.source_kind === "webcam") {
+    if (row?.result_complete !== true) {
       setVisitPatterns(null);
       return;
     }
@@ -161,10 +161,10 @@ export function SessionResultsPage({
     return () => {
       active = false;
     };
-  }, [apiBaseUrl, sessionId, row?.result_complete, session?.source_kind]);
+  }, [apiBaseUrl, sessionId, row?.result_complete]);
 
   useEffect(() => {
-    if (session == null || row?.result_complete !== true || session.source_kind === "webcam") {
+    if (row?.result_complete !== true) {
       setPossiblePurchases(null);
       return;
     }
@@ -180,7 +180,7 @@ export function SessionResultsPage({
     return () => {
       active = false;
     };
-  }, [apiBaseUrl, sessionId, row?.result_complete, session?.source_kind]);
+  }, [apiBaseUrl, sessionId, row?.result_complete]);
 
   useEffect(() => {
     if (row?.result_complete !== true || shopId === null) return;
@@ -270,18 +270,14 @@ export function SessionResultsPage({
               <details className={styles.moreMetrics}><summary>Ver todos los indicadores</summary><ul className={styles.metrics}>{metrics.metrics.filter((metric) => !PRIMARY_CODES.has(metric.code)).map((metric) => <MetricCard key={metric.code} metric={metric} prominent />)}</ul></details>
             </>}
           </section>
-          {funnel !== null && session != null && session.source_kind !== "webcam" && (
-            <FunnelPanel
-              funnel={funnel}
-              officialEntries={metrics?.metrics.find((metric) => metric.code === "entries")?.value ?? null}
+          {funnel !== null && <FunnelPanel funnel={funnel} />}
+          {visitPatterns !== null && (
+            <VisitPatternsPanel
+              patterns={visitPatterns}
+              zones={shops.map((shop) => ({ id: shop.shop_id, name: shop.name }))}
             />
           )}
-          {visitPatterns !== null && session != null && session.source_kind !== "webcam" && (
-            <VisitPatternsPanel patterns={visitPatterns} shops={shops} />
-          )}
-          {possiblePurchases !== null && session != null && session.source_kind !== "webcam" && (
-            <PossiblePurchasePanel purchases={possiblePurchases} />
-          )}
+          {possiblePurchases !== null && <PossiblePurchasePanel purchases={possiblePurchases} />}
           <div className={styles.analysisGrid}>
             <section className={`${styles.panel} ${styles.flowPanel}`} aria-labelledby="flow-title">
               <h2 id="flow-title">Flujo temporal</h2>

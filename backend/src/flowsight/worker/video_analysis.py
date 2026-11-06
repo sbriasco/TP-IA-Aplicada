@@ -59,6 +59,8 @@ from flowsight.vision.visit_patterns import ConfiguredArea, VisitPatternRecorder
 logger = logging.getLogger(__name__)
 
 FLUSH_EVERY_FRAMES = 15
+# Analyze one frame and skip the next. Timestamps stay on the source frame index.
+FRAME_STRIDE = 2
 # Remote writers coalesce and drain about once per second so inference never
 # waits on Azure RTT; a crash can lose at most this window of partial measures.
 REMOTE_FLUSH_INTERVAL_S = 1.0
@@ -205,6 +207,20 @@ def _monotonic() -> float:
     return time.monotonic()
 
 
+def frame_is_analyzed(frame_index: int) -> bool:
+    """True for frame 0, 2, 4, … — one analyzed frame, then one skipped."""
+
+    return frame_index % FRAME_STRIDE == 0
+
+
+def last_analyzed_frame(frames_total: int) -> int:
+    """Highest analyzed index strictly inside the clip."""
+
+    if frames_total <= 0:
+        return 0
+    return ((frames_total - 1) // FRAME_STRIDE) * FRAME_STRIDE
+
+
 def preview_is_due(
     *,
     frame_index: int,
@@ -213,9 +229,9 @@ def preview_is_due(
     last_publish_s: float | None,
     max_fps: int,
 ) -> bool:
-    """True for the first frame, the last frame, and at most `max_fps` images per second."""
+    """True for the first and last analyzed frames, and at most `max_fps` images per second."""
 
-    if frame_index == 0 or frame_index + 1 == frames_total:
+    if frame_index == 0 or frame_index == last_analyzed_frame(frames_total):
         return True
     if last_publish_s is None:
         return True
@@ -324,24 +340,25 @@ def _run(
             if flush_gate.cancelled:
                 break
             timestamp = (Decimal(frame_index) / Decimal(str(fps))).quantize(Decimal("0.000001"))
-            detections = detector.detect(frame_index, width, height, frame)
-            bags = detector.detect_bags(frame_index, width, height, frame)
-            writer.observe(
-                frame_index,
-                timestamp,
-                detections,
-                width=width,
-                height=height,
-            )
-            facts = counter.observe(frame_index, detections, width=width, height=height)
-            feet = [
-                (detection.track_id, normalized_foot(detection, width, height))
-                for detection in detections
-            ]
-            recorder.observe(frame_index, feet, facts)
-            patterns.observe(frame_index, feet)
-            purchases.observe(frame_index, detections, bags)
-            pending_facts.extend(facts)
+            if frame_is_analyzed(frame_index):
+                detections = detector.detect(frame_index, width, height, frame)
+                bags = detector.detect_bags(frame_index, width, height, frame)
+                writer.observe(
+                    frame_index,
+                    timestamp,
+                    detections,
+                    width=width,
+                    height=height,
+                )
+                facts = counter.observe(frame_index, detections, width=width, height=height)
+                feet = [
+                    (detection.track_id, normalized_foot(detection, width, height))
+                    for detection in detections
+                ]
+                recorder.observe(frame_index, feet, facts)
+                patterns.observe(frame_index, feet)
+                purchases.observe(frame_index, detections, bags)
+                pending_facts.extend(facts)
             frames_analyzed = frame_index + 1
             if frames_analyzed == frames_total:
                 finished = counter.finish()
@@ -363,7 +380,7 @@ def _run(
                 if flush_gate.cancelled:
                     break
             now_s = _monotonic()
-            if preview_is_due(
+            if frame_is_analyzed(frame_index) and preview_is_due(
                 frame_index=frame_index,
                 frames_total=frames_total,
                 now_s=now_s,

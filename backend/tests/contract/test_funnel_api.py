@@ -202,8 +202,8 @@ def test_completed_funnel_is_whole_session_and_metrics_stay_unchanged(
     assert ranged.json() == funnel.json()
     body = funnel.json()
     assert body["precision_uncommitted"] is True
-    assert body["stop_threshold_seconds"] == "3"
-    assert body["attention_threshold_seconds"] == "8"
+    assert body["stop_threshold_seconds"] == "1"
+    assert body["attention_threshold_seconds"] == "2"
     assert [stage["stage"] for stage in body["stages"]] == [
         "observed_pass",
         "exposure",
@@ -220,11 +220,11 @@ def test_completed_funnel_is_whole_session_and_metrics_stay_unchanged(
     assert "entry_rate" not in {rate["code"] for rate in body["rates"]}
     by_stage = {stage["stage"]: stage for stage in body["stages"]}
     assert by_stage["observed_pass"]["count"] == 1
-    assert by_stage["exposure"]["count"] == 1
+    assert by_stage["exposure"]["count"] == 0
     assert by_stage["stop"]["count"] == 0
     assert by_stage["attention"]["label"] == "attention_estimate"
     by_rate = {rate["code"]: rate for rate in body["rates"]}
-    assert by_rate["observed_pass_to_exposure"]["value"] == "1.000000"
+    assert by_rate["observed_pass_to_exposure"]["value"] == "0.000000"
     assert by_rate["stop_to_attention"]["availability"] == "unavailable"
     assert by_rate["stop_to_attention"]["value"] is None
     assert by_rate["stop_to_attention"]["unavailable_reason"] == "no_previous_stage"

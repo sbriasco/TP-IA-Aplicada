@@ -31,16 +31,15 @@ describe("PossiblePurchasePanel", () => {
     container.remove();
   });
 
-  it("muestra cantidad, umbral, estimación y aviso de precisión", async () => {
+  it("muestra solo la cantidad estimada", async () => {
     await act(async () => {
       root.render(<PossiblePurchasePanel purchases={sample()} />);
     });
     const text = container.textContent ?? "";
     expect(text).toContain("2 visitas con posible compra estimada");
-    expect(text).toContain("1 segundo");
-    expect(text).toContain("estimación");
-    expect(text).toContain("no es una venta confirmada");
-    expect(text).toContain("La precisión de la posible compra estimada no está comprometida.");
+    expect(text).not.toContain("Umbral");
+    expect(text).not.toContain("venta confirmada");
+    expect(text).not.toContain("precisión");
   });
 
   it("cero visitas se lee como cero disponible", async () => {

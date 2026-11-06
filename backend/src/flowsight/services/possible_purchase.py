@@ -37,10 +37,11 @@ def persist_possible_purchase(
     session_id: uuid.UUID,
     draft: PossiblePurchaseDraft,
     source_kind: str,
+    allow_webcam: bool = False,
 ) -> None:
-    """Store the closed result. A webcam source stores nothing."""
+    """Store the closed result. A webcam source stores nothing unless asked."""
 
-    if source_kind == SourceKind.WEBCAM.value:
+    if source_kind == SourceKind.WEBCAM.value and not allow_webcam:
         return
     report = PossiblePurchaseReport(
         job_id=job_id,
@@ -66,8 +67,6 @@ def load_possible_purchase(
     flow_session = get_active_session(database_session, session_id)
     if flow_session is None:
         raise ResultIncomplete()
-    if flow_session.source_kind == SourceKind.WEBCAM:
-        raise LivePurchaseUnavailable()
     job = _completed_job(database_session, session_id)
     if job is None:
         raise ResultIncomplete()
@@ -75,6 +74,8 @@ def load_possible_purchase(
         select(PossiblePurchaseReport).where(PossiblePurchaseReport.job_id == job.id)
     )
     if report is None:
+        if flow_session.source_kind == SourceKind.WEBCAM:
+            raise LivePurchaseUnavailable()
         raise ResultIncomplete()
     members = database_session.scalars(
         select(PossiblePurchaseMember)

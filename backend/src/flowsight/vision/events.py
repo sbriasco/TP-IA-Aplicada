@@ -116,6 +116,35 @@ class SceneEventRecorder:
                 )
             )
 
+    def draft_events(self) -> list[SceneEventFact]:
+        """Closed facts plus a pass for each front visit that already ended.
+
+        Someone still inside the front is neither a pass nor an entry. This
+        does not close the recorder.
+        """
+
+        inside = {
+            (shop_id, track_id)
+            for (shop_id, track_id, role), present in self._inside.items()
+            if role == "front" and present
+        }
+        events = list(self._events)
+        for (shop_id, track_id), frame_index in self._first_front.items():
+            if (shop_id, track_id) in self._entered or (shop_id, track_id) in inside:
+                continue
+            events.append(
+                SceneEventFact(
+                    shop_id=shop_id,
+                    track_id=track_id,
+                    kind="store_pass",
+                    zone_role=None,
+                    frame_index=frame_index,
+                    duration_seconds=None,
+                    crossing=None,
+                )
+            )
+        return events
+
     def finish(self) -> list[SceneEventFact]:
         for (shop_id, track_id), frame_index in self._first_front.items():
             if (shop_id, track_id) in self._entered:

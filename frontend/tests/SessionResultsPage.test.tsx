@@ -233,7 +233,7 @@ describe("SessionResultsPage", () => {
     expect(container.textContent).toContain("observable");
     expect(container.textContent).toContain("no disponible");
     expect(container.textContent).toContain("Horario pico: 0:00–1:00, 4");
-    expect(container.textContent).toContain("La precisión de estas etapas no está comprometida.");
+    expect(container.textContent).not.toContain("La precisión de estas etapas no está comprometida.");
     const metricsBefore = calls.filter((url) => url.includes("/metrics")).length;
     const funnelBefore = calls.filter((url) => url.includes("/funnel")).length;
     const patternsBefore = calls.filter((url) => url.includes("/visit-patterns")).length;
@@ -454,7 +454,7 @@ describe("SessionResultsPage", () => {
     expect(container.textContent).toContain("Tráfico");
   });
 
-  it("una sesión webcam no muestra el funnel", async () => {
+  it("una sesión webcam sin informe guardado no muestra el funnel", async () => {
     const calls: string[] = [];
     vi.stubGlobal(
       "fetch",
@@ -475,10 +475,10 @@ describe("SessionResultsPage", () => {
     );
     await act(async () => root.render(<SessionResultsPage sessionId="s-1" apiBaseUrl={API} />));
     expect(container.textContent).not.toContain("Funnel comercial");
-    expect(container.textContent).not.toContain("Patrones de visita y grupos estimados");
+    expect(container.textContent).not.toContain("Grupos estimados");
     expect(container.textContent).not.toContain("Posible compra estimada");
-    expect(calls.some((url) => url.includes("/funnel"))).toBe(false);
-    expect(calls.some((url) => url.includes("/visit-patterns"))).toBe(false);
-    expect(calls.some((url) => url.includes("/possible-purchases"))).toBe(false);
+    expect(calls.some((url) => url.includes("/funnel"))).toBe(true);
+    expect(calls.some((url) => url.includes("/visit-patterns"))).toBe(true);
+    expect(calls.some((url) => url.includes("/possible-purchases"))).toBe(true);
   });
 });

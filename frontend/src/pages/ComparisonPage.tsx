@@ -1,12 +1,9 @@
 import { useEffect, useId, useState } from "react";
 
 import { API_BASE_URL } from "../api/config";
-import {
-  createComparison,
-  type ComparisonAxis,
-  type ComparisonResponse,
-} from "../api/comparisons";
+import { createComparison, type ComparisonResponse } from "../api/comparisons";
 import { ApiRequestError } from "../api/http";
+import { getSceneShops } from "../api/metrics";
 import { listProcessedSessions, type ProcessedSession } from "../api/processedSessions";
 import { AppShell } from "../components/AppShell";
 import { Link } from "../components/Link";
@@ -29,14 +26,41 @@ function cellText(value: number | null, availability: string): string {
   return String(value);
 }
 
+function zoneOptions(names: string[]): string[] {
+  const seen = new Map<string, string>();
+  for (const raw of names) {
+    const name = raw.trim();
+    if (name === "") continue;
+    const key = name.toLocaleLowerCase("es");
+    if (!seen.has(key)) seen.set(key, name);
+  }
+  return [...seen.values()].sort((left, right) => left.localeCompare(right, "es"));
+}
+
+function preferredZone(names: string[]): string {
+  const counts = new Map<string, { name: string; count: number }>();
+  for (const raw of names) {
+    const name = raw.trim();
+    if (name === "") continue;
+    const key = name.toLocaleLowerCase("es");
+    const current = counts.get(key);
+    if (current === undefined) counts.set(key, { name, count: 1 });
+    else current.count += 1;
+  }
+  const ranked = [...counts.values()].sort(
+    (left, right) => right.count - left.count || left.name.localeCompare(right.name, "es"),
+  );
+  return ranked[0]?.name ?? "";
+}
+
 export function ComparisonPage({ apiBaseUrl = API_BASE_URL }: ComparisonPageProps) {
   const zoneId = useId();
-  const axisId = useId();
   const [rows, setRows] = useState<ProcessedSession[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
-  const [zoneName, setZoneName] = useState("Local");
-  const [axis, setAxis] = useState<ComparisonAxis>("session");
+  const [zoneName, setZoneName] = useState("");
+  const [zoneNames, setZoneNames] = useState<string[]>([]);
+  const [zonesReady, setZonesReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ComparisonResponse | null>(null);
@@ -55,13 +79,54 @@ export function ComparisonPage({ apiBaseUrl = API_BASE_URL }: ComparisonPageProp
     };
   }, [apiBaseUrl]);
 
+  useEffect(() => {
+    if (rows === null) return;
+    const versionIds = [
+      ...new Set(
+        rows
+          .filter(
+            (row) =>
+              row.result_complete &&
+              row.status === "completed" &&
+              row.scene_version_id !== null,
+          )
+          .map((row) => row.scene_version_id as string),
+      ),
+    ];
+    let active = true;
+    setZonesReady(false);
+    Promise.all(
+      versionIds.map((id) =>
+        getSceneShops(apiBaseUrl, id).then(
+          (shops) => shops.map((shop) => shop.name),
+          () => [] as string[],
+        ),
+      ),
+    ).then((lists) => {
+      if (!active) return;
+      const collected = lists.flat();
+      const names = zoneOptions(collected);
+      setZoneNames(names);
+      setZoneName((current) => {
+        const key = current.trim().toLocaleLowerCase("es");
+        return (
+          names.find((name) => name.toLocaleLowerCase("es") === key) ?? preferredZone(collected)
+        );
+      });
+      setZonesReady(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, [apiBaseUrl, rows]);
+
   const eligible =
-    rows?.filter(
-      (row) =>
-        row.result_complete &&
-        row.status === "completed" &&
-        row.source_kind !== "webcam",
-    ) ?? [];
+    rows?.filter((row) => row.result_complete && row.status === "completed") ?? [];
+  const selectedRows = eligible.filter((row) => selected.includes(row.session_id));
+  const selectedOrigins = new Set(
+    selectedRows.map((row) => (row.source_kind === "webcam" ? "webcam" : "file")),
+  );
+  const mixedOrigins = selectedOrigins.size > 1;
 
   function toggle(sessionId: string): void {
     setSelected((current) =>
@@ -79,7 +144,7 @@ export function ComparisonPage({ apiBaseUrl = API_BASE_URL }: ComparisonPageProp
       const body = await createComparison(apiBaseUrl, {
         session_ids: selected,
         zone_name: zoneName.trim(),
-        axis,
+        axis: "session",
       });
       setResult(body);
     } catch (reason) {
@@ -94,8 +159,8 @@ export function ComparisonPage({ apiBaseUrl = API_BASE_URL }: ComparisonPageProp
       <section className={styles.section} aria-labelledby="comparison-title">
         <h1 id="comparison-title">Comparar sesiones</h1>
         <p>
-          Elegí al menos dos sesiones de archivo completadas y una zona. Las cifras se leen del
-          historial; no se recalculan desde el video.
+          Elegí al menos dos sesiones completadas del mismo origen y una zona. Los archivos se
+          comparan entre sí y las sesiones en vivo entre sí. Las cifras se leen del historial.
         </p>
         <p>
           <Link href="/">Volver a las sesiones</Link>
@@ -108,7 +173,7 @@ export function ComparisonPage({ apiBaseUrl = API_BASE_URL }: ComparisonPageProp
           <div className={styles.controls}>
             <fieldset className={styles.sessionList}>
               <legend>Sesiones elegibles</legend>
-              {eligible.length === 0 && <p>No hay sesiones de archivo completadas para comparar.</p>}
+              {eligible.length === 0 && <p>No hay sesiones completadas para comparar.</p>}
               {eligible.map((row) => (
                 <label key={row.session_id}>
                   <input
@@ -117,6 +182,7 @@ export function ComparisonPage({ apiBaseUrl = API_BASE_URL }: ComparisonPageProp
                     onChange={() => toggle(row.session_id)}
                   />{" "}
                   {row.name}
+                  {row.source_kind === "webcam" && " · en vivo"}
                   {row.finished_at !== null && (
                     <>
                       {" "}
@@ -132,38 +198,31 @@ export function ComparisonPage({ apiBaseUrl = API_BASE_URL }: ComparisonPageProp
             <div className={styles.actions}>
               <label htmlFor={zoneId}>
                 Nombre de zona
-                <input
+                <select
                   id={zoneId}
                   value={zoneName}
+                  disabled={!zonesReady || zoneNames.length === 0}
                   onChange={(event) => setZoneName(event.target.value)}
-                />
-              </label>
-              <label htmlFor={axisId}>
-                Eje
-                <select
-                  id={axisId}
-                  value={axis}
-                  onChange={(event) => setAxis(event.target.value as ComparisonAxis)}
                 >
-                  <option value="session">Sesión vs sesión</option>
-                  <option value="day">Día (cierre UTC del análisis)</option>
-                  <option value="time_of_day">Horario (tiempo de video)</option>
-                  <option value="zone">Zona (misma cámara)</option>
+                  {!zonesReady && <option value="">Cargando zonas…</option>}
+                  {zonesReady && zoneNames.length === 0 && <option value="">Sin zonas</option>}
+                  {zoneNames.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
                 </select>
               </label>
               <button
                 type="button"
-                disabled={busy || selected.length < 2 || zoneName.trim() === ""}
+                disabled={busy || selected.length < 2 || mixedOrigins || zoneName.trim() === ""}
                 onClick={() => void runComparison()}
               >
                 {busy ? "Comparando…" : "Comparar"}
               </button>
             </div>
-            {axis === "day" && (
-              <p role="note">
-                El eje día usa la fecha UTC de cierre del análisis, no el día del local ni el tiempo
-                del video.
-              </p>
+            {mixedOrigins && (
+              <p role="status">Compará sesiones en vivo entre sí, o archivos entre sí.</p>
             )}
             {selected.length < 2 && (
               <p role="status">Seleccioná al menos dos sesiones elegibles.</p>
